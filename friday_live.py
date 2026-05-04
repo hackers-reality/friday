@@ -143,7 +143,6 @@ When the Boss asks you to do something, follow this exact order:
 2. THEN execute the tool immediately.
 3. AFTER the tool returns, confirm the result naturally. "Done. Here's what I found..." or "That's sorted."
 Never use robotic labels like "Executing" or "Running tool". Be conversational.
-
 For screen questions, use see_screen() immediately.
 For web questions, use web_search() immediately.
 For deep reports, use deep_research().
@@ -164,6 +163,12 @@ Boss does not want essays. Get to the point.
 
 [VISION]
 You receive a live camera feed. Use it for context about the Boss's environment.
+
+[LANGUAGE - CRITICAL]
+YOU MUST RESPOND ONLY IN ENGLISH. 
+If Boss speaks in Hindi or any other language, politely ask: "Boss, could you repeat that in English please?"
+NEVER respond in Hindi, Hinglish, or any non-English language.
+Your output_transcription will be in English only.
 """
 
 
@@ -200,17 +205,19 @@ _duck_lock = threading.Lock()
 
 
 def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
-    stream = pa.open(
-        format=pyaudio.paInt16, channels=1, rate=sample_rate,
-        output=True, frames_per_buffer=4800
-    )
+    stream = None
     try:
+        stream = pa.open(
+            format=pyaudio.paInt16, channels=1, rate=sample_rate,
+            output=True, frames_per_buffer=4800
+        )
         while not _audio_playback_stop.is_set():
             try:
                 chunk = _audio_playback_queue.get(timeout=0.5)
                 if chunk is None:
                     break
-                stream.write(chunk)
+                if stream and stream.is_active():
+                    stream.write(chunk)
                 global _is_ducked, last_audio_time
                 with _duck_lock:
                     if not _is_ducked:
@@ -219,9 +226,27 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
                     last_audio_time = time.time()
             except _thread_queue.Empty:
                 continue
+            except OSError as e:
+                if "Unanticipated host error" in str(e):
+                    # Stream broke, try to recreate
+                    try:
+                        if stream:
+                            stream.stop_stream()
+                            stream.close()
+                        stream = pa.open(
+                            format=pyaudio.paInt16, channels=1, rate=sample_rate,
+                            output=True, frames_per_buffer=4800
+                        )
+                    except Exception:
+                        break
+                continue
     finally:
-        stream.stop_stream()
-        stream.close()
+        if stream:
+            try:
+                stream.stop_stream()
+                stream.close()
+            except Exception:
+                pass
 
 
 def set_audio_ducking_internal(duck: bool) -> None:
@@ -763,7 +788,7 @@ def _build_session_config(tools, resume_handle=None):
             )
         ),
         system_instruction=types.Content(
-            parts=[types.Part(text=SYSTEM_INSTRUCTION)]
+            parts=[types.Part(text=SYSTEM_INSTRUCTION + "\n\nIMPORTANT: You MUST respond ONLY in English. If Boss speaks in Hindi or other languages, politely ask them to repeat in English. NEVER respond in Hindi or other non-English languages.")]
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
@@ -813,7 +838,7 @@ async def audio_worker(recorder, session, audio_ready, porcupine, wake_event):
 
 # MAIN ENGINE
 async def friday_live_engine():
-    stark_initialization()
+    first_run = True
     tools = _build_tools()
     chat = ChatDisplay(console)
 
@@ -831,6 +856,12 @@ async def friday_live_engine():
     try:
         while reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
             try:
+                if first_run:
+                    stark_initialization()
+                    first_run = False
+                else:
+                    console.print(f"\n[dim white]Reconnecting...[/]")
+
                 console.print(f"[bold green]Connecting to {MODEL_ID}...[/]")
                 if resume_handle:
                     console.print(f"[dim]Resuming session: {resume_handle[:24]}...[/]")
@@ -857,6 +888,7 @@ async def friday_live_engine():
                         nonlocal is_greeting, shown_input, resume_handle, follow_up_mode
                         thinking_parts = []
                         spoken_text = ""
+                        displayed_text = ""
 
                         try:
                             while True:
@@ -896,19 +928,21 @@ async def friday_live_engine():
                                                 if not part.thought and part.text:
                                                     text_fragment = part.text
                                                     spoken_text += text_fragment
-                                                    # Stream display - show text as it arrives
-                                                    if text_fragment.strip():
-                                                        chat.stream_friday_text(text_fragment)
+                                                    # Stream display - show only new text
+                                                    new_text = spoken_text[len(displayed_text):]
+                                                    if new_text.strip():
+                                                        chat.stream_friday_text(new_text)
+                                                        displayed_text = spoken_text
 
                                         # Output transcription - Gemini 3.1 sends this as separate events
                                         if sc.output_transcription and sc.output_transcription.text:
                                             transcribed = sc.output_transcription.text
-                                            # Show only the new part that hasn't been displayed yet
-                                            if transcribed != shown_input:
-                                                new_text = transcribed[len(spoken_text):] if transcribed.startswith(spoken_text) else transcribed
+                                            if transcribed != displayed_text:
+                                                new_text = transcribed[len(displayed_text):] if transcribed.startswith(displayed_text) else transcribed
                                                 if new_text.strip():
                                                     chat.stream_friday_text(new_text)
                                                 spoken_text = transcribed
+                                                displayed_text = transcribed
 
                                         # Turn complete
                                         if sc.turn_complete:
@@ -918,6 +952,7 @@ async def friday_live_engine():
 
                                             final_text = spoken_text.strip()
                                             spoken_text = ""
+                                            displayed_text = ""
 
                                             if final_text:
                                                 chat.finish_friday_message(final_text)
@@ -942,6 +977,7 @@ async def friday_live_engine():
                                         if sc.interrupted:
                                             thinking_parts = []
                                             spoken_text = ""
+                                            displayed_text = ""
                                             follow_up_mode = True
 
                                     # Tool calls
