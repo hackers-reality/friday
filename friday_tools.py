@@ -654,11 +654,35 @@ def web_search(query: str, max_results: int = 5) -> str:
     """Quick single web search."""
     try:
         from ddgs import DDGS
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
+        results = []
+        try:
+            with DDGS(timeout=10) as ddgs:
+                results = list(ddgs.text(query, max_results=max_results))
+        except Exception as ddgs_error:
+            # Try alternative approach
+            try:
+                import urllib.parse
+                from bs4 import BeautifulSoup
+                search_url = f"https://duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+                resp = requests.get(search_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+                if resp.ok:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    for result in soup.select(".result")[:max_results]:
+                        title_el = result.select_one(".result__title")
+                        snippet_el = result.select_one(".result__snippet")
+                        url_el = result.select_one(".result__url")
+                        if title_el:
+                            results.append({
+                                "title": title_el.get_text(strip=True),
+                                "href": url_el.get("href", "") if url_el else "",
+                                "body": snippet_el.get_text(strip=True) if snippet_el else ""
+                            })
+            except Exception:
+                return f"Search failed: {ddgs_error}"
+
         if results:
             return "\n---\n".join(
-                f"Title: {r['title']}\nSource: {r['href']}\nSnippet: {r['body']}"
+                f"Title: {r.get('title', 'N/A')}\nSource: {r.get('href', 'N/A')}\nSnippet: {r.get('body', 'N/A')}"
                 for r in results
             )
     except Exception as e:
@@ -669,15 +693,20 @@ def video_search(query: str, max_results: int = 5) -> str:
     """Find videos online and return results headlessly (no browser)."""
     try:
         from ddgs import DDGS
-        with DDGS() as ddgs:
-            results = list(ddgs.videos(query, max_results=max_results))
+        results = []
+        try:
+            with DDGS(timeout=10) as ddgs:
+                results = list(ddgs.videos(query, max_results=max_results))
+        except Exception as ddgs_error:
+            return f"Video search failed: {ddgs_error}. Try using web_search instead."
+
         if not results:
-            return "No videos found for this query."
+            return "No videos found for this query. Try a different search term."
 
         lines = [f"### Video Results for: {query}\n"]
         for i, v in enumerate(results, 1):
             title = v.get("title", "Unknown")
-            url = v.get("content", v.get("href", "N/A"))
+            url = v.get("content", v.get("href", v.get("url", "N/A")))
             duration = v.get("duration", "N/A")
             publisher = v.get("publisher", "N/A")
             lines.append(f"{i}. **{title}**")

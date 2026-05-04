@@ -274,14 +274,27 @@ def _stop_audio_playback():
 class ChatDisplay:
     def __init__(self, console: Console):
         self.console = console
+        self._friday_streaming = False
 
     def add_user_message(self, text: str):
         self.console.print(f"[bold green]---Boss---[/]")
         self.console.print(f"  {text}")
 
-    def add_friday_message(self, text: str):
-        self.console.print(f"[bold cyan]---Friday---[/]")
-        self.console.print(f"  {text}")
+    def stream_friday_text(self, text: str):
+        """Stream Friday's text as it arrives."""
+        if not self._friday_streaming:
+            self.console.print(f"[bold cyan]---Friday---[/]", end="")
+            self._friday_streaming = True
+        self.console.print(f"[cyan]{text}[/]", end="")
+
+    def finish_friday_message(self, final_text: str):
+        """Finish streaming and print the complete message."""
+        if self._friday_streaming:
+            self.console.print()  # New line after streaming
+            self._friday_streaming = False
+        else:
+            self.console.print(f"[bold cyan]---Friday---[/]")
+            self.console.print(f"  [cyan]{final_text}[/]")
 
     def add_thought(self, text: str):
         self.console.print()
@@ -317,14 +330,14 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="web_search",
-                description="Quick web search for information. Returns text results.",
+                description="Quick web search for information. Returns text results. Use this when Boss asks anything that needs current info from the web.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "query": {"type": "STRING", "description": "Search query."}
                 }, required=["query"]),
             ),
             types.FunctionDeclaration(
                 name="video_search",
-                description="Search for videos. Returns 5 formatted results as text.",
+                description="Search for videos online. Returns formatted results as text - titles, URLs, duration. Use when Boss asks to find or search for videos.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "query": {"type": "STRING", "description": "Video search query."}
                 }, required=["query"]),
@@ -754,6 +767,7 @@ def _build_session_config(tools, resume_handle=None):
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
+        media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
         realtime_input_config=types.RealtimeInputConfig(
             turn_coverage="TURN_INCLUDES_ONLY_ACTIVITY"
         ),
@@ -769,7 +783,9 @@ async def vision_worker(session):
             if ret:
                 _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
                 try:
-                    await session.send_realtime_input(video=buffer.tobytes())
+                    await session.send_realtime_input(
+                        video=types.Blob(data=buffer.tobytes(), mime_type="image/jpeg")
+                    )
                 except Exception:
                     pass
             await asyncio.sleep(3)
@@ -788,7 +804,10 @@ async def audio_worker(recorder, session, audio_ready, porcupine, wake_event):
         wake_index = porcupine.process(frame)
         if wake_index >= 0:
             wake_event.set()
-        await session.send_realtime_input(audio=audio_data)
+        # Send audio as Blob with correct mime_type for Gemini 3.1
+        await session.send_realtime_input(
+            audio=types.Blob(data=audio_data, mime_type="audio/pcm;rate=16000")
+        )
         await asyncio.sleep(0)
 
 
@@ -873,13 +892,23 @@ async def friday_live_engine():
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
 
-                                                # Accumulate spoken text from non-thought parts
+                                                # Stream spoken text from non-thought parts
                                                 if not part.thought and part.text:
-                                                    spoken_text += part.text
+                                                    text_fragment = part.text
+                                                    spoken_text += text_fragment
+                                                    # Stream display - show text as it arrives
+                                                    if text_fragment.strip():
+                                                        chat.stream_friday_text(text_fragment)
 
-                                        # Output transcription - cumulative spoken text
+                                        # Output transcription - Gemini 3.1 sends this as separate events
                                         if sc.output_transcription and sc.output_transcription.text:
-                                            spoken_text = sc.output_transcription.text
+                                            transcribed = sc.output_transcription.text
+                                            # Show only the new part that hasn't been displayed yet
+                                            if transcribed != shown_input:
+                                                new_text = transcribed[len(spoken_text):] if transcribed.startswith(spoken_text) else transcribed
+                                                if new_text.strip():
+                                                    chat.stream_friday_text(new_text)
+                                                spoken_text = transcribed
 
                                         # Turn complete
                                         if sc.turn_complete:
@@ -891,7 +920,7 @@ async def friday_live_engine():
                                             spoken_text = ""
 
                                             if final_text:
-                                                chat.add_friday_message(final_text)
+                                                chat.finish_friday_message(final_text)
 
                                                 if final_text.rstrip().endswith("?"):
                                                     follow_up_mode = True
@@ -921,6 +950,8 @@ async def friday_live_engine():
                                         for fc in tc.function_calls:
                                             name = fc.name
                                             args = fc.args or {}
+                                            # Display executing message in chat
+                                            console.print(f"\n[bold magenta]* EXECUTING: {name}[/]")
                                             result = _invoke_tool(name, args)
                                             responses.append(
                                                 types.FunctionResponse(
