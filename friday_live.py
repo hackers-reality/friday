@@ -44,10 +44,6 @@ from pvrecorder import PvRecorder
 from PIL import ImageGrab
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
 
-# Suppress duckduckgo_search rename warning
-warnings.filterwarnings("ignore", message=".*duckduckgo_search.*renamed.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning, module="friday_tools")
-
 if sys.platform == "win32":
     try:
         import winsound

@@ -208,7 +208,7 @@ def deep_research(topic: str, url: Optional[str] = None, depth: int = 3) -> str:
     Saved under friday_reports/.
     """
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
     except Exception as e:
         return f"Deep research unavailable: duckduckgo_search import failed ({e})."
 
@@ -653,7 +653,7 @@ def open_url(url: str) -> str:
 def web_search(query: str, max_results: int = 5) -> str:
     """Quick single web search."""
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=max_results))
         if results:
@@ -668,7 +668,7 @@ def web_search(query: str, max_results: int = 5) -> str:
 def video_search(query: str, max_results: int = 5) -> str:
     """Find videos online and return results headlessly (no browser)."""
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         with DDGS() as ddgs:
             results = list(ddgs.videos(query, max_results=max_results))
         if not results:
