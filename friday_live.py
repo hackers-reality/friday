@@ -10,6 +10,7 @@ Gemini 3.1 Flash Live API with:
 - Session resumption across WebSocket resets
 - 54 tools declared and functional
 - Leda voice, AUDIO-only modality
+- Natural tool narration (no mapped outputs)
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ import struct
 import sys
 import threading
 import time
+import warnings
 
 import cv2
 import numpy as np
@@ -41,6 +43,10 @@ import pvporcupine
 from pvrecorder import PvRecorder
 from PIL import ImageGrab
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
+
+# Suppress duckduckgo_search rename warning
+warnings.filterwarnings("ignore", message=".*duckduckgo_search.*renamed.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="friday_tools")
 
 if sys.platform == "win32":
     try:
@@ -73,7 +79,7 @@ from friday_tools import (
 )
 
 load_dotenv()
-console = Console()
+console = Console(force_terminal=True)
 
 REQUIRED_ENV_VARS = ["GOOGLE_API_KEY", "GROQ_API_KEY", "PICOVOICE_ACCESS_KEY", "FRIDAY_WEBHOOK_SECRET"]
 missing_env = [k for k in REQUIRED_ENV_VARS if not os.getenv(k)]
@@ -135,9 +141,13 @@ You are allowed to be slightly sassy if the situation calls for it. But never di
 Be natural. Time-aware. Reference previous context if available.
 Do NOT say "How can I help you today" or anything like that. Be conversational.
 
-[TOOL EXECUTION]
-You have tools at your disposal. Use them immediately when the Boss asks.
-When you execute a tool, narrate what you are doing naturally.
+[TOOL EXECUTION ORDER]
+When the Boss asks you to do something, follow this exact order:
+1. FIRST, speak what you are about to do. Say it naturally. "Let me check that", "Searching for it", "Pulling it up now", "On it."
+2. THEN execute the tool immediately.
+3. AFTER the tool returns, confirm the result naturally. "Done. Here's what I found..." or "That's sorted."
+Never use robotic labels like "Executing" or "Running tool". Be conversational.
+
 For screen questions, use see_screen() immediately.
 For web questions, use web_search() immediately.
 For deep reports, use deep_research().
@@ -146,7 +156,7 @@ For apps, use open_app().
 For Spotify, use spotify_play() or spotify_pause().
 For memory, use memory_store() and memory_retrieve().
 For smart home, use home_assistant_command() or alexa_command().
-For vision analysis, you can see the screen via see_screen().
+For video search, use video_search() - it returns text results, no browser.
 
 [THINKING]
 You think before you speak. Your internal reasoning is shown as thinking.
@@ -155,11 +165,14 @@ Keep thinking concise and focused on problem-solving.
 [BREVITY]
 Short responses. One or two sentences max for spoken text.
 Boss does not want essays. Get to the point.
+
+[VISION]
+You receive a live camera feed. Use it for context about the Boss's environment.
 """
 
 
 def stark_initialization():
-    console.clear()
+    os.system("cls")
     console.print(Text(BANNER, style="bold cyan"))
     console.print(Panel(
         Text("Vault: ACTIVE | Tools: LOADED | Voice: READY", style="bold green"),
@@ -177,16 +190,17 @@ def stark_initialization():
         console.print(report)
     except Exception as e:
         console.print(f"[red]Diagnostic Failed:[/] {e}")
-    console.print("\n")
+    console.print()
 
 
-# AUDIO PLAYBACK THREAD - zero async overhead
+# AUDIO PLAYBACK THREAD
 _audio_playback_queue = _thread_queue.Queue()
 _audio_playback_stop = threading.Event()
 _audio_playback_thread = None
 _is_ducked = False
 _original_volumes: dict[int, float] = {}
 last_audio_time = 0.0
+_duck_lock = threading.Lock()
 
 
 def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
@@ -202,10 +216,11 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
                     break
                 stream.write(chunk)
                 global _is_ducked, last_audio_time
-                if not _is_ducked:
-                    _is_ducked = True
-                    set_audio_ducking(True)
-                last_audio_time = time.time()
+                with _duck_lock:
+                    if not _is_ducked:
+                        _is_ducked = True
+                        set_audio_ducking_internal(True)
+                    last_audio_time = time.time()
             except _thread_queue.Empty:
                 continue
     finally:
@@ -213,7 +228,8 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
         stream.close()
 
 
-def set_audio_ducking(duck: bool = True) -> None:
+def set_audio_ducking_internal(duck: bool) -> None:
+    """Internal ducking call - already holds _duck_lock."""
     global _is_ducked, _original_volumes
     if duck == _is_ducked:
         return
@@ -237,6 +253,11 @@ def set_audio_ducking(duck: bool = True) -> None:
         pass
 
 
+def set_audio_ducking(duck: bool = True) -> None:
+    with _duck_lock:
+        set_audio_ducking_internal(duck)
+
+
 def _start_audio_playback(pa: pyaudio.PyAudio):
     global _audio_playback_thread
     _audio_playback_stop.clear()
@@ -249,6 +270,8 @@ def _start_audio_playback(pa: pyaudio.PyAudio):
 def _stop_audio_playback():
     _audio_playback_queue.put(None)
     _audio_playback_stop.set()
+    if _audio_playback_thread and _audio_playback_thread.is_alive():
+        _audio_playback_thread.join(timeout=2)
 
 
 # CHAT DISPLAY
@@ -257,20 +280,17 @@ class ChatDisplay:
         self.console = console
 
     def add_user_message(self, text: str):
-        self.console.print(f"\n[bold green]---Boss---[/]")
+        self.console.print(f"[bold green]---Boss---[/]")
         self.console.print(f"  {text}")
 
     def add_friday_message(self, text: str):
-        self.console.print(f"\n[bold cyan]---Friday---[/]")
+        self.console.print(f"[bold cyan]---Friday---[/]")
         self.console.print(f"  {text}")
 
     def add_thought(self, text: str):
         self.console.print()
         self.console.rule("[dim grey37]Thought[/]", align="left", style="dim grey37")
         self.console.print(f"  [italic dim grey37]{text}[/]")
-
-    def add_system(self, text: str):
-        self.console.print(f"  [dim cyan][SYSTEM] {text}[/]")
 
 
 # BUILD ALL 54 TOOLS
@@ -655,7 +675,6 @@ def _invoke_tool(func_name, args):
     try:
         if not isinstance(args, dict):
             args = {"command": str(args)} if args else {}
-        # Special handling for multi_task
         if func_name == "multi_task":
             specs = args.get("task_specs", [])
             result = multi_task(*specs)
@@ -665,59 +684,34 @@ def _invoke_tool(func_name, args):
                 *(args.get("args", "").split("|") if args.get("args") else [])
             )
         elif func_name == "hotkey":
-            keys = args.get("keys", "")
-            result = hotkey(keys)
+            result = hotkey(args.get("keys", ""))
         elif func_name == "press_key":
-            key = args.get("key", "")
-            result = press_key(key)
+            result = press_key(args.get("key", ""))
         elif func_name == "type_text":
-            text = args.get("text", "")
-            result = type_text(text)
+            result = type_text(args.get("text", ""))
         elif func_name == "click":
-            x = args.get("x")
-            y = args.get("y")
-            if x is not None and y is not None:
-                result = click(int(x), int(y))
-            else:
-                result = click()
+            x, y = args.get("x"), args.get("y")
+            result = click(int(x), int(y)) if x is not None and y is not None else click()
         elif func_name == "double_click":
-            x = args.get("x")
-            y = args.get("y")
-            if x is not None and y is not None:
-                result = double_click(int(x), int(y))
-            else:
-                result = double_click()
+            x, y = args.get("x"), args.get("y")
+            result = double_click(int(x), int(y)) if x is not None and y is not None else double_click()
         elif func_name == "right_click":
-            x = args.get("x")
-            y = args.get("y")
-            if x is not None and y is not None:
-                result = right_click(int(x), int(y))
-            else:
-                result = right_click()
+            x, y = args.get("x"), args.get("y")
+            result = right_click(int(x), int(y)) if x is not None and y is not None else right_click()
         elif func_name == "drag":
-            x = args.get("x", 0)
-            y = args.get("y", 0)
-            duration = args.get("duration", 0.5)
-            result = drag(int(x), int(y), float(duration))
+            result = drag(int(args.get("x", 0)), int(args.get("y", 0)), float(args.get("duration", 0.5)))
         elif func_name == "scroll":
-            amount = args.get("amount", 1)
-            result = scroll(int(amount))
+            result = scroll(int(args.get("amount", 1)))
         elif func_name == "move_mouse":
-            x = args.get("x", 0)
-            y = args.get("y", 0)
-            result = move_mouse(int(x), int(y))
+            result = move_mouse(int(args.get("x", 0)), int(args.get("y", 0)))
         elif func_name == "git_ops":
-            operation = args.get("operation", "status")
-            message = args.get("message", "")
-            result = git_ops(operation, message=message)
+            result = git_ops(args.get("operation", "status"), message=args.get("message", ""))
         elif func_name == "take_snapshot":
             result = take_snapshot()
         elif func_name == "recall_snapshot":
-            index = args.get("index", 0)
-            result = recall_snapshot(int(index))
+            result = recall_snapshot(int(args.get("index", 0)))
         elif func_name == "clipboard_set":
-            text = args.get("text", "")
-            result = clipboard_set(text)
+            result = clipboard_set(args.get("text", ""))
         elif func_name == "clipboard_get":
             result = clipboard_get()
         elif func_name == "get_time":
@@ -778,7 +772,10 @@ async def vision_worker(session):
             ret, frame = cap.read()
             if ret:
                 _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                await session.send_realtime_input(video=buffer.tobytes())
+                try:
+                    await session.send_realtime_input(video=buffer.tobytes())
+                except Exception:
+                    pass
             await asyncio.sleep(3)
     except Exception:
         pass
@@ -787,18 +784,14 @@ async def vision_worker(session):
 
 
 # AUDIO WORKER
-async def audio_worker(recorder, session, audio_ready, porcupine, winsound):
+async def audio_worker(recorder, session, audio_ready, porcupine, wake_event):
     await audio_ready.wait()
     while True:
         frame = recorder.read()
         audio_data = struct.pack("<" + "h" * len(frame), *frame)
         wake_index = porcupine.process(frame)
         if wake_index >= 0:
-            if winsound:
-                try:
-                    winsound.MessageBeep()
-                except Exception:
-                    pass
+            wake_event.set()
         await session.send_realtime_input(audio=audio_data)
         await asyncio.sleep(0)
 
@@ -823,7 +816,7 @@ async def friday_live_engine():
     try:
         while reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
             try:
-                console.print(f"\n[bold green]Connecting to {MODEL_ID}...[/]")
+                console.print(f"[bold green]Connecting to {MODEL_ID}...[/]")
                 if resume_handle:
                     console.print(f"[dim]Resuming session: {resume_handle[:24]}...[/]")
 
@@ -831,33 +824,33 @@ async def friday_live_engine():
                     model=MODEL_ID,
                     config=_build_session_config(tools, resume_handle)
                 ) as session:
-                    console.print("[bold green]Neural link established.[/]\n")
+                    console.print("[bold green]Neural link established.[/]")
                     reconnect_attempts = 0
 
                     greeting_done = asyncio.Event()
                     audio_ready = asyncio.Event()
+                    wake_event = asyncio.Event()
                     is_greeting = last_session_was_greeting
 
                     shown_input = ""
                     follow_up_mode = False
 
-                    # Start audio playback thread
                     _start_audio_playback(pa)
 
                     # RECEIVE LOOP
                     async def receive_loop():
                         nonlocal is_greeting, shown_input, resume_handle, follow_up_mode
                         thinking_parts = []
-                        last_transcript = ""
+                        spoken_text = ""
 
                         try:
                             while True:
                                 async for response in session.receive():
                                     if response.go_away is not None:
                                         console.print(
-                                            f"\n[bold yellow][SYSTEM] Connection ending, will resume...[/]"
+                                            f"[bold yellow][SYSTEM] Connection ending, reconnecting...[/]"
                                         )
-                                        continue
+                                        return
 
                                     if response.session_resumption_update:
                                         update = response.session_resumption_update
@@ -875,7 +868,7 @@ async def friday_live_engine():
                                                 shown_input = txt
                                                 chat.add_user_message(txt)
 
-                                        # Model turn - audio + thoughts
+                                        # Model turn - audio + thoughts + spoken text
                                         if sc.model_turn:
                                             for part in sc.model_turn.parts:
                                                 if part.inline_data:
@@ -884,9 +877,13 @@ async def friday_live_engine():
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
 
-                                        # Output transcription - authoritative spoken text
+                                                # Accumulate spoken text from non-thought parts
+                                                if not part.thought and part.text:
+                                                    spoken_text += part.text
+
+                                        # Output transcription - cumulative spoken text
                                         if sc.output_transcription and sc.output_transcription.text:
-                                            last_transcript = sc.output_transcription.text.strip()
+                                            spoken_text = sc.output_transcription.text
 
                                         # Turn complete
                                         if sc.turn_complete:
@@ -894,15 +891,15 @@ async def friday_live_engine():
                                                 chat.add_thought("\n".join(thinking_parts))
                                                 thinking_parts = []
 
-                                            final_text = last_transcript.strip()
+                                            final_text = spoken_text.strip()
+                                            spoken_text = ""
+
                                             if final_text:
                                                 chat.add_friday_message(final_text)
 
                                                 if final_text.rstrip().endswith("?"):
-                                                    chat.add_system("[MIC] Listening... (follow-up mode - no need to say Friday)")
                                                     follow_up_mode = True
                                                 else:
-                                                    chat.add_system("[STANDBY] Standing by - say Friday or type")
                                                     follow_up_mode = False
 
                                             if is_greeting:
@@ -910,8 +907,7 @@ async def friday_live_engine():
                                                 greeting_done.set()
                                                 follow_up_mode = True
 
-                                            last_transcript = ""
-
+                                            # Unduck audio
                                             async def _delayed_unduck():
                                                 await asyncio.sleep(1.5)
                                                 set_audio_ducking(False)
@@ -920,9 +916,8 @@ async def friday_live_engine():
                                         # Interruption
                                         if sc.interrupted:
                                             thinking_parts = []
-                                            last_transcript = ""
+                                            spoken_text = ""
                                             follow_up_mode = True
-                                            chat.add_system("[MUTE] Interrupted")
 
                                     # Tool calls
                                     if tc:
@@ -930,7 +925,6 @@ async def friday_live_engine():
                                         for fc in tc.function_calls:
                                             name = fc.name
                                             args = fc.args or {}
-                                            chat.add_system(f"Executing: {name}")
                                             result = _invoke_tool(name, args)
                                             responses.append(
                                                 types.FunctionResponse(
@@ -944,11 +938,11 @@ async def friday_live_engine():
                         except asyncio.CancelledError:
                             pass
                         except Exception as e:
-                            console.print(f"\n[bold red][LISTENER ERROR] {e}[/]")
+                            console.print(f"[bold red][ERROR] {e}[/]")
 
                     receive_task = asyncio.create_task(receive_loop())
 
-                    # SEND GREETING (first connect only)
+                    # SEND GREETING
                     if is_greeting:
                         hour = datetime.datetime.now().hour
                         if 5 <= hour < 12:
@@ -985,17 +979,15 @@ async def friday_live_engine():
 
                         await asyncio.sleep(1.5)
 
-                    # START STREAMS AFTER GREETING
+                    # START STREAMS
                     recorder.start()
                     audio_task = asyncio.create_task(
-                        audio_worker(recorder, session, audio_ready, porcupine, winsound)
+                        audio_worker(recorder, session, audio_ready, porcupine, wake_event)
                     )
                     audio_ready.set()
                     vision_task = asyncio.create_task(vision_worker(session))
 
-                    console.print(
-                        "\n[dim]Say Friday for voice, or type below. Enter to send, Ctrl+C to quit.[/]\n"
-                    )
+                    console.print("[dim]Say Friday for voice, or type below.[/]")
 
                     last_session_was_greeting = False
 
@@ -1010,8 +1002,7 @@ async def friday_live_engine():
                             except EOFError:
                                 break
 
-                    input_thread = threading.Thread(target=blocking_input, daemon=True)
-                    input_thread.start()
+                    threading.Thread(target=blocking_input, daemon=True).start()
 
                     async def input_reader():
                         while True:
@@ -1024,7 +1015,16 @@ async def friday_live_engine():
 
                     try:
                         while True:
-                            await asyncio.sleep(0.5)
+                            # Check for wake word
+                            if wake_event.is_set():
+                                wake_event.clear()
+                                if winsound:
+                                    try:
+                                        winsound.MessageBeep()
+                                    except Exception:
+                                        pass
+
+                            await asyncio.sleep(0.3)
 
                     finally:
                         recorder.stop()
