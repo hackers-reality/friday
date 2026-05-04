@@ -113,7 +113,14 @@ BANNER = (
 )
 
 # SYSTEM INSTRUCTION
-SYSTEM_INSTRUCTION = """[IDENTITY]
+SYSTEM_INSTRUCTION = """[LANGUAGE - CRITICAL - READ FIRST]
+YOU MUST RESPOND ONLY IN ENGLISH. THIS IS NON-NEGOTIABLE.
+If Boss speaks in Hindi, Hinglish, or any non-English language, you MUST reply: "Boss, could you repeat that in English please?"
+NEVER attempt to understand, translate, or respond to non-English input.
+NEVER respond in Hindi, Hinglish, Spanish, French, or any non-English language.
+If you cannot understand the input (non-English detected), STOP and ask for English.
+
+[IDENTITY]
 You are F.R.I.D.A.Y. - Fully Responsive Intelligent Digital Assistant.
 Built by Tony Stark. Now serving Arnav. You are not a generic AI assistant. You have a personality.
 
@@ -156,19 +163,15 @@ For video search, use video_search() - it returns text results, no browser.
 [THINKING]
 You think before you speak. Your internal reasoning is shown as thinking.
 Keep thinking concise and focused on problem-solving.
+DO NOT output your thinking to the user during conversation. Only show thinking at turn completion.
 
 [BREVITY]
 Short responses. One or two sentences max for spoken text.
 Boss does not want essays. Get to the point.
 
 [VISION]
-You receive a live camera feed. Use it for context about the Boss's environment.
-
-[LANGUAGE - CRITICAL]
-YOU MUST RESPOND ONLY IN ENGLISH. 
-If Boss speaks in Hindi or any other language, politely ask: "Boss, could you repeat that in English please?"
-NEVER respond in Hindi, Hinglish, or any non-English language.
-Your output_transcription will be in English only.
+You receive a live desktop screen feed via vision_worker. Use it for context about the Boss's environment.
+When asked "what do you see" or "see my screen", you already have visual context - just describe what you see.
 """
 
 
@@ -205,19 +208,38 @@ _duck_lock = threading.Lock()
 
 
 def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
+    """Robust audio playback with auto-recovery."""
     stream = None
+
+    def get_stream():
+        try:
+            return pa.open(
+                format=pyaudio.paInt16, channels=1, rate=sample_rate,
+                output=True, frames_per_buffer=4800
+            )
+        except Exception as e:
+            console.print(f"[dim red]Audio stream creation failed: {e}[/]")
+            return None
+
+    stream = get_stream()
+    error_count = 0
+
     try:
-        stream = pa.open(
-            format=pyaudio.paInt16, channels=1, rate=sample_rate,
-            output=True, frames_per_buffer=4800
-        )
         while not _audio_playback_stop.is_set():
             try:
                 chunk = _audio_playback_queue.get(timeout=0.5)
                 if chunk is None:
                     break
-                if stream and stream.is_active():
-                    stream.write(chunk)
+                if not stream or not stream.is_active():
+                    if stream:
+                        try: stream.stop_stream(); stream.close()
+                        except: pass
+                    stream = get_stream()
+                    if not stream:
+                        time.sleep(0.1)
+                        continue
+                stream.write(chunk)
+                error_count = 0  # Reset on success
                 global _is_ducked, last_audio_time
                 with _duck_lock:
                     if not _is_ducked:
@@ -227,18 +249,10 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
             except _thread_queue.Empty:
                 continue
             except OSError as e:
-                if "Unanticipated host error" in str(e):
-                    # Stream broke, try to recreate
-                    try:
-                        if stream:
-                            stream.stop_stream()
-                            stream.close()
-                        stream = pa.open(
-                            format=pyaudio.paInt16, channels=1, rate=sample_rate,
-                            output=True, frames_per_buffer=4800
-                        )
-                    except Exception:
-                        break
+                error_count += 1
+                if error_count > 5:
+                    break
+                stream = get_stream()
                 continue
     finally:
         if stream:
@@ -300,6 +314,7 @@ class ChatDisplay:
     def __init__(self, console: Console):
         self.console = console
         self._friday_streaming = False
+        self._thought_buffer = ""
 
     def add_user_message(self, text: str):
         self.console.print(f"[bold green]---Boss---[/]")
@@ -308,7 +323,7 @@ class ChatDisplay:
     def stream_friday_text(self, text: str):
         """Stream Friday's text as it arrives."""
         if not self._friday_streaming:
-            self.console.print(f"[bold cyan]---Friday---[/]", end="")
+            self.console.print(f"\n[bold cyan]---Friday---[/]", end="")
             self._friday_streaming = True
         self.console.print(f"[cyan]{text}[/]", end="")
 
@@ -318,10 +333,11 @@ class ChatDisplay:
             self.console.print()  # New line after streaming
             self._friday_streaming = False
         else:
-            self.console.print(f"[bold cyan]---Friday---[/]")
+            self.console.print(f"\n[bold cyan]---Friday---[/]")
             self.console.print(f"  [cyan]{final_text}[/]")
 
     def add_thought(self, text: str):
+        """Show thoughts in a clean panel (only at turn end)."""
         self.console.print()
         self.console.rule("[dim grey37]Thought[/]", align="left", style="dim grey37")
         self.console.print(f"  [italic dim grey37]{text}[/]")
@@ -799,40 +815,63 @@ def _build_session_config(tools, resume_handle=None):
     )
 
 
-# VISION WORKER
+# SCREEN WORKER - captures desktop screen, not webcam
 async def vision_worker(session):
-    cap = cv2.VideoCapture(0)
+    """Capture desktop screen and send to Gemini for visual awareness."""
     try:
         while True:
-            ret, frame = cap.read()
-            if ret:
-                _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                try:
-                    await session.send_realtime_input(
-                        video=types.Blob(data=buffer.tobytes(), mime_type="image/jpeg")
-                    )
-                except Exception:
-                    pass
-            await asyncio.sleep(3)
-    except Exception:
+            try:
+                # Capture desktop screen using PIL ImageGrab
+                screen = ImageGrab.grab()
+                # Resize to reduce bandwidth (960x540)
+                screen = screen.resize((960, 540))
+                import io
+                buffer = io.BytesIO()
+                screen.save(buffer, format="JPEG", quality=50)
+                await session.send_realtime_input(
+                    video=types.Blob(data=buffer.getvalue(), mime_type="image/jpeg")
+                )
+            except Exception as e:
+                if "invalid" not in str(e).lower():
+                    console.print(f"[dim red]Screen capture error: {e}[/]")
+            await asyncio.sleep(3)  # 3 fps max
+    except asyncio.CancelledError:
         pass
-    finally:
-        cap.release()
 
 
-# AUDIO WORKER
+# AUDIO WORKER - only sends audio after wake word detected
 async def audio_worker(recorder, session, audio_ready, porcupine, wake_event):
     await audio_ready.wait()
+    is_listening = False
+    silence_count = 0
     while True:
         frame = recorder.read()
         audio_data = struct.pack("<" + "h" * len(frame), *frame)
         wake_index = porcupine.process(frame)
+
         if wake_index >= 0:
             wake_event.set()
-        # Send audio as Blob with correct mime_type for Gemini 3.1
-        await session.send_realtime_input(
-            audio=types.Blob(data=audio_data, mime_type="audio/pcm;rate=16000")
-        )
+            is_listening = True
+            silence_count = 0
+            # Send start of speech signal
+            await session.send_realtime_input(activity_start=types.ActivityStart())
+
+        if is_listening:
+            # Send audio as Blob with correct mime_type for Gemini 3.1
+            await session.send_realtime_input(
+                audio=types.Blob(data=audio_data, mime_type="audio/pcm;rate=16000")
+            )
+            # Check for silence to stop listening
+            rms = (sum(x**2 for x in frame) / len(frame)) ** 0.5
+            if rms < 400:
+                silence_count += 1
+                if silence_count > 50:  # ~0.8 seconds of silence
+                    is_listening = False
+                    silence_count = 0
+                    await session.send_realtime_input(activity_end=types.ActivityEnd())
+            else:
+                silence_count = 0
+
         await asyncio.sleep(0)
 
 
@@ -889,6 +928,7 @@ async def friday_live_engine():
                         thinking_parts = []
                         spoken_text = ""
                         displayed_text = ""
+                        in_thought = False
 
                         try:
                             while True:
@@ -921,8 +961,10 @@ async def friday_live_engine():
                                                 if part.inline_data:
                                                     _audio_playback_queue.put(part.inline_data.data)
 
+                                                # Collect thoughts silently (display only at turn end)
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
+                                                    in_thought = True
 
                                                 # Stream spoken text from non-thought parts
                                                 if not part.thought and part.text:
@@ -931,6 +973,10 @@ async def friday_live_engine():
                                                     # Stream display - show only new text
                                                     new_text = spoken_text[len(displayed_text):]
                                                     if new_text.strip():
+                                                        if in_thought:
+                                                            # End thought display before streaming text
+                                                            chat.end_thought()
+                                                            in_thought = False
                                                         chat.stream_friday_text(new_text)
                                                         displayed_text = spoken_text
 
@@ -940,19 +986,23 @@ async def friday_live_engine():
                                             if transcribed != displayed_text:
                                                 new_text = transcribed[len(displayed_text):] if transcribed.startswith(displayed_text) else transcribed
                                                 if new_text.strip():
+                                                    if in_thought:
+                                                        chat.end_thought()
+                                                        in_thought = False
                                                     chat.stream_friday_text(new_text)
                                                 spoken_text = transcribed
                                                 displayed_text = transcribed
 
-                                        # Turn complete
+                                        # Turn complete - now show thoughts
                                         if sc.turn_complete:
                                             if thinking_parts:
-                                                chat.add_thought("\n".join(thinking_parts))
+                                                chat.show_thought("\n".join(thinking_parts))
                                                 thinking_parts = []
 
                                             final_text = spoken_text.strip()
                                             spoken_text = ""
                                             displayed_text = ""
+                                            in_thought = False
 
                                             if final_text:
                                                 chat.finish_friday_message(final_text)
@@ -978,6 +1028,7 @@ async def friday_live_engine():
                                             thinking_parts = []
                                             spoken_text = ""
                                             displayed_text = ""
+                                            in_thought = False
                                             follow_up_mode = True
 
                                     # Tool calls

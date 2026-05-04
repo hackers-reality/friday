@@ -738,8 +738,9 @@ def see_screen(question: str = "Analyze the current workspace.") -> str:
         pass
 
     try:
-        import pyautogui
-        img = pyautogui.screenshot()
+        # Use PIL ImageGrab instead of pyautogui to avoid camera access
+        from PIL import ImageGrab
+        img = ImageGrab.grab()
     except Exception as e:
         return f"Visual Link Error: screenshot failed ({e})"
 
