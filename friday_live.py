@@ -324,6 +324,12 @@ class ChatDisplay:
         self.console = console
         self._friday_streaming = False
         self._thought_buffer = ""
+    
+    def end_thought(self):
+        """End the current thought display."""
+        if self._thought_buffer:
+            self.console.print(f"[dim grey37]{self._thought_buffer}[/]")
+            self._thought_buffer = ""
 
     def add_user_message(self, text: str):
         self.console.print(f"[bold green]---Boss---[/]")
@@ -841,7 +847,8 @@ async def vision_worker(session):
                     video=types.Blob(data=buffer.getvalue(), mime_type="image/jpeg")
                 )
             except Exception as e:
-                if "invalid" not in str(e).lower():
+                err_str = str(e).lower()
+                if "invalid" not in err_str and "keepalive" not in err_str and "ping" not in err_str:
                     console.print(f"[dim red]Screen capture error: {e}[/]")
             await asyncio.sleep(3)  # 3 fps max
     except asyncio.CancelledError:
