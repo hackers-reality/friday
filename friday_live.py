@@ -74,6 +74,15 @@ from friday_tools import (
     smart_home_command, video_search, see_screen, stark_log,
 )
 
+# ─── UI Dashboard ────────────────────────────────────────────────────────────
+try:
+    from friday_ui import (ui_queue, update_ui, add_thought,
+                          add_tool_call, update_status, add_conversation_message)
+    UI_AVAILABLE = True
+except Exception as e:
+    print(f"UI Dashboard not available: {e}")
+    UI_AVAILABLE = False
+
 load_dotenv()
 console = Console(force_terminal=True)
 
