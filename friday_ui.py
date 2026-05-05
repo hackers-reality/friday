@@ -2,13 +2,14 @@
 
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
+import os
 import threading
 import queue
 import json
 import time
 
 app = Flask(__name__, template_folder='templates')
-app.config['SECRET_KEY'] = 'friday-dashboard-secret'
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'friday-dashboard-secret')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global state
