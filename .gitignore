@@ -9,3 +9,12 @@ friday_memory/
 .venv/
 venv/
 node_modules/
+
+# Sensitive / generated files — never commit these
+chroma_db/
+stark_logs.txt
+model_list.txt
+credentials.json
+.gmail_token.json
+*.sqlite3
+*.exe
