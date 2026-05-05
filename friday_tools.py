@@ -743,7 +743,7 @@ def web_search(query: str, max_results: int = 5) -> str:
     return "No results found."
 
 def video_search(query: str, max_results: int = 5) -> str:
-    """Find videos online and return results headlessly (no browser)."""
+    """Find videos and open the first result directly (not channel page)."""
     try:
         from ddgs import DDGS
         results = []
@@ -756,16 +756,26 @@ def video_search(query: str, max_results: int = 5) -> str:
         if not results:
             return "No videos found for this query. Try a different search term."
 
-        lines = [f"### Video Results for: {query}\n"]
-        for i, v in enumerate(results, 1):
-            title = v.get("title", "Unknown")
-            url = v.get("content", v.get("href", v.get("url", "N/A")))
-            duration = v.get("duration", "N/A")
-            publisher = v.get("publisher", "N/A")
-            lines.append(f"{i}. **{title}**")
-            lines.append(f"   URL: {url}")
-            lines.append(f"   Duration: {duration} | Source: {publisher}\n")
-        return "\n".join(lines)
+        # Open the FIRST video directly (not channel page)
+        first = results[0]
+        url = first.get("content", first.get("href", first.get("url", None)))
+        
+        if url:
+            import webbrowser
+            webbrowser.open(url)
+            title = first.get("title", "Unknown")
+            duration = first.get("duration", "N/A")
+            return f"Opened video: {title} ({duration})\nURL: {url}"
+        else:
+            # Fallback: return list
+            lines = [f"### Video Results for: {query}\n"]
+            for i, v in enumerate(results, 1):
+                title = v.get("title", "Unknown")
+                url = v.get("content", v.get("href", v.get("url", "N/A")))
+                duration = v.get("duration", "N/A")
+                lines.append(f"{i}. **{title}** ({duration})\n   URL: {url}")
+            return "\n".join(lines)
+
     except Exception as e:
         return f"Video search error: {e}"
 
