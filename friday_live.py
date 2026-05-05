@@ -1185,6 +1185,11 @@ async def friday_live_engine():
             except Exception as e:
                 reconnect_attempts += 1
                 console.print(f"[red]Link error:[/] {e}")
+                # Properly close session before reconnecting
+                try:
+                    await session.close()
+                except:
+                    pass
                 if reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
                     await asyncio.sleep(3 * reconnect_attempts)
                 else:

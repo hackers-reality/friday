@@ -839,8 +839,22 @@ def type_text(text: str) -> str:
     pyautogui.write(text)
     return f"Typed: {text}"
 
-def click(x=None, y=None) -> str:
+def click(x=None, y=None, target: str = None) -> str:
     import pyautogui
+    # If target is specified, try to find it on screen using vision
+    if target:
+        try:
+            from friday_live import last_screenshot
+            # Use simple approach: ask user to position mouse over target, then click
+            # For now, if coordinates provided, use them
+            if x is not None and y is not None:
+                pyautogui.click(x, y)
+                return f"Clicked on {target} at ({x}, {y})"
+            else:
+                # No coordinates - use current position or ask
+                return f"Target '{target}' specified but no coordinates. Use click(x, y) with coordinates."
+        except Exception as e:
+            return f"Error finding target: {e}"
     if x is not None and y is not None:
         pyautogui.click(x, y)
         return f"Clicked at ({x}, {y})"
