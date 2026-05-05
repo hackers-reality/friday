@@ -82,6 +82,11 @@ try:
 except Exception as e:
     print(f"UI Dashboard not available: {e}")
     UI_AVAILABLE = False
+    # Ensure UI functions exist as no-ops
+    def add_thought(*args, **kwargs): pass
+    def add_tool_call(*args, **kwargs): pass
+    def update_status(*args, **kwargs): pass
+    def add_conversation_message(*args, **kwargs): pass
 
 load_dotenv()
 console = Console(force_terminal=True)
@@ -98,7 +103,7 @@ FRIDAY_WEBHOOK_SECRET = os.environ["FRIDAY_WEBHOOK_SECRET"]
 
 PORCUPINE_MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "picovoice_model/Friday_en_windows_v4_0_0.ppn")
 MODEL_ID = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview")
-MAX_RECONNECT_ATTEMPTS = 5
+MAX_RECONNECT_ATTEMPTS = 9999  # Keep trying indefinitely
 
 client = genai.Client(api_key=GOOGLE_API_KEY, http_options={"api_version": "v1alpha"})
 
