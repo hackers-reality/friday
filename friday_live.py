@@ -812,16 +812,23 @@ def _invoke_tool(func_name, args):
 
 # SESSION CONFIG
 def _build_session_config(tools, resume_handle=None):
+    # Session resumption config - handle-based reconnection
+    if resume_handle:
+        resumption_config = types.SessionResumptionConfig(
+            handle=resume_handle,
+        )
+    else:
+        resumption_config = None
+    
     return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
         tools=tools,
         thinking_config=types.ThinkingConfig(include_thoughts=True),
         context_window_compression=types.ContextWindowCompressionConfig(
             sliding_window=types.SlidingWindow(),
+            trigger_tokens=40000,  # Compress when hitting 40k tokens
         ),
-        session_resumption=types.SessionResumptionConfig(
-            handle=resume_handle
-        ) if resume_handle else None,
+        session_resumption=resumption_config,
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
@@ -968,10 +975,22 @@ async def friday_live_engine():
                             while True:
                                 async for response in session.receive():
                                     if response.go_away is not None:
+                                        # Get the new resume handle from GoAway if available
+                                        go_away = response.go_away
+                                        if hasattr(go_away, 'new_handle') and go_away.new_handle:
+                                            resume_handle = go_away.new_handle
+                                        elif hasattr(go_away, 'time_left') and go_away.time_left:
+                                            # Wait for the suggested time before reconnecting
+                                            wait_time = max(0.1, float(go_away.time_left) - 1.0)
+                                            console.print(
+                                                f"[bold yellow][SYSTEM] Connection ending in {go_away.time_left}s, reconnecting...[/]"
+                                            )
+                                            await asyncio.sleep(wait_time)
+                                        
                                         console.print(
-                                            f"[bold yellow][SYSTEM] Connection ending, reconnecting...[/]"
+                                            f"[bold yellow][SYSTEM] Connection ended, reconnecting with handle: {resume_handle[:20] if resume_handle else 'None'}...[/]"
                                         )
-                                        return
+                                        return  # Exit to trigger reconnect in outer loop
 
                                     if response.session_resumption_update:
                                         update = response.session_resumption_update

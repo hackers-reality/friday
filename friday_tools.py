@@ -784,19 +784,20 @@ def video_search(query: str, max_results: int = 5) -> str:
 def see_screen(question: str = "Analyze the current workspace.") -> str:
     """Visual Scout: Gemini Vision analyzes screen with model fallback."""
     try:
-        import pygetwindow as gw
-        active = gw.getActiveWindow()
-        if active:
-            try:
-                state_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sovereign_state.json")
-                with open(state_path, "r+", encoding="utf-8") as f:
-                    s = json.load(f)
-                    s["active_window"] = active.title
-                    f.seek(0)
-                    json.dump(s, f, indent=4)
-                    f.truncate()
-            except Exception:
-                pass
+        # Update state with active window info
+        from screen_watcher import get_active_window_info
+        info = get_active_window_info()
+        state_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sovereign_state.json")
+        try:
+            with open(state_path, "r+", encoding="utf-8") as f:
+                s = json.load(f)
+                s["active_window"] = info.get("title", "Unknown")
+                s["active_process"] = info.get("process_name", "Unknown")
+                f.seek(0)
+                json.dump(s, f, indent=4)
+                f.truncate()
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -1005,14 +1006,33 @@ def get_time() -> str:
 def _get_spotify():
     import spotipy
     from spotipy.oauth2 import SpotifyOAuth
-    return spotipy.Spotify(auth_manager=SpotifyOAuth(
-        client_id=os.environ.get("SPOTIFY_CLIENT_ID", ""),
-        client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET", ""),
-        redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback"),
-        scope="user-modify-playback-state user-read-playback-state user-read-currently-playing",
-        open_browser=True,
-        cache_path=".spotify_cache",
-    ))
+    import ssl
+    # Create custom SSL context to handle SSL errors
+    try:
+        return spotipy.Spotify(auth_manager=SpotifyOAuth(
+            client_id=os.environ.get("SPOTIFY_CLIENT_ID", ""),
+            client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET", ""),
+            redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback"),
+            scope="user-modify-playback-state user-read-playback-state user-read-currently-playing",
+            open_browser=True,
+            cache_path=".spotify_cache",
+        ))
+    except ssl.SSLError as e:
+        # Retry with relaxed SSL context
+        import urllib.request
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx))
+        urllib.request.install_opener(opener)
+        return spotipy.Spotify(auth_manager=SpotifyOAuth(
+            client_id=os.environ.get("SPOTIFY_CLIENT_ID", ""),
+            client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET", ""),
+            redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback"),
+            scope="user-modify-playback-state user-read-playback-state user-read-currently-playing",
+            open_browser=False,
+            cache_path=".spotify_cache",
+        ))
 
 def spotify_play(query: Optional[str] = None) -> str:
     """Play a track on Spotify. Auto-wakes app if closed."""

@@ -1,0 +1,49 @@
+# Friday - Requirements
+# Install: pip install -r requirements.txt
+
+# Core LangChain/LangGraph
+langgraph>=1.0.0
+langchain>=0.2.0
+langchain-google-genai>=1.0.0
+langchain-community>=0.2.0
+langgraph-checkpoint-sqlite>=3.0.0
+
+# MCP (Model Context Protocol)
+mcp>=1.0.0
+
+# Screen & Vision
+pywinctl>=0.0.52
+pycaw>=1.5.0
+Pillow>=10.0.0
+pyautogui>=0.9.54
+pyscreeze>=0.1.29
+
+# System & Process
+psutil>=5.9.0
+
+# Browser History
+browser-history>=0.5.0
+
+# Google APIs (Calendar, Auth)
+google-auth>=2.28.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+google-api-python-client>=2.125.0
+
+# HTTP & API
+requests>=2.31.0
+
+# Optional - Voice Wake Word
+pvporcupine>=3.0.0
+openwakeword>=0.5.0
+
+# Optional - Messaging
+python-telegram-bot>=21.0.0
+discord.py>=2.3.0
+
+# Optional - Browser Automation
+selenium>=4.15.0
+playwright>=1.40.0
+
+# Optional - Development
+pytest>=7.4.0

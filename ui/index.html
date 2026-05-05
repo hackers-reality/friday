@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friday - Sovereign AI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1b2e;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #16213e;
+            padding: 1rem;
+            border-bottom: 1px solid #0f3460;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            color: #533483;
+            margin: 0;
+        }
+        
+        .header-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.5rem;
+            background: #533483;
+            color: white;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover { background: #6a4c93; }
+        
+        .btn-secondary {
+            background: #0f3460;
+        }
+        
+        .btn-secondary:hover { background: #1a1b2e; }
+        
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .sidebar {
+            width: 250px;
+            background: #16213e;
+            border-right: 1px solid #0f3460;
+            padding: 1rem;
+            overflow-y: auto;
+            display: none;
+        }
+        
+        .sidebar.active { display: block; }
+        
+        .sidebar-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .sidebar-section h3 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: #533483;
+            margin-bottom: 0.5rem;
+        }
+        
+        .sidebar-item {
+            padding: 0.5rem;
+            margin-bottom: 0.25rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+        
+        .sidebar-item:hover { background: #0f3460; }
+        
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+        
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            max-width: 80%;
+            animation: fadeIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .user-msg {
+            background: #16213e;
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .friday-msg {
+            background: #0f3460;
+            margin-right: auto;
+        }
+        
+        .system-msg {
+            background: #533483;
+            margin: 0 auto;
+            text-align: center;
+            font-size: 0.9rem;
+            max-width: 60%;
+        }
+        
+        .input-container {
+            padding: 1rem;
+            border-top: 1px solid #0f3460;
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+        }
+        
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+        
+        #userInput {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #0f3460;
+            border-radius: 0.5rem;
+            background: #16213e;
+            color: #e0e0e0;
+            font-size: 1rem;
+            resize: none;
+            min-height: 44px;
+            max-height: 150px;
+            font-family: inherit;
+        }
+        
+        #userInput:focus {
+            outline: none;
+            border-color: #533483;
+        }
+        
+        .send-btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            background: #533483;
+            color: white;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+        
+        .send-btn:hover { background: #6a4c93; }
+        
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status-bar {
+            padding: 0.5rem 1rem;
+            background: #16213e;
+            border-top: 1px solid #0f3460;
+            font-size: 0.8rem;
+            color: #888;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 400px;
+            height: 100vh;
+            background: #16213e;
+            border-left: 1px solid #0f3460;
+            transition: right 0.3s;
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        
+        .panel.active { right: 0; }
+        
+        .panel-header {
+            padding: 1rem;
+            border-bottom: 1px solid #0f3460;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .panel-header h2 {
+            font-size: 1.2rem;
+            margin: 0;
+        }
+        
+        .panel-close {
+            background: none;
+            border: none;
+            color: #e0e0e0;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .panel-content {
+            padding: 1rem;
+        }
+        
+        .goal-item {
+            background: #0f3460;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.5rem;
+        }
+        
+        .goal-title {
+            font-weight: bold;
+            margin-bottom: 0.25rem;
+        }
+        
+        .goal-meta {
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #16213e;
+            border-radius: 3px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #533483;
+            transition: width 0.3s;
+        }
+        
+        .settings-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .settings-group h3 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: #533483;
+            margin-bottom: 0.75rem;
+        }
+        
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        
+        .setting-label {
+            font-size: 0.9rem;
+        }
+        
+        .toggle {
+            position: relative;
+            width: 50px;
+            height: 24px;
+        }
+        
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        .toggle input:checked + .toggle-slider {
+            background-color: #533483;
+        }
+        
+        .toggle input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 Friday - Sovereign AI</h1>
+        <div class="header-buttons">
+            <button class="btn btn-secondary" onclick="toggleSidebar()">☰ Menu</button>
+            <button class="btn" onclick="toggleGoals()">🎯 Goals</button>
+            <button class="btn" onclick="toggleSettings()">⚙ Settings</button>
+        </div>
+    </div>
+    
+    <div class="main-container">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-section">
+                <h3>Quick Actions</h3>
+                <div class="sidebar-item" onclick="quickAction('What time is it?')">🕐 Time</div>
+                <div class="sidebar-item" onclick="quickAction('System status')">💻 Status</div>
+                <div class="sidebar-item" onclick="quickAction('Search the web for...')">🔍 Search</div>
+                <div class="sidebar-item" onclick="quickAction('Start screen watch')">👁 Screen Watch</div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Tools</h3>
+                <div class="sidebar-item" onclick="quickAction('open_app calculator')">🧮 Calculator</div>
+                <div class="sidebar-item" onclick="quickAction('spotify_play')">🎵 Spotify</div>
+                <div class="sidebar-item" onclick="quickAction('memory_retrieve ')">🧠 Memory</div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Active Window</h3>
+                <div class="sidebar-item" id="activeWindow">Loading...</div>
+            </div>
+        </div>
+        
+        <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+                <div class="message friday-msg">
+                    <strong>Friday:</strong> Ready to assist, Boss. How can I help you today?
+                </div>
+            </div>
+            
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <textarea id="userInput" placeholder="Type your message... (Shift+Enter to send)" rows="1" onkeydown="handleKeyDown(event)"></textarea>
+                </div>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Ready</span>
+        </div>
+        <div>
+            <span id="messageCount">0 messages</span>
+        </div>
+    </div>
+    
+    <!-- Goals Panel -->
+    <div class="panel" id="goalsPanel">
+        <div class="panel-header">
+            <h2>🎯 Goals</h2>
+            <button class="panel-close" onclick="toggleGoals()">×</button>
+        </div>
+        <div class="panel-content" id="goalsContent">
+            <p>Loading goals...</p>
+        </div>
+    </div>
+    
+    <!-- Settings Panel -->
+    <div class="panel" id="settingsPanel">
+        <div class="panel-header">
+            <h2>⚙ Settings</h2>
+            <button class="panel-close" onclick="toggleSettings()">×</button>
+        </div>
+        <div class="panel-content">
+            <div class="settings-group">
+                <h3>General</h3>
+                <div class="setting-item">
+                    <span class="setting-label">Screen Watch</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="screenWatchToggle" onchange="toggleScreenWatch()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <span class="setting-label">Voice Input</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="voiceToggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <span class="setting-label">Startup</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="startupToggle" onchange="toggleStartup()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="settings-group">
+                <h3>Friday Profile</h3>
+                <div class="setting-item">
+                    <span class="setting-label">Name: Arnav</span>
+                </div>
+                <div class="setting-item">
+                    <span class="setting-label" id="goalCount">Goals: Loading...</span>
+                </div>
+            </div>
+            
+            <div class="settings-group">
+                <h3>Actions</h3>
+                <button class="btn" style="width: 100%; margin-bottom: 0.5rem;" onclick="checkGoals()">🎯 Check Goals</button>
+                <button class="btn btn-secondary" style="width: 100%;" onclick="openStartupSettings()">🚀 Startup Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chatMessages');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const messageCount = document.getElementById('messageCount');
+        const goalsContent = document.getElementById('goalsContent');
+        const activeWindow = document.getElementById('activeWindow');
+        
+        let messageCounter = 0;
+        let ws = null;
+        
+        // Auto-resize textarea
+        userInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+        });
+        
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+            
+            addMessage(text, 'user');
+            userInput.value = '';
+            userInput.style.height = '44px';
+            
+            // Update status
+            updateStatus('Processing...', false);
+            
+            // Send to Friday backend (WebSocket)
+            sendToFriday(text);
+        }
+        
+        function addMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message ' + (sender === 'user' ? 'user-msg' : 'friday-msg');
+            msgDiv.innerHTML = '<strong>' + (sender === 'user' ? 'You:' : 'Friday:') + '</strong> ' + escapeHtml(text);
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            messageCounter++;
+            messageCount.textContent = messageCounter + ' messages';
+        }
+        
+        function addSystemMessage(text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message system-msg';
+            msgDiv.textContent = text;
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function updateStatus(text, ready = true) {
+            statusText.textContent = text;
+            statusDot.style.background = ready ? '#4caf50' : '#ff9800';
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Quick action from sidebar
+        function quickAction(text) {
+            userInput.value = text;
+            userInput.focus();
+        }
+        
+        // Panel toggles
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('active');
+        }
+        
+        function toggleGoals() {
+            document.getElementById('goalsPanel').classList.toggle('active');
+            if (document.getElementById('goalsPanel').classList.contains('active')) {
+                loadGoals();
+            }
+        }
+        
+        function toggleSettings() {
+            document.getElementById('settingsPanel').classList.toggle('active');
+            checkStartupStatus();
+        }
+        
+        // WebSocket connection to Friday backend
+        function connectWebSocket() {
+            // In production, connect to Friday's WebSocket server
+            // ws = new WebSocket('ws://localhost:8765');
+            
+            // For now, simulate
+            updateStatus('Ready', true);
+        }
+        
+        function sendToFriday(message) {
+            // TODO: Send via WebSocket
+            // if (ws && ws.readyState === WebSocket.OPEN) {
+            //     ws.send(JSON.stringify({type: 'message', content: message}));
+            // }
+            
+            // Simulate response
+            setTimeout(() => {
+                const responses = [
+                    "I'm on it, Boss.",
+                    "Processing your request...",
+                    "Let me check that for you.",
+                    "Working on it now.",
+                ];
+                const response = responses[Math.floor(Math.random() * responses.length)];
+                addMessage(response, 'friday');
+                updateStatus('Ready', true);
+            }, 1000);
+        }
+        
+        function loadGoals() {
+            // TODO: Fetch from Friday backend
+            goalsContent.innerHTML = `
+                <div class="goal-item">
+                    <div class="goal-title">⏳ IITM Course</div>
+                    <div class="goal-meta">Type: course | Priority: high</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 45%"></div>
+                    </div>
+                </div>
+                <div class="goal-item">
+                    <div class="goal-title">📄 Math Exam</div>
+                    <div class="goal-meta">Date: 2026-05-20 | Priority: high</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 20%"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function checkGoals() {
+            addSystemMessage('📊 Checking goals...');
+            // TODO: Call Friday goals check
+        }
+        
+        function toggleScreenWatch() {
+            const enabled = document.getElementById('screenWatchToggle').checked;
+            addSystemMessage(enabled ? '👁 Screen watch enabled' : '👁 Screen watch disabled');
+            // TODO: Send to Friday backend
+        }
+        
+        function toggleStartup() {
+            // TODO: Toggle startup via Friday backend
+            addSystemMessage('🚀 Startup setting changed');
+        }
+        
+        function checkStartupStatus() {
+            // TODO: Check actual status
+            document.getElementById('startupToggle').checked = false;
+        }
+        
+        function openStartupSettings() {
+            addSystemMessage('🚀 Opening startup settings...');
+            // TODO: Call Friday startup integration
+        }
+        
+        // Update active window (simulated)
+        function updateActiveWindow() {
+            // TODO: Fetch from Friday backend
+            activeWindow.textContent = '🖥️ Terminal';
+        }
+        
+        // Initialize
+        connectWebSocket();
+        setInterval(updateActiveWindow, 5000);
+    </script>
+</body>
+</html>
