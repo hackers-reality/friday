@@ -28,6 +28,22 @@ from typing import Any, Callable, Optional
 import requests
 from dotenv import load_dotenv
 
+# ─── OpenCLI Integration ────────────────────────────────────────────────
+try:
+    from opencli_integration import (opencli_navigate, opencli_click, 
+                               opencli_type, opencli_extract, 
+                               opencli_screenshot, instagram_message_opencli)
+except Exception as e:
+    print(f"OpenCLI integration not available: {e}")
+
+
+# ─── Instagram Messaging ────────────────────────────────────────────────
+try:
+    from instagram_bot import instagram_message, instagram_search_and_message
+except Exception as e:
+    print(f"Instagram messaging not available: {e}")
+
+
 # ─── LLM Manager ────────────────────────────────────────────────────────────
 try:
     from llm_manager import llm_manager, switch_llm, list_llms
@@ -841,20 +857,22 @@ def type_text(text: str) -> str:
 
 def click(x=None, y=None, target: str = None) -> str:
     import pyautogui
-    # If target is specified, try to find it on screen using vision
+    # If target is specified, use vision to find it
     if target:
         try:
-            from friday_live import last_screenshot
-            # Use simple approach: ask user to position mouse over target, then click
-            # For now, if coordinates provided, use them
-            if x is not None and y is not None:
+            # Use see_screen to analyze where the target is
+            screen_analysis = see_screen(f"Where is {target} on screen? Give me exact pixel coordinates (x,y).")
+            # Try to extract coordinates from analysis
+            import re
+            coords = re.search(r'\(?(\d+)\s*,\s*(\d+)\)?', screen_analysis)
+            if coords:
+                x, y = int(coords.group(1)), int(coords.group(2))
                 pyautogui.click(x, y)
-                return f"Clicked on {target} at ({x}, {y})"
+                return f"Clicked on '{target}' at ({x}, {y})"
             else:
-                # No coordinates - use current position or ask
-                return f"Target '{target}' specified but no coordinates. Use click(x, y) with coordinates."
+                return f"Could not locate '{target}' on screen. Analysis: {screen_analysis[:200]}"
         except Exception as e:
-            return f"Error finding target: {e}"
+            return f"Error finding target '{target}': {e}"
     if x is not None and y is not None:
         pyautogui.click(x, y)
         return f"Clicked at ({x}, {y})"
