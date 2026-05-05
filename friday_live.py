@@ -852,9 +852,18 @@ async def vision_worker(session):
                 import io
                 buffer = io.BytesIO()
                 screen.save(buffer, format="JPEG", quality=50)
-                await session.send_realtime_input(
-                    video=types.Blob(data=buffer.getvalue(), mime_type="image/jpeg")
-                )
+                
+                # Send with timeout to avoid hanging
+                try:
+                    await asyncio.wait_for(
+                        session.send_realtime_input(
+                            video=types.Blob(data=buffer.getvalue(), mime_type="image/jpeg")
+                        ),
+                        timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    console.print("[dim yellow]Screen capture timeout[/]")
+                
             except Exception as e:
                 err_str = str(e).lower()
                 if "invalid" not in err_str and "keepalive" not in err_str and "ping" not in err_str:
