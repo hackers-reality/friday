@@ -1,68 +1,20 @@
-# Friday .gitignore
-# Protect sensitive files and generated content
-
-# Environment and API keys
-.env
-*.env
-
-# Memory and state (contains user data)
-friday_memory/
-sovereign_state.json
-
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+*.pyc
+.env
+sovereign_state.json
+picovoice_model/
+friday_memory/
+*.wav
+*.mp3
+.venv/
 venv/
-env/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+node_modules/
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Logs
-*.log
-logs/
-
-# Google Calendar credentials
+# Sensitive / generated files — never commit these
+chroma_db/
+stark_logs.txt
+model_list.txt
 credentials.json
-token.json
-client_secret*.json
-
-# PyInstaller
-*.spec
-build/
-dist/
+.gmail_token.json
+*.sqlite3
 *.exe
-
-# Test
-.pytest_cache/
-htmlcov/
-.coverage
-*.cover
-
-# OS
-Thumbs.db
-Desktop.ini
