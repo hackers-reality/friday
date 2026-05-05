@@ -331,6 +331,10 @@ class ChatDisplay:
             self.console.print(f"[dim grey37]{self._thought_buffer}[/]")
             self._thought_buffer = ""
 
+    def show_thought(self, text: str):
+        """Show a thought (alias for updating thought buffer)."""
+        self._thought_buffer = text
+
     def add_user_message(self, text: str):
         self.console.print(f"[bold green]---Boss---[/]")
         self.console.print(f"  {text}")
