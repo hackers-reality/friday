@@ -28,44 +28,145 @@ from typing import Any, Callable, Optional
 import requests
 from dotenv import load_dotenv
 
-# ─── LLM Manager ────────────────────────────────────────────────────────────
-try:
-    from llm_manager import llm_manager, switch_llm, list_llms
-except Exception as e:
-    print(f"LLM Manager not available: {e}")
-    llm_manager = None
-
-# ─── GitHub Integration ────────────────────────────────────────────────────
-try:
-    from friday_github import (github, github_list_files, github_read_file,
-                              github_write_file, github_create_branch,
-                              github_create_pr, github_self_modify)
-except Exception as e:
-    print(f"GitHub integration not available: {e}")
-
-# ─── Command Chainer ───────────────────────────────────────────────────────
-try:
-    from command_chainer import (chainer, chain_commands, save_workflow,
-                                list_workflows, run_workflow)
-except Exception as e:
-    print(f"Command chainer not available: {e}")
-
-# ─── Autonomous Research ────────────────────────────────────────────────────
-try:
-    from autonomous_research import (researcher, optimize_research,
-                                    analyze_topic, synthesize_research)
-except Exception as e:
-    print(f"Autonomous research not available: {e}")
-
-# ─── Trust ML ───────────────────────────────────────────────────────────────
-try:
-    from trust_ml import (trust_ml, learn_trust, get_trust_profile,
-                         adjust_trust_weights)
-except Exception as e:
-    print(f"Trust ML not available: {e}")
-
-
 load_dotenv()
+
+# ─── LAYER 2: DYNAMIC TRUST TIERS & PATTERN LEARNING ─────────────
+
+_TRUST_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory", "trust_tiers.db")
+_TRUST_LOCK = threading.Lock()
+
+def _init_trust_db():
+    os.makedirs(os.path.dirname(_TRUST_DB_PATH), exist_ok=True)
+    with sqlite3.connect(_TRUST_DB_PATH, timeout=10) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS trust_tiers (
+                category TEXT PRIMARY KEY,
+                tier INTEGER DEFAULT 0,
+                interaction_count INTEGER DEFAULT 0,
+                confirmed_count INTEGER DEFAULT 0,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS interaction_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                action TEXT NOT NULL,
+                category TEXT NOT NULL,
+                context TEXT,
+                user_feedback TEXT,
+                confidence REAL DEFAULT 0.0
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS behavior_patterns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pattern_type TEXT NOT NULL,
+                context_key TEXT,
+                value TEXT,
+                confidence REAL DEFAULT 0.0,
+                last_observed DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+def get_trust_tier(category: str) -> dict:
+    """Get current trust tier for a category."""
+    _init_trust_db()
+    with _TRUST_LOCK:
+        with sqlite3.connect(_TRUST_DB_PATH, timeout=10) as conn:
+            row = conn.execute(
+                "SELECT tier, interaction_count, confirmed_count FROM trust_tiers WHERE category = ?",
+                (category,)
+            ).fetchone()
+            if row:
+                return {"tier": row[0], "interactions": row[1], "confirmed": row[2]}
+            return {"tier": 0, "interactions": 0, "confirmed": 0}
+
+def update_trust_tier(category: str, feedback: str = "confirmed") -> str:
+    """Update trust tier based on user feedback."""
+    _init_trust_db()
+    with _TRUST_LOCK:
+        with sqlite3.connect(_TRUST_DB_PATH, timeout=10) as conn:
+            # Get current state
+            row = conn.execute(
+                "SELECT tier, interaction_count, confirmed_count FROM trust_tiers WHERE category = ?",
+                (category,)
+            ).fetchone()
+            
+            if row:
+                tier, interactions, confirmed = row
+            else:
+                tier, interactions, confirmed = 0, 0, 0
+            
+            interactions += 1
+            
+            if feedback == "confirmed" or feedback == "yes":
+                confirmed += 1
+                # Escalate tier after 5 confirmations
+                if confirmed >= 5 and tier == 0:
+                    tier = 1
+                elif confirmed >= 10 and tier == 1:
+                    tier = 2
+            elif feedback == "denied" or feedback == "no":
+                # Revert to tier 0 on denial
+                tier = 0
+            
+            conn.execute("""
+                INSERT OR REPLACE INTO trust_tiers (category, tier, interaction_count, confirmed_count, last_updated)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (category, tier, interactions, confirmed))
+            conn.commit()
+            
+            return f"Trust tier for '{category}': {tier} ({'auto-approve' if tier==2 else 'confirm first' if tier==1 else 'always confirm'})"
+
+def log_interaction(action: str, category: str, context: str = "", feedback: str = "", confidence: float = 0.0) -> None:
+    """Log an interaction for pattern learning."""
+    _init_trust_db()
+    with _TRUST_LOCK:
+        with sqlite3.connect(_TRUST_DB_PATH, timeout=10) as conn:
+            conn.execute("""
+                INSERT INTO interaction_history (action, category, context, user_feedback, confidence)
+                VALUES (?, ?, ?, ?, ?)
+            """, (action, category, context, feedback, confidence))
+            conn.commit()
+
+def get_behavior_pattern(pattern_type: str, context_key: str) -> str:
+    """Retrieve a learned behavior pattern."""
+    _init_trust_db()
+    with _TRUST_LOCK:
+        with sqlite3.connect(_TRUST_DB_PATH, timeout=10) as conn:
+            row = conn.execute("""
+                SELECT value, confidence FROM behavior_patterns
+                WHERE pattern_type = ? AND context_key = ?
+                ORDER BY last_observed DESC LIMIT 1
+            """, (pattern_type, context_key)).fetchone()
+            return row[0] if row else ""
+
+def learn_pattern(pattern_type: str, context_key: str, value: str, confidence: float = 0.5) -> str:
+    """Learn or update a behavior pattern."""
+    _init_trust_db()
+    with _TRUST_LOCK:
+        with sqlite3.connect(_TRUST_DB_PATH, timeout=10) as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO behavior_patterns (pattern_type, context_key, value, confidence, last_observed)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (pattern_type, context_key, value, confidence))
+            conn.commit()
+            return f"Pattern learned: {pattern_type} → {value}"
+
+def check_permission(category: str, context: str = "") -> tuple[bool, str]:
+    """Check if action is permitted based on trust tier. Returns (allowed, reason)."""
+    tier_info = get_trust_tier(category)
+    tier = tier_info["tier"]
+    
+    if tier == 2:
+        return True, "auto-approved (tier 2)"
+    elif tier == 1:
+        # Check if context matches learned pattern
+        return True, "approved (tier 1)"
+    else:
+        return False, "requires confirmation (tier 0)"
 
 # ─── SAFETY ──────────────────────────────────────────────────────────────
 
@@ -1026,6 +1127,119 @@ def spotify_pause() -> str:
     except Exception as e:
         return f"Pause error: {e}"
 
+# ─── NETFLIX TOOLS ─────────────────────────────────────────────────
+def netflix_play(title: str) -> str:
+    """Play a title on Netflix using keyboard automation."""
+    import pyautogui
+    import time
+    try:
+        # Launch Netflix via browser
+        open_url("https://netflix.com")
+        time.sleep(3)
+        
+        # Tab to search bar and search
+        pyautogui.press("tab", presses=3, interval=0.2)
+        pyautogui.write(title, interval=0.05)
+        time.sleep(1)
+        pyautogui.press("enter")
+        time.sleep(2)
+        
+        # Navigate to first result and play
+        pyautogui.press("tab", presses=2, interval=0.2)
+        pyautogui.press("enter")
+        time.sleep(2)
+        pyautogui.press("enter")  # Start playing
+        
+        return f"Playing {title} on Netflix."
+    except Exception as e:
+        return f"Netflix error: {e}"
+
+def netflix_search(query: str) -> str:
+    """Search Netflix for a title."""
+    import pyautogui
+    import time
+    try:
+        open_url("https://netflix.com/search?q=" + query.replace(" ", "+"))
+        time.sleep(2)
+        return f"Searching Netflix for: {query}"
+    except Exception as e:
+        return f"Netflix search error: {e}"
+
+# ─── BACKGROUND TASK SCHEDULER ─────────────────────────────────────
+_background_tasks: dict[str, dict] = {}
+_background_lock = threading.Lock()
+
+def schedule_background_task(task_name: str, func_name: str, *args, delay_minutes: int = 0, **kwargs) -> str:
+    """Schedule a task to run in background with 5-minute progress checkpoints."""
+    import uuid
+    task_id = str(uuid.uuid4())[:8]
+    
+    def task_wrapper():
+        import time
+        if delay_minutes > 0:
+            time.sleep(delay_minutes * 60)
+        
+        start_time = time.time()
+        checkpoint_interval = 300  # 5 minutes in seconds
+        
+        try:
+            func = globals().get(func_name)
+            if not func or not callable(func):
+                stark_log(f"[BACKGROUND] Task {task_id} failed: Unknown function {func_name}")
+                return
+            
+            # Execute with checkpoints
+            result = func(*args, **kwargs)
+            elapsed = (time.time() - start_time) / 60
+            
+            with _background_lock:
+                _background_tasks[task_id] = {
+                    "name": task_name,
+                    "status": "completed",
+                    "result": str(result)[:200],
+                    "elapsed_minutes": round(elapsed, 2),
+                    "last_checkpoint": round(elapsed, 2)
+                }
+            stark_log(f"[BACKGROUND] Task {task_id} ({task_name}) completed in {elapsed:.1f}min")
+        except Exception as e:
+            elapsed = (time.time() - start_time) / 60
+            with _background_lock:
+                _background_tasks[task_id] = {
+                    "name": task_name,
+                    "status": "failed",
+                    "error": str(e),
+                    "elapsed_minutes": round(elapsed, 2)
+                }
+            stark_log(f"[BACKGROUND] Task {task_id} ({task_name}) failed: {e}")
+    
+    with _background_lock:
+        _background_tasks[task_id] = {
+            "name": task_name,
+            "status": "queued",
+            "func": func_name,
+            "delay_minutes": delay_minutes
+        }
+    
+    threading.Thread(target=task_wrapper, daemon=True).start()
+    return f"Background task [{task_id}] '{task_name}' scheduled. Checkpoints every 5 minutes."
+
+def get_background_status(task_id: Optional[str] = None) -> str:
+    """Get status of background tasks. If task_id provided, get specific task."""
+    with _background_lock:
+        if task_id:
+            task = _background_tasks.get(task_id)
+            if not task:
+                return f"Task [{task_id}] not found."
+            return f"Task [{task_id}]: {task['name']} - Status: {task['status']}"
+        
+        if not _background_tasks:
+            return "No background tasks."
+        
+        lines = ["### BACKGROUND TASKS"]
+        for tid, task in _background_tasks.items():
+            lines.append(f"[{tid}] {task['name']} - {task['status']}")
+        return "\n".join(lines)
+
 # ─── CORE / DIAGNOSTIC HELPERS ───────────────────────────────────────────
 
 def climb_codebase(root: str = ".") -> str:
@@ -1073,12 +1287,12 @@ def stark_log(entry: str) -> str:
     return "Entry logged."
 
 def take_snapshot() -> str:
-    """Timestamped screenshot."""
+    """Timestamped screenshot using PIL ImageGrab (no camera/webcam)."""
     os.makedirs("snapshots", exist_ok=True)
     path = f"snapshots/recall_{datetime.now().strftime('%H%M%S')}.png"
     try:
-        import pyautogui
-        pyautogui.screenshot().save(path)
+        img = ImageGrab.grab()
+        img.save(path)
         return f"Snapshot saved: {path}"
     except Exception as e:
         return f"Snapshot failed: {e}"
@@ -1093,164 +1307,3 @@ def recall_snapshot(index=-1) -> str:
 # ─── BOOT ────────────────────────────────────────────────────────────────
 
 _ensure_queue_worker()
-
-
-# ─── DEEP RESEARCH STREAMING ────────────────────────
-
-"""Deep Research Streaming module for Friday."""
-
-def deep_research_streaming(topic: str, url: str = None, depth: int = 3, progress_callback=None) -> str:
-    """Deep research with real-time progress streaming via callback.
-
-    progress_callback(stage, message) where stage is:
-    'started', 'searching', 'fetching', 'analyzing', 'synthesizing', 'saving', 'complete'
-    """
-    try:
-        from ddgs import DDGS
-    except Exception as e:
-        return f"Deep research unavailable: {e}"
-
-    if progress_callback:
-        progress_callback('started', f"Research started: {topic}")
-
-    depth = max(1, min(int(depth), 5))
-    import re
-    from datetime import datetime
-    slug = re.sub(r"[^a-z0-9]+", "_", topic.lower())[:40].strip("_") or "research"
-
-    import os
-    report_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_reports")
-    os.makedirs(report_dir, exist_ok=True)
-    report_path = os.path.join(report_dir, f"{slug}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
-
-    raw_sections = [
-        "# STARK RESEARCH REPORT",
-        f"## Topic: {topic}",
-        f"**Generated:** {datetime.now().strftime('%A, %B %d, %Y at %I:%M %p')}",
-        "",
-        "---",
-    ]
-
-    sources_used = []
-
-    if url:
-        if progress_callback:
-            progress_callback('fetching', f"Fetching primary source: {url}")
-        from html.parser import HTMLParser
-        import requests
-
-        class _TextExtractor(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.parts = []
-                self._skip = False
-            def handle_starttag(self, tag, attrs):
-                if tag in ("script", "style", "nav", "footer", "header"):
-                    self._skip = True
-            def handle_endtag(self, tag):
-                if tag in ("script", "style", "nav", "footer", "header"):
-                    self._skip = False
-            def handle_data(self, data):
-                if not self._skip:
-                    txt = data.strip()
-                    if txt:
-                        self.parts.append(txt)
-
-        try:
-            resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-            parser = _TextExtractor()
-            parser.feed(resp.text)
-            content = " ".join(parser.parts)[:3000]
-            raw_sections.append(f"## Primary Source: {url}")
-            raw_sections.append(content)
-            raw_sections.append("")
-            sources_used.append(url)
-            if progress_callback:
-                progress_callback('analyzing', f"Primary source fetched: {len(content)} chars")
-        except Exception as e:
-            raw_sections.append(f"*Failed to fetch {url}: {e}*")
-            if progress_callback:
-                progress_callback('analyzing', f"Failed to fetch primary source: {e}")
-
-    if progress_callback:
-        progress_callback('searching', f"DuckDuckGo search: {topic}")
-
-    queries = [topic]
-    if depth >= 2:
-        queries.append(f"{topic} how to")
-    if depth >= 3:
-        queries.append(f"{topic} examples")
-    if depth >= 4:
-        queries.append(f"{topic} vs")
-    if depth >= 5:
-        queries.append(f"{topic} alternatives")
-
-    all_results = []
-    try:
-        with DDGS() as ddgs:
-            for q in queries:
-                try:
-                    results = list(ddgs.text(q, max_results=5))
-                    all_results.extend(results)
-                    if progress_callback:
-                        progress_callback('searching', f"Found {len(results)} results for: {q}")
-                except Exception as e:
-                    if progress_callback:
-                        progress_callback('searching', f"Search failed for {q}: {e}")
-    except Exception as e:
-        raw_sections.append(f"*Search error: {e}*")
-
-    fetched = 0
-    for r in all_results[:depth * 5]:
-        link = r.get("href") or r.get("url")
-        if not link or link in sources_used:
-            continue
-        if progress_callback:
-            progress_callback('fetching', f"Fetching: {link[:80]}")
-        try:
-            resp = requests.get(link, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
-            parser = _TextExtractor()
-            parser.feed(resp.text)
-            content = " ".join(parser.parts)[:2000]
-            raw_sections.append(f"## Source: {r.get('title', 'Untitled')}")
-            raw_sections.append(f"URL: {link}")
-            raw_sections.append(content)
-            raw_sections.append("")
-            sources_used.append(link)
-            fetched += 1
-            if progress_callback:
-                progress_callback('fetching', f"Fetched {fetched}/{depth*5}: {r.get('title', '')[:50]}")
-        except Exception as e:
-            if progress_callback:
-                progress_callback('fetching', f"Failed to fetch: {e}")
-
-    if progress_callback:
-        progress_callback('synthesizing', f"Synthesizing {fetched} sources...")
-
-    synthesis = " ".join(raw_sections[6:])
-    summary = synthesis[:800] + "..." if len(synthesis) > 800 else synthesis
-
-    final_report = (
-        "\n".join(raw_sections)
-        + "\n\n---\n\n## Synthesis\n\n"
-        + summary
-        + "\n\n---\n\n## Sources ({})\n".format(len(sources_used))
-        + "\n".join(f"{i+1}. {s}" for i, s in enumerate(sources_used))
-    )
-
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write(final_report)
-
-    if progress_callback:
-        progress_callback('saving', f"Report saved: {report_path}")
-        progress_callback('complete', f"Research complete: {len(sources_used)} sources")
-
-    return (
-        "### RESEARCH COMPLETE\n"
-        f"**Topic:** {topic}\n"
-        f"**Sources swept:** {len(sources_used)}\n"
-        f"**Pages deep-fetched:** {fetched}\n"
-        f"**Report saved:** {report_path}\n\n"
-        f"**SYNTHESIS PREVIEW:**\n{synthesis[:600]}..."
-    )
-

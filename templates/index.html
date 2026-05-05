@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friday Dashboard</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0a0e14; color: #a6b0c3; height: 100vh; overflow: hidden; }
+        .container { display: grid; grid-template-columns: 250px 1fr 300px; grid-template-rows: 60px 1fr; height: 100vh; }
+        .header { grid-column: 1/-1; background: #0d1117; border-bottom: 1px solid #21262d; display: flex; align-items: center; padding: 0 20px; }
+        .header h1 { color: #58a6ff; font-size: 20px; }
+        .sidebar { background: #0d1117; border-right: 1px solid #21262d; padding: 15px; overflow-y: auto; }
+        .main { background: #0a0e14; padding: 20px; overflow-y: auto; }
+        .panel { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 15px; margin-bottom: 15px; }
+        .panel h3 { color: #58a6ff; margin-bottom: 10px; font-size: 14px; }
+        .status { display: flex; align-items: center; gap: 10px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #3fb950; animation: pulse 2s infinite; }
+        .status-dot.idle { background: #6e7681; }
+        .status-dot.working { background: #d29922; }
+        .status-dot.error { background: #f85149; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .thought { background: #161b22; padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; }
+        .tool-call { background: #161b22; padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; border-left: 3px solid #58a6ff; }
+        .conversation { max-height: 400px; overflow-y: auto; }
+        .msg { margin: 8px 0; padding: 8px; border-radius: 4px; }
+        .msg.user { background: #0d1117; border-left: 3px solid #3fb950; }
+        .msg.friday { background: #161b22; border-left: 3px solid #58a6ff; }
+        input[type="text"] { width: 100%; padding: 10px; background: #161b22; border: 1px solid #21262d; color: #a6b0c3; border-radius: 4px; }
+        button { padding: 10px 20px; background: #238636; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #2ea043; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ Friday Dashboard</h1>
+            <div style="margin-left: auto; display: flex; gap: 15px; align-items: center;">
+                <div class="status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Idle</span>
+                </div>
+                <span id="trustTier" style="font-size: 12px; color: #6e7681;">Trust: New</span>
+            </div>
+        </div>
+        <div class="sidebar">
+            <div class="panel">
+                <h3>🧠 Thoughts</h3>
+                <div id="thoughtsList"></div>
+            </div>
+            <div class="panel">
+                <h3>🔧 Tools Called</h3>
+                <div id="toolsList"></div>
+            </div>
+        </div>
+        <div class="main">
+            <div class="panel" style="height: calc(100% - 70px);">
+                <h3>💬 Conversation</h3>
+                <div class="conversation" id="conversation"></div>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <input type="text" id="messageInput" placeholder="Type a message to Friday..." onkeypress="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        const socket = io();
+        const state = {
+            status: 'idle',
+            thoughts: [],
+            tools_called: [],
+            conversation: []
+        };
+
+        socket.on('connect', () => console.log('Connected to Friday'));
+        socket.on('state_update', updateState);
+        socket.on('thought_added', data => addThought(data.thought));
+        socket.on('tool_called', data => addToolCall(data));
+        socket.on('status_update', data => updateStatus(data.status, data.current_task));
+        socket.on('conversation_update', data => addMessage(data.role, data.content));
+
+        function updateState(newState) {
+            Object.assign(state, newState);
+            renderUI();
+        }
+
+        function updateStatus(status, task) {
+            state.status = status;
+            document.getElementById('statusText').textContent = task || status;
+            const dot = document.getElementById('statusDot');
+            dot.className = 'status-dot ' + status;
+        }
+
+        function addThought(thought) {
+            state.thoughts.push(thought);
+            const list = document.getElementById('thoughtsList');
+            const div = document.createElement('div');
+            div.className = 'thought';
+            div.textContent = thought;
+            list.appendChild(div);
+            list.scrollTop = list.scrollHeight;
+        }
+
+        function addToolCall(data) {
+            const list = document.getElementById('toolsList');
+            const div = document.createElement('div');
+            div.className = 'tool-call';
+            div.textContent = `${data.tool}(${JSON.stringify(data.args).slice(0, 50)}...)`;
+            list.appendChild(div);
+            list.scrollTop = list.scrollHeight;
+        }
+
+        function addMessage(role, content) {
+            const conv = document.getElementById('conversation');
+            const div = document.createElement('div');
+            div.className = 'msg ' + role;
+            div.textContent = `${role}: ${content.slice(0, 200)}`;
+            conv.appendChild(div);
+            conv.scrollTop = conv.scrollHeight;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const msg = input.value.trim();
+            if (msg) {
+                socket.emit('send_message', { message: msg });
+                addMessage('user', msg);
+                input.value = '';
+            }
+        }
+
+        function renderUI() {
+            document.getElementById('trustTier').textContent = 'Trust: ' + (state.trust_tier || 'new');
+            updateStatus(state.status, state.current_task);
+        }
+    </script>
+</body>
+</html>
