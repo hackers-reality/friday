@@ -321,7 +321,7 @@ def proactive_commentary_tool(action: str = "status", enable: bool = True) -> st
 
     if action == "start" or enable:`
         commentary.start()`
-        return "✅ Proactive commentary started. I'll watch your screen and comment."`
+        return "[OK] Proactive commentary started. I'll watch your screen and comment."`
 
     if action == "stop":`
         commentary.stop()`

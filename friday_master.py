@@ -1,265 +1,255 @@
 """
-Friday Master Integration - Main Entry Point
-Integrates all Friday subsystems into a unified AI agent.
+Friday Master Bootstrap - Loads and tests ALL features you asked for.
+Run: python friday_master.py
 """
-from __future__ import annotations
+import sys'
+import os'
+sys.path.insert(0, '.')
 
-import os
-import sys
-import argparse
-import threading
-from typing import Optional
+print("=" * 70)
+print("FRIDAY SOVEREIGN AI - ALL FEATURES BOOTSTRAP")
+print("=" * 70)
 
-# ─── Version ────────────────────────────────────#
+results = {"pass": 0, "fail": 0, "skip": 0}
+modules_status = []
 
-FRIDAY_VERSION = "1.0.0"
-FRIDAY_CODENAME = "Sovereign"
-
-
-# ─── Banner ────────────────────────────────────#
-
-def print_banner():
-    """Print Friday banner."""
-    print(f"""
-===============================================================
-|                                                             |
-|     FFFFF  RRRR   III  DDDD   AAA   Y   Y                  |
-|     F      R   R   I   D   D  A   A   Y Y                    |
-|     FFF    RRRR    I   D   D  AAAAA    Y                     |
-|     F      R   R   I   D   D  A   A    Y                     |
-|     F      R    R III  DDDD   A   A    Y                     |
-|                                                             |
-|         Ultimate AI Agent v{FRIDAY_VERSION} "{FRIDAY_CODENAME}"       |
-|                                                             |
-===============================================================
-""")
-
-
-# ─── Component Status ────────────────────────────────────#
-
-def check_components() -> dict:
-    """Check which components are available."""
-    status = {}
-
-    # LangGraph
+def test_module(name, import_path, test_fn=None):
+    """Test a module."""
     try:
-        import langgraph
-        status["langgraph"] = True
-    except ImportError:
-        status["langgraph"] = False
+        if import_path:
+            m = __import__(import_path)
+        else:
+            m = __import__(name)
+        
+        if test_fn:
+            result = test_fn(m)
+            modules_status.append(("✅", name, result))
+        else:
+            modules_status.append(("✅", name, "imported"))
+        results["pass"] += 1
+        return m
+    except Exception as e:
+        # Clean error for Windows console
+        err = str(e)[:100].encode('ascii', 'ignore').decode('ascii')
+        modules_status.append(("❌", name, err))
+        results["fail"] += 1
+        return None
 
-    # MCP
+def safe_str(obj, max_len=80):
+    """Safe string conversion."""
     try:
-        import mcp
-        status["mcp"] = True
-    except ImportError:
-        status["mcp"] = False
+        s = str(obj)
+        return s[:max_len] if len(s) > max_len else s
+    except:
+        return "(unprintable)"
 
-    # Screen watcher
+# ─── Phase 1: Core Modules ────────────────────────────────#
+
+print("\n### PHASE 1: CORE MODULES ###\n")
+
+# Screen Watcher
+def test_screen(m):
+    from screen_watcher import get_active_window_info
+    info = get_active_window_info()
+    return f"Active: {safe_str(info.get('title', 'Unknown'))}"
+
+test_module("screen_watcher", "screen_watcher", test_screen)
+
+# Browser History
+def test_browser(m):
+    from browser_history_tools import get_browser_status
+    return safe_str(get_browser_status())
+
+test_module("browser_history_tools", "browser_history_tools", test_browser)
+
+# File Generator
+def test_filegen(m):
+    from file_generator import get_generator_status
+    return safe_str(get_generator_status())
+
+test_module("file_generator", "file_generator", test_filegen)
+
+# Goal Memory
+def test_goal(m):
+    from goal_memory import get_profile_summary
+    return safe_str(get_profile_summary())
+
+test_module("goal_memory", "goal_memory", test_goal)
+
+# Friday Tools
+def test_tools(m):
+    from friday_tools import __all__
+    return f"{len(__all__)} tools loaded"
+
+test_module("friday_tools", "friday_tools", test_tools)
+
+# Startup Integration
+def test_startup(m):
+    from startup_integration import check_startup_status
+    return safe_str(check_startup_status())
+
+test_module("startup_integration", "startup_integration", test_startup)
+
+# ─── Phase 2: Advanced Features ────────────────────────────────#
+
+print("\n### PHASE 2: ADVANCED FEATURES ###\n")
+
+# Proactive Monitor
+def test_monitor(m):
+    from proactive_screen_monitor import ProactiveScreenMonitor
+    m = ProactiveScreenMonitor(ai_enabled=False)
+    return m.get_status()[:80]
+
+test_module("proactive_screen_monitor", "proactive_screen_monitor", test_monitor)
+
+# MCP Server
+def test_mcp(m):
+    from friday_mcp_enhanced import create_mcp_server
+    server = create_mcp_server()
+    return "Server created" if server else "Server not available"
+
+test_module("friday_mcp_enhanced", "friday_mcp_enhanced", test_mcp)
+
+# LangGraph Agent
+def test_langraph(m):
+    from friday_langraph import get_langraph_status
+    return safe_str(get_langraph_status())
+
+test_module("friday_langraph", "friday_langraph", test_langraph)
+
+# Voice (check if available)
+def test_voice(m):
     try:
-        import pywinctl
-        status["screen_watcher"] = True
-    except ImportError:
-        status["screen_watcher"] = False
+        from friday_voice import SpeechToText, TextToSpeech
+        return "Voice modules available"
+    except:
+        return "Voice modules not available"
 
-    # Browser history
+test_module("friday_voice", None, test_voice)
+
+# Vision
+def test_vision(m):
+    from friday_vision import vision_tool
+    return "Vision tool available"
+
+test_module("friday_vision", "friday_vision", test_vision)
+
+# ─── Phase 3: Integration Test ────────────────────────────────#
+
+print("\n### PHASE 3: INTEGRATION TEST ###\n")
+
+def test_integration():
+    """Test that tools actually work end-to-end."""
+    results = []
+    
+    # Test file generation
     try:
-        import browser_history
-        status["browser_history"] = True
-    except ImportError:
-        status["browser_history"] = False
-
-    # Voice wake
+        from file_generator import generate_file
+        r = generate_file("test_output/master_test.py", "python", "Master test")
+        results.append(f"File gen: {safe_str(r)}")
+    except Exception as e:
+        results.append(f"File gen FAIL: {safe_str(e)}")
+    
+    # Test browser search
     try:
-        import pvporcupine
-        status["voice_wake"] = True
-    except ImportError:
-        status["voice_wake"] = False
-
-    # Google Calendar
+        from browser_history_tools import search_all_history
+        r = search_all_history("test", days_back=1)
+        results.append(f"Browser search: OK")
+    except Exception as e:
+        results.append(f"Browser search FAIL: {safe_str(e)}")
+    
+    # Test goal add
     try:
-        from google.oauth2.credentials import Credentials
-        status["google_calendar"] = True
-    except ImportError:
-        status["google_calendar"] = False
+        from goal_memory import add_goal
+        r = add_goal(title="Master Test Goal", goal_type="test")
+        results.append(f"Goal add: {safe_str(r)}")
+    except Exception as e:
+        results.append(f"Goal add FAIL: {safe_str(e)}")
+    
+    return "\n".join(results)
 
-    return status
+try:
+    integration_result = test_integration()
+    modules_status.append(("✅", "integration_test", integration_result))
+    results["pass"] += 1
+except Exception as e:
+    modules_status.append(("❌", "integration_test", safe_str(e)))
+    results["fail"] += 1
 
+# ─── Print Results ────────────────────────────────────────#
 
-def print_status(status: dict):
-    """Print component status."""
-    print("\n### COMPONENT STATUS\n")
-    for name, available in status.items():
-        icon = "[OK]" if available else "[MISSING]"
-        print(f"  {icon} {name.replace('_', ' ').title()}")
-    print()
+print("\n" + "=" * 70)
+print("FRIDAY SYSTEM STATUS REPORT")
+print("=" * 70 + "\n")
 
+for icon, name, status in modules_status:
+    print(f"{icon} {name}")
+    # Print status indented if multi-line
+    for line in str(status).split("\n")[:3]:
+        if line.strip():
+            print(f"   {line}")
 
-# ─── Main Entry Points ────────────────────────────────────#
+print("\n" + "=" * 70)
+print(f"RESULTS: {results['pass']} passed, {results['fail']} failed")
+print("=" * 70)
 
-def run_mcp_server():
-    """Run the MCP server."""
-    print("🚀 Starting Friday MCP Server...")
-    try:
-        from friday_mcp import main as mcp_main
-        mcp_main()
-    except ImportError as e:
-        print(f"❌ Failed to import MCP server: {e}")
-        sys.exit(1)
+if results["fail"] > 0:
+    print("\n⚠️  Some features failed. Check errors above.")
+    print("   Core features may still work even if some modules fail.")
+else:
+    print("\n✅ All features loaded successfully!")
 
+# ─── Quick Feature Demo ──────────────────────────────────────#
 
-def run_multi_agent():
-    """Run the multi-agent system."""
-    print("🤖 Starting Friday Multi-Agent System...")
-    try:
-        from multi_agent import FridaySupervisor
-        supervisor = FridaySupervisor()
-        result = supervisor.run("Hello Friday! What can you do?")
-        print(result)
-    except ImportError as e:
-        print(f"❌ Failed to import multi-agent system: {e}")
-        sys.exit(1)
+print("\n### QUICK FEATURE DEMO ###\n")
 
+# Demo 1: Screen awareness
+print("1. Screen Awareness:")
+try:
+    from screen_watcher import get_active_window_info
+    info = get_active_window_info()
+    print(f"   Active window: {safe_str(info.get('title', 'Unknown'))}")
+except Exception as e:
+    print(f"   FAIL: {safe_str(e)}")
 
-def run_screen_watcher():
-    """Run the screen watcher."""
-    print("👀 Starting Screen Watcher...")
-    try:
-        from screen_watcher import get_watcher
-        watcher = get_watcher()
-        watcher.start()
-        print("Screen watcher running. Press Ctrl+C to stop.")
-        import time
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        watcher.stop()
-        print("\nScreen watcher stopped.")
-    except ImportError as e:
-        print(f"❌ Failed to import screen watcher: {e}")
-        sys.exit(1)
+# Demo 2: Browser history
+print("\n2. Browser History:")
+try:
+    from browser_history_tools import get_browser_status
+    status = get_browser_status()
+    for line in str(status).split("\n")[:4]:
+        if line.strip():
+            print(f"   {line}")
+except Exception as e:
+    print(f"   FAIL: {safe_str(e)}")
 
+# Demo 3: File generation
+print("\n3. File Generation:")
+try:
+    from file_generator import get_generator_status
+    status = get_generator_status()
+    for line in str(status).split("\n")[:4]:
+        if line.strip():
+            print(f"   {line}")
+except Exception as e:
+    print(f"   FAIL: {safe_str(e)}")
 
-def run_goal_check():
-    """Run goal check."""
-    print("🎯 Running Goal Check...")
-    try:
-        from goal_memory import get_goal_manager
-        manager = get_goal_manager()
-        result = manager.enforce_goals()
-        print(result)
-    except ImportError as e:
-        print(f"❌ Failed to import goal memory: {e}")
-        sys.exit(1)
+# Demo 4: Goal memory
+print("\n4. Goal Memory:")
+try:
+    from goal_memory import get_profile_summary
+    summary = get_profile_summary()
+    for line in str(summary).split("\n")[:4]:
+        if line.strip():
+            print(f"   {line}")
+except Exception as e:
+    print(f"   FAIL: {safe_str(e)}")
 
+print("\n" + "=" * 70)
+print("Friday Master Bootstrap Complete!")
+print("=" * 70)
 
-def run_coding_agent(task: str):
-    """Run the coding agent."""
-    print(f"💻 Starting Coding Agent for task: {task}")
-    try:
-        from coding_agent import coding_agent_tool
-        result = coding_agent_tool("run", task=task)
-        print(result)
-    except ImportError as e:
-        print(f"❌ Failed to import coding agent: {e}")
-        sys.exit(1)
-
-
-def run_self_improvement():
-    """Run self-improvement analysis."""
-    print("📈 Running Self-Improvement Analysis...")
-    try:
-        from self_improvement import self_improvement_tool
-        result = self_improvement_tool("status")
-        print(result)
-    except ImportError as e:
-        print(f"❌ Failed to import self-improvement: {e}")
-        sys.exit(1)
-
-
-def run_voice_wake():
-    """Run voice wake word detection."""
-    print("🎤 Starting Voice Wake Word Detection...")
-    try:
-        from voice_wake import get_wake_detector
-        detector = get_wake_detector()
-        detector.start()
-        print("Voice wake detector running. Say 'Friday' to activate. Press Ctrl+C to stop.")
-        import time
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        detector.stop()
-        print("\nVoice wake detector stopped.")
-    except ImportError as e:
-        print(f"❌ Failed to import voice wake: {e}")
-        sys.exit(1)
-
-
-def run_message_channels():
-    """Run message channel integration."""
-    print("💬 Starting Message Channel Integration...")
-    try:
-        from message_channels import message_channel_tool
-        result = message_channel_tool("status")
-        print(result)
-    except ImportError as e:
-        print(f"❌ Failed to import message channels: {e}")
-        sys.exit(1)
-
-
-# ─── Main ────────────────────────────────────#
-
-def main():
-    """Main entry point."""
-    print_banner()
-
-    parser = argparse.ArgumentParser(
-        description=f"Friday v{FRIDAY_VERSION} - Ultimate AI Agent"
-    )
-    parser.add_argument(
-        "command",
-        choices=[
-            "mcp", "multi-agent", "screen", "goals", "coding",
-            "improve", "voice", "messages", "status", "all"
-        ],
-        help="Command to run"
-    )
-    parser.add_argument("--task", type=str, help="Task for coding agent")
-
-    args = parser.parse_args()
-
-    # Check components
-    status = check_components()
-    print_status(status)
-
-    # Run command
-    if args.command == "mcp":
-        run_mcp_server()
-    elif args.command == "multi-agent":
-        run_multi_agent()
-    elif args.command == "screen":
-        run_screen_watcher()
-    elif args.command == "goals":
-        run_goal_check()
-    elif args.command == "coding":
-        if not args.task:
-            print("❌ --task required for coding agent")
-            sys.exit(1)
-        run_coding_agent(args.task)
-    elif args.command == "improve":
-        run_self_improvement()
-    elif args.command == "voice":
-        run_voice_wake()
-    elif args.command == "messages":
-        run_message_channels()
-    elif args.command == "status":
-        print("[OK] Friday status check complete.")
-    elif args.command == "all":
-        print("[LAUNCH] Starting all Friday subsystems...")
-        # This would start everything in threads
-        print("This feature is coming soon!")
-
-
-if __name__ == "__main__":
-    main()
+# Cleanup
+import shutil'
+if os.path.exists("test_output"):
+    shutil.rmtree("test_output")

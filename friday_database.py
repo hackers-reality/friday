@@ -369,63 +369,63 @@ def database_tool(
     
     if action == "sqlite_query":
         if not query:
-            return "❌ Query required."
+            return "[FAIL] Query required."
         db = SQLiteDB()
         result = db.query(query)
         if result["success"]:
             preview = json.dumps(result["results"][:5], indent=2)
             return f"### SQLITE QUERY\n\nFound {result['count']} rows:\n{preview}"
         else:
-            return f"❌ Query error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Query error: {result.get('error', 'Unknown')}"
     
     if action == "sqlite_insert":
         if not table or not data:
-            return "❌ Table and data required."
+            return "[FAIL] Table and data required."
         db = SQLiteDB()
         result = db.insert(table, data)
-        return f"### SQLITE INSERT\n\n{'✅ Inserted' if result['success'] else f'❌ {result.get(\"error\", \"Unknown\")}'}"
+        return f"### SQLITE INSERT\n\n{'[OK] Inserted' if result['success'] else '[FAIL] ' + str(result.get('error', 'Unknown'))}"
     
     if action == "json_get":
         if not key:
-            return "❌ Key required."
+            return "[FAIL] Key required."
         db = JSONDB()
         value = db.get(key)
         return f"### JSON GET\n\n**{key}**: {json.dumps(value, indent=2)[:200]}"
     
     if action == "json_set":
         if not key or data is None:
-            return "❌ Key and data required."
+            return "[FAIL] Key and data required."
         db = JSONDB()
         result = db.set(key, data)
-        return f"### JSON SET\n\n{'✅ Set' if result['success'] else f'❌ {result.get(\"error\", \"Unknown\")}'}"
+        return "### JSON SET\n\n[OK] Set" if result['success'] else "[FAIL] " + str(result.get('error', 'Unknown'))
     
     if action == "kv_put":
         if not key or data is None:
-            return "❌ Key and value required."
+            return "[FAIL] Key and value required."
         kv = KeyValueStore()
         result = kv.put(key, data)
-        return f"### KV PUT\n\n{'✅ Stored' if result['success'] else '❌ Error'}"
+        return f"### KV PUT\n\n{'[OK] Stored' if result['success'] else '[FAIL] Error'}"
     
     if action == "kv_get":
         if not key:
-            return "❌ Key required."
+            return "[FAIL] Key required."
         kv = KeyValueStore()
         result = kv.get(key)
         if result["success"]:
             return f"### KV GET\n\n**{key}**: {json.dumps(result['value'], indent=2)[:200]}"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "vector_add":
         if not key or not data:
-            return "❌ ID and vector required."
+            return "[FAIL] ID and vector required."
         vdb = SimpleVectorDB()
         result = vdb.add(key, data)
-        return f"### VECTOR ADD\n\n{'✅ Added' if result['success'] else '❌ Error'}"
+        return f"### VECTOR ADD\n\n{'[OK] Added' if result['success'] else '[FAIL] Error'}"
     
     if action == "vector_search":
         if not data:
-            return "❌ Query vector required."
+            return "[FAIL] Query vector required."
         vdb = SimpleVectorDB()
         results = vdb.search(data, top_k=5)
         preview = json.dumps(results, indent=2)[:500]

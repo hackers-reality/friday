@@ -256,7 +256,8 @@ class ECCHandler:
         self.p = 2**256 - 2**32 - 977  # secp256k1 prime
         self.a = 0
         self.b = 7
-        self.G_x = 550662630222773436695787748698573...  # Simplified
+        # Simplified demo values (actual secp256k1 G_x is very large)
+        self.G_x = 550662630222773436695787748698573797721822934473594973145600292036142447125866  # Simplified
         self.G_y = 326705100207588169780830851305070...  # Simplified
         self.n = 2**256 - ...  # Order
         
@@ -514,7 +515,7 @@ def crypto_tool(
     
     if action == "hash":
         if not data:
-            return "❌ Data required for hashing."
+            return "[FAIL] Data required for hashing."
         lines = ["### HASH RESULTS", ""]
         lines.append(f"**SHA-256**: {Hasher.sha256(data)}")
         lines.append(f"**SHA-512**: {Hasher.sha512(data)}")
@@ -523,14 +524,14 @@ def crypto_tool(
     
     if action == "aes_encrypt":
         if not data:
-            return "❌ Data required for encryption."
+            return "[FAIL] Data required for encryption."
         cipher = AESCipher(key)
         result = cipher.encrypt(data)
         return f"### AES ENCRYPTION\n\n{json.dumps(result, indent=2)}"
     
     if action == "aes_decrypt":
         if not data or not key:
-            return "❌ Ciphertext and key required."
+            return "[FAIL] Ciphertext and key required."
         try:
             import json
             enc_data = json.loads(data)
@@ -543,18 +544,18 @@ def crypto_tool(
             )
             return f"### AES DECRYPTION\n\nPlaintext: {plaintext}"
         except Exception as e:
-            return f"❌ Decryption error: {e}"
+            return f"[FAIL] Decryption error: {e}"
     
     if action == "rsa_encrypt":
         if not data:
-            return "❌ Data required for encryption."
+            return "[FAIL] Data required for encryption."
         rsa = RSAHandler()
         ciphertext = rsa.encrypt(data)
         return f"### RSA ENCRYPTION\n\nCiphertext: {ciphertext}"
     
     if action == "rsa_sign":
         if not data:
-            return "❌ Message required for signing."
+            return "[FAIL] Message required for signing."
         rsa = RSAHandler()
         signature = rsa.sign(data)
         return f"### RSA SIGNATURE\n\nSignature: {signature}"
@@ -568,7 +569,7 @@ def crypto_tool(
     
     if action == "ecdsa_sign":
         if not data:
-            return "❌ Message required for signing."
+            return "[FAIL] Message required for signing."
         ecdsa = ECDSAHandler()
         ecc = ECCHandler()
         keypair = ecc.generate_keypair()
@@ -577,7 +578,7 @@ def crypto_tool(
     
     if action == "zkp":
         if not data:
-            return "❌ Secret required for ZKP."
+            return "[FAIL] Secret required for ZKP."
         secret = int.from_bytes(hashlib.sha256(data.encode()).digest(), 'big')
         generator = 2  # Simplified
         modulus = 2**256 - 2**32 - 977  # Simplified
@@ -588,17 +589,17 @@ def crypto_tool(
         
         return f"""### ZERO-KNOWLEDGE PROOF
 **Proof**: {json.dumps(proof)}
-**Verified**: {'✅' if verified else '❌'}"""
+**Verified**: {'[OK]' if verified else '[FAIL]'}"""
     
     if action == "pbkdf2":
         if not data:
-            return "❌ Password required."
+            return "[FAIL] Password required."
         result = KeyDerivation.pbkdf2(data)
         return f"### PBKDF2 KEY DERIVATION\n\n{json.dumps(result, indent=2)}"
     
     if action == "cert_create":
         if not data:
-            return "❌ Common Name required for certificate."
+            return "[FAIL] Common Name required for certificate."
         handler = CertificateHandler()
         result = handler.create_self_signed(data)
         return f"""### SELF-SIGNED CERTIFICATE

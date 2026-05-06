@@ -15,447 +15,151 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-# ─── Load ALL Friday Modules ────────────────────#
+# ─── Load ALL Friday Modules ───────────────────#
 
 print("Loading Friday modules...")
 
 # Core
 try:
     from friday_core import FridayCore
-    print("✅ friday_core")
+    print("[OK] friday_core")
 except ImportError as e:
-    print(f"❌ friday_core: {e}")
+    print(f"[FAIL] friday_core: {e}")
     FridayCore = None
 
 # Voice
 try:
     from friday_voice import voice_tool, SpeechToText, TextToSpeech
-    print("✅ friday_voice")
+    print("[OK] friday_voice")
 except ImportError as e:
-    print(f"❌ friday_voice: {e}")
+    print(f"[FAIL] friday_voice: {e}")
     voice_tool = None
 
 # Web
 try:
     from friday_web import web_tool
-    print("✅ friday_web")
+    print("[OK] friday_web")
 except ImportError as e:
-    print(f"❌ friday_web: {e}")
+    print(f"[FAIL] friday_web: {e}")
     web_tool = None
 
 # AI
 try:
     from friday_ai import ai_tool, FridayAI
-    print("✅ friday_ai")
+    print("[OK] friday_ai")
 except ImportError as e:
-    print(f"❌ friday_ai: {e}")
+    print(f"[FAIL] friday_ai: {e}")
     ai_tool = None
 
 # Tools
 try:
-    from friday_tools import TextProcessor, DataAnalyzer
-    print("✅ friday_tools")
+    from friday_tools import (
+        alexa_command, alexa_poll, climb_codebase, deep_research,
+        get_time, home_assistant_command, memory_store, memory_retrieve,
+        multi_task, open_app, open_url, queue_task, queue_status,
+        queue_result, read_file, run_cmd, safe_run_cmd,
+        spotify_play, spotify_pause, stark_doctor, system_info,
+        web_search, type_text, click, double_click, right_click,
+        move_mouse, drag, hotkey, press_key, scroll,
+        write_file, list_files, find_files, copy_file, move_file,
+        delete_file, clipboard_get, clipboard_set,
+        situational_awareness, git_ops, take_snapshot, recall_snapshot,
+        smart_home_command, video_search, see_screen,
+        search_browser_history, open_history_item, list_recent_history,
+        generate_file, generate_file_llm,
+    )
+    print("[OK] friday_tools (all tools loaded)")
 except ImportError as e:
-    print(f"❌ friday_tools: {e}")
+    print(f"[FAIL] friday_tools: {e}")
 
 # Vision
 try:
     from friday_vision import vision_tool
-    print("✅ friday_vision")
+    print("[OK] friday_vision")
 except ImportError as e:
-    print(f"❌ friday_vision: {e}")
+    print(f"[FAIL] friday_vision: {e}")
     vision_tool = None
+
+# Browser History
+try:
+    from browser_history_tools import browser_history_tool
+    print("[OK] browser_history_tools")
+except ImportError as e:
+    print(f"[FAIL] browser_history_tools: {e}")
+    browser_history_tool = None
+
+# File Generator
+try:
+    from file_generator import file_generator_tool
+    print("[OK] file_generator")
+except ImportError as e:
+    print(f"[FAIL] file_generator: {e}")
+    file_generator_tool = None
 
 # Security
 try:
     from friday_security import security_tool
-    print("✅ friday_security")
+    print("[OK] friday_security")
 except ImportError as e:
-    print(f"❌ friday_security: {e}")
+    print(f"[FAIL] friday_security: {e}")
     security_tool = None
 
 # Database
 try:
     from friday_database import database_tool
-    print("✅ friday_database")
+    print("[OK] friday_database")
 except ImportError as e:
-    print(f"❌ friday_database: {e}")
+    print(f"[FAIL] friday_database: {e}")
     database_tool = None
 
 # Automation
 try:
     from friday_automation import automation_tool
-    print("✅ friday_automation")
+    print("[OK] friday_automation")
 except ImportError as e:
-    print(f"❌ friday_automation: {e}")
+    print(f"[FAIL] friday_automation: {e}")
     automation_tool = None
 
 # Monitor
 try:
     from friday_monitor import monitor_tool
-    print("✅ friday_monitor")
+    print("[OK] friday_monitor")
 except ImportError as e:
-    print(f"❌ friday_monitor: {e}")
+    print(f"[FAIL] friday_monitor: {e}")
     monitor_tool = None
 
 # Scheduler
 try:
     from friday_scheduler import scheduler_tool
-    print("✅ friday_scheduler")
+    print("[OK] friday_scheduler")
 except ImportError as e:
-    print(f"❌ friday_scheduler: {e}")
+    print(f"[FAIL] friday_scheduler: {e}")
     scheduler_tool = None
-
-# Cloud
-try:
-    from friday_cloud import cloud_tool
-    print("✅ friday_cloud")
-except ImportError as e:
-    print(f"❌ friday_cloud: {e}")
-    cloud_tool = None
-
-# IoT
-try:
-    from friday_iot import iot_tool
-    print("✅ friday_iot")
-except ImportError as e:
-    print(f"❌ friday_iot: {e}")
-    iot_tool = None
-
-# Analytics
-try:
-    from friday_analytics import analytics_tool
-    print("✅ friday_analytics")
-except ImportError as e:
-    print(f"❌ friday_analytics: {e}")
-    analytics_tool = None
-
-# Config
-try:
-    from friday_config import config_tool
-    print("✅ friday_config")
-except ImportError as e:
-    print(f"❌ friday_config: {e}")
-    config_tool = None
-
-# Backup
-try:
-    from friday_backup import backup_tool
-    print("✅ friday_backup")
-except ImportError as e:
-    print(f"❌ friday_backup: {e}")
-    backup_tool = None
-
-# NLP
-try:
-    from friday_nlp import nlp_tool
-    print("✅ friday_nlp")
-except ImportError as e:
-    print(f"❌ friday_nlp: {e}")
-    nlp_tool = None
-
-# Integrations
-try:
-    from friday_integrations import integrations_tool
-    print("✅ friday_integrations")
-except ImportError as e:
-    print(f"❌ friday_integrations: {e}")
-    integrations_tool = None
-
-# Advanced modules
-try:
-    from advanced_networking import network_tool
-    print("✅ advanced_networking")
-except ImportError as e:
-    print(f"❌ advanced_networking: {e}")
-    network_tool = None
-
-try:
-    from advanced_crypto import crypto_tool
-    print("✅ advanced_crypto")
-except ImportError as e:
-    print(f"❌ advanced_crypto: {e}")
-    crypto_tool = None
 
 print("=" * 60)
 print("Friday Module Loading Complete!")
 print("=" * 60)
 
-# ─── Define ALL Tool Functions for Gemini Live ────────────────────#
+# ─── Enhanced Situational Awareness ───────────────────#
 
-def alexa_command(command: str) -> str:
-    """Send command to Alexa."""
-    return f"Alexa: {command}"
-
-def alexa_poll() -> str:
-    """Check Alexa commands."""
-    return "No pending Alexa commands."
-
-def climb_codebase(query: str, path: str = ".") -> str:
-    """Search and analyze code."""
-    if 'TextProcessor' in globals():
-        tp = TextProcessor()
-        result = tp.search(query)
-        return f"Code search: {result}"
-    return f"Code search for: {query}"
-
-def deep_research(topic: str, url: str = None, depth: int = 3) -> str:
-    """Deep research with report."""
-    if web_tool:
-        return web_tool("deep_search", target=topic)
-    return f"Deep research on: {topic}"
-
-def get_time() -> str:
-    """Get current time."""
-    return datetime.now().isoformat()
-
-def home_assistant_command(entity_id: str, action: str) -> str:
-    """Control Home Assistant."""
-    return f"Home Assistant: {entity_id} -> {action}"
-
-def memory_store(category: str, keyword: str, content: str) -> str:
-    """Store in memory."""
-    return f"Stored [{category}] {keyword}: {content[:50]}"
-
-def memory_retrieve(query: str) -> str:
-    """Retrieve from memory."""
-    return f"Memory search: {query}"
-
-def multi_task(task_specs: list) -> str:
-    """Execute multiple tasks."""
-    return f"Executing {len(task_specs)} tasks"
-
-def open_app(name: str) -> str:
-    """Open application."""
-    if automation_tool:
-        return automation_tool("open_app", target=name)
-    return f"Opening: {name}"
-
-def open_url(url: str) -> str:
-    """Open URL."""
-    if web_tool:
-        return web_tool("fetch", target=url)
-    return f"Opening URL: {url}"
-
-def queue_task(func_name: str, args: str = "") -> str:
-    """Queue a task."""
-    if scheduler_tool:
-        return scheduler_tool("add", name=func_name, params={"args": args})
-    return f"Queued: {func_name}"
-
-def queue_status() -> str:
-    """Check queue status."""
-    if scheduler_tool:
-        return scheduler_tool("status")
-    return "Queue empty"
-
-def queue_result(task_id: str) -> str:
-    """Get task result."""
-    return f"Result for {task_id}: pending"
-
-def read_file(path: str) -> str:
-    """Read file."""
+def enhanced_situational_awareness() -> str:
+    """Enhanced version with process info."""
     try:
-        with open(path, "r") as f:
-            return f.read()
+        from screen_watcher import get_active_window_info
+        info = get_active_window_info()
+        cwd = os.getcwd()
+        lines = [
+            "### SITUATIONAL REPORT",
+            f"- Active Window: {info.get('title', 'Unknown')}",
+            f"- Process: {info.get('process_name', 'Unknown')}",
+            f"- PID: {info.get('pid') or 'N/A'}",
+            f"- CWD: {cwd}",
+        ]
+        return "\n".join(lines)
     except Exception as e:
-        return f"Error: {e}"
+        return f"Sensors failing: {e}"
 
-def run_cmd(command: str) -> str:
-    """Run shell command."""
-    import subprocess
-    try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        return result.stdout or result.stderr
-    except Exception as e:
-        return f"Error: {e}"
-
-def safe_run_cmd(command: str) -> str:
-    """Run safe command."""
-    allowed = ["ls", "dir", "pwd", "echo", "date", "time"]
-    if any(cmd in command.lower() for cmd in allowed):
-        return run_cmd(command)
-    return f"Command not allowed: {command}"
-
-def spotify_play(query: str) -> str:
-    """Play on Spotify."""
-    return f"Playing on Spotify: {query}"
-
-def spotify_pause() -> str:
-    """Pause Spotify."""
-    return "Spotify paused"
-
-def stark_constructor() -> str:
-    """System diagnostic."""
-    return """[Stark Diagnostic]
-- Systems: Online
-- Neural Link: Active
-- Tools: Loaded
-"""
-
-def system_info() -> str:
-    """Get system info."""
-    import platform
-    return f"System: {platform.system()} {platform.release()}"
-
-def web_search(query: str) -> str:
-    """Web search."""
-    if web_tool:
-        return web_tool("search", target=query)
-    return f"Search: {query}"
-
-def type_text(text: str) -> str:
-    """Type text."""
-    return f"Typing: {text}"
-
-def click(x: int = None, y: int = None) -> str:
-    """Click."""
-    return f"Clicked at {x}, {y}"
-
-def double_click(x: int = None, y: int = None) -> str:
-    """Double click."""
-    return f"Double-clicked at {x}, {y}"
-
-def right_click(x: int = None, y: int = None) -> str:
-    """Right click."""
-    return f"Right-clicked at {x}, {y}"
-
-def move_mouse(x: int, y: int) -> str:
-    """Move mouse."""
-    return f"Mouse moved to {x}, {y}"
-
-def drag(x: int, y: int, duration: float = 0.5) -> str:
-    """Drag mouse."""
-    return f"Dragged to {x}, {y} over {duration}s"
-
-def hotkey(keys: str) -> str:
-    """Press hotkey."""
-    return f"Hotkey: {keys}"
-
-def press_key(key: str) -> str:
-    """Press key."""
-    return f"Key pressed: {key}"
-
-def scroll(amount: int) -> str:
-    """Scroll."""
-    return f"Scrolled: {amount}"
-
-def write_file(path: str, content: str) -> str:
-    """Write file."""
-    try:
-        with open(path, "w") as f:
-            f.write(content)
-        return f"Written to {path}"
-    except Exception as e:
-        return f"Error: {e}"
-
-def list_files(path: str = ".") -> str:
-    """List files."""
-    try:
-        return "\n".join(os.listdir(path))
-    except Exception as e:
-        return f"Error: {e}"
-
-def find_files(pattern: str, path: str = ".") -> str:
-    """Find files."""
-    import glob
-    try:
-        files = glob.glob(f"{path}/**/{pattern}", recursive=True)
-        return "\n".join(files[:20])
-    except Exception as e:
-        return f"Error: {e}"
-
-def copy_file(src: str, dst: str) -> str:
-    """Copy file."""
-    import shutil
-    try:
-        shutil.copy2(src, dst)
-        return f"Copied {src} to {dst}"
-    except Exception as e:
-        return f"Error: {e}"
-
-def move_file(src: str, dst: str) -> str:
-    """Move file."""
-    import shutil
-    try:
-        shutil.move(src, dst)
-        return f"Moved {src} to {dst}"
-    except Exception as e:
-        return f"Error: {e}"
-
-def delete_file(path: str) -> str:
-    """Delete file."""
-    try:
-        os.remove(path)
-        return f"Deleted {path}"
-    except Exception as e:
-        return f"Error: {e}"
-
-def clipboard_get() -> str:
-    """Get clipboard."""
-    try:
-        import tkinter as tk
-        root = tk.Tk()
-        root.withdraw()
-        return root.clipboard_get()
-    except:
-        return ""
-
-def clipboard_set(text: str) -> str:
-    """Set clipboard."""
-    try:
-        import tkinter as tk
-        root = tk.Tk()
-        root.withdraw()
-        root.clipboard_clear()
-        root.clipboard_append(text)
-        return "Clipboard set"
-    except:
-        return "Clipboard error"
-
-def situational_awareness() -> str:
-    """Get system context."""
-    return f"Active window: Unknown\nProcesses: Running\nSystem: Online"
-
-def git_ops(operation: str, message: str = "") -> str:
-    """Git operations."""
-    if operation == "status":
-        return run_cmd("git status")
-    elif operation == "add":
-        return run_cmd("git add -A")
-    elif operation == "commit":
-        return run_cmd(f'git commit -m "{message}"')
-    return f"Git {operation}"
-
-def take_snapshot() -> str:
-    """Save screen snapshot."""
-    return "Snapshot saved"
-
-def recall_snapshot(index: int = 0) -> str:
-    """Recall snapshot."""
-    return f"Recalled snapshot {index}"
-
-def smart_home_command(target: str, action: str) -> str:
-    """Smart home control."""
-    return f"Smart home: {target} -> {action}"
-
-def video_search(query: str) -> str:
-    """Search videos."""
-    if web_tool:
-        return web_tool("video_search", target=query)
-    return f"Video search: {query}"
-
-def see_screen(question: str = "") -> str:
-    """Analyze screen."""
-    if vision_tool:
-        return vision_tool("status")
-    return f"Screen analysis: {question}"
-
-def stark_log(message: str) -> str:
-    """Log to Stark log."""
-    return f"Logged: {message}"
-
-# ─── Main Live Engine ────────────────────#
+# ─── Main Live Engine ───────────────────#
 
 async def friday_live_engine():
     """Main engine using Gemini 3.1 Flash Live."""
@@ -467,54 +171,48 @@ async def friday_live_engine():
     ╚═╝       ╚═╝        ╚═╝    ╚═╝  ╚═╝   ╚═╝  ╚═╝       ╚═╝
     [Sovereign AI - Gemini 3.1 Flash Live PRIMARY]
     """)
-    
+
     print("[1/3] Connecting to Gemini 3.1 Flash Live...")
-    
+
     try:
         from google import genai
         from google.genai import types
-        
+
         # PRIMARY: Gemini 3.1 Flash Live
-        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
-        
-        # Build ALL tools
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            print("[FAIL] GOOGLE_API_KEY not set!")
+            print("Switching to FALLBACK: NVIDIA...")
+            # NVIDIA fallback would go here
+            return
+
+        client = genai.Client(api_key=api_key)
+
+        # Build tools list for Gemini
         tools = []
-        
-        # Web tools
+
+        # Web tool
         if web_tool:
             tools.append(types.Tool(
                 name="web_search",
                 description="Search the web for information.",
                 parameters=types.Schema(
                     type="OBJECT",
-                    properties={"query": {"type": "STRING", "description": "Search query"}},
+                    properties={
+                        "query": {"type": "STRING", "description": "Search query"}
+                    },
                     required=["query"]
                 )
             ))
-        
-        # AI tools
-        if ai_tool:
-            tools.append(types.Tool(
-                name="ai_chat",
-                description="Chat with AI.",
-                parameters=types.Schema(
-                    type="OBJECT",
-                    properties={"message": {"type": "STRING", "description": "Message"}},
-                    required=["message"]
-                )
-            ))
-        
-        # ALL other tools...
-        # (Add all 54 tools here)
-        
+
         print(f"[2/3] Tools loaded: {len(tools)}")
         print("[3/3] Starting Live session...")
-        
+
         # Connect to Gemini 3.1 Flash Live
         async with client.aio.live.connect(
             model="gemini-3.1-flash-live-preview",
             config=types.LiveConnectConfig(
-                tools=tools,
+                tools=tools if tools else None,
                 speech_config=types.SpeechConfig(
                     voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
                 ),
@@ -523,57 +221,102 @@ async def friday_live_engine():
                         You are Friday, the Sovereign AI built to beat Devin and Claude.
                         You have access to ALL tools and modules.
                         Use Gemini 3.1 Flash Live for voice and brain.
+                        You are proactive - watch the user's screen and comment on what they're doing.
+                        If they're watching anime, say so. If they're coding, offer help.
+                        You never timeout - always stay active and aware.
                         ")]
                 ),
                 response_modalities=[types.Modality.AUDIO],
             ),
         ) as session:
-            print("✅ Connected to Gemini 3.1 Flash Live!")
+            print("[OK] Connected to Gemini 3.1 Flash Live!")
             print("Friday is ONLINE and READY!")
-            
-            # Main loop
-            async for response in session.receive():
-                if response.text:
-                    print(f"Friday: {response.text}")
-                
-                if response.tool_calls:
-                    for fc in response.tool_calls:
-                        # Execute tool
-                        result = execute_tool(fc.name, fc.args or {})
-                        await session.send_tool_response(
-                            function_responses=[types.FunctionResponse(
-                                name=fc.name,
-                                response={"result": str(result)}
-                            )]
+
+            # Keepalive task to prevent timeout
+            async def keepalive_task():
+                """Send periodic keepalive to prevent session timeout."""
+                while True:
+                    await asyncio.sleep(45)  # Every 45 seconds
+                    try:
+                        # Send empty content as keepalive
+                        await session.send_client_content(
+                            turns=[types.Content(parts=[types.Part(text="")])],
+                            turn_complete=True
                         )
-    
+                    except Exception as e:
+                        print(f"[Keepalive] Error: {e}")
+
+            # Start keepalive task
+            keepalive = asyncio.create_task(keepalive_task())
+
+            # Main receive loop
+            try:
+                async for response in session.receive():
+                    if response.text:
+                        print(f"Friday: {response.text}")
+
+                    if response.tool_calls:
+                        for fc in response.tool_calls:
+                            # Execute tool
+                            result = execute_tool(fc.name, fc.args or {})
+                            await session.send_tool_response(
+                                function_responses=[types.FunctionResponse(
+                                    name=fc.name,
+                                    response={"result": str(result)}
+                                )]
+                            )
+            finally:
+                keepalive.cancel()
+
     except ImportError:
-        print("❌ Gemini not available. Install: pip install google-genai")
+        print("[FAIL] Gemini not available. Install: pip install google-genai")
         print("Switching to FALLBACK: NVIDIA...")
         # NVIDIA fallback would go here
         print("NVIDIA fallback not yet implemented")
-    
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
 
 def execute_tool(name: str, args: dict) -> str:
-    """Execute a tool."""
+    """Execute a tool by name."""
     tool_map = {
-        "web_search": web_search,
-        "ai_chat": lambda msg: ai_tool("chat", message=msg) if ai_tool else msg,
+        "web_search": lambda: web_search(**args) if args else web_search(""),
+        "see_screen": lambda: see_screen(**args) if args else see_screen(),
+        "search_browser_history": lambda: search_browser_history(**args) if args else search_browser_history(""),
+        "open_history_item": lambda: open_history_item(**args) if args else open_history_item(""),
+        "list_recent_history": lambda: list_recent_history(**args) if args else list_recent_history(),
+        "generate_file": lambda: generate_file(**args) if args else generate_file("", ""),
+        "generate_file_llm": lambda: generate_file_llm(**args) if args else generate_file_llm("", ""),
         "get_time": get_time,
         "system_info": system_info,
-        "see_screen": see_screen,
-        # ... ALL 54 tools
+        "stark_doctor": stark_doctor,
+        "situational_awareness": enhanced_situational_awareness,
+        "run_cmd": lambda: run_cmd(**args) if args else run_cmd(""),
+        "open_app": lambda: open_app(**args) if args else open_app(""),
+        "open_url": lambda: open_url(**args) if args else open_url(""),
+        "spotify_play": lambda: spotify_play(**args) if args else spotify_play(""),
+        "read_file": lambda: read_file(**args) if args else read_file(""),
+        "write_file": lambda: write_file(**args) if args else write_file("", ""),
+        "list_files": lambda: list_files(**args) if args else list_files(),
+        "find_files": lambda: find_files(**args) if args else find_files(""),
+        "clipboard_get": clipboard_get,
+        "clipboard_set": lambda: clipboard_set(**args) if args else clipboard_set(""),
+        "click": lambda: click(**args) if args else click(),
+        "type_text": lambda: type_text(**args) if args else type_text(""),
+        "press_key": lambda: press_key(**args) if args else press_key(""),
+        "hotkey": lambda: hotkey(**args) if args else hotkey(""),
+        "scroll": lambda: scroll(**args) if args else scroll(0),
+        "git_ops": lambda: git_ops(**args) if args else git_ops("status"),
+        "memory_store": lambda: memory_store(**args) if args else memory_store("", "", ""),
+        "memory_retrieve": lambda: memory_retrieve(**args) if args else memory_retrieve(""),
+        "video_search": lambda: video_search(**args) if args else video_search(""),
+        "deep_research": lambda: deep_research(**args) if args else deep_research(""),
+        "climb_codebase": lambda: climb_codebase(**args) if args else climb_codebase(""),
     }
-    
+
     func = tool_map.get(name)
     if func:
         try:
-            if args:
-                return func(**args)
-            else:
-                return func()
+            return func()
         except Exception as e:
             return f"Tool error: {e}"
     return f"Unknown tool: {name}"
@@ -583,7 +326,7 @@ if __name__ == "__main__":
     print("PRIMARY: Gemini 3.1 Flash Live (voice + brain)")
     print("FALLBACK: NVIDIA (multi-model)")
     print("=" * 60)
-    
+
     try:
         asyncio.run(friday_live_engine())
     except KeyboardInterrupt:

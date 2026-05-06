@@ -1,267 +1,328 @@
 """
-Friday Browser History - Phase 3.1-3.4
-Search across all browsers: Chrome, Brave, Edge, Opera, Firefox, Vivaldi.
-Natural language query + time-ordered results.
+Friday Browser History Tools - Phase 3
+Read and search browser history from Chrome, Edge, Brave, Opera.
 """
 from __future__ import annotations
 
 import os
 import sys
-import webbrowser
 import json
+import sqlite3
+import shutil
+import time
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
-try:
-    from browser_history import get_history, browsers
-    BROWSER_HISTORY_AVAILABLE = True
-except Exception as e:
-    print(f"[BrowserHistory] browser-history not available: {e}")
-    BROWSER_HISTORY_AVAILABLE = False
+# ─── Browser Paths (Windows) ────────────────────────────────────
 
+BROWSER_PATHS = {
+    "chrome": {
+        "path": os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data\Default"),
+        "history_file": "History",
+        "name": "Chrome",
+    },
+    "edge": {
+        "path": os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data\Default"),
+        "history_file": "History",
+        "name": "Microsoft Edge",
+    },
+    "brave": {
+        "path": os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\Default"),
+        "history_file": "History",
+        "name": "Brave",
+    },
+    "opera": {
+        "path": os.path.expandvars(r"%APPDATA%\Opera Software\Opera Stable"),
+        "history_file": "History",
+        "name": "Opera",
+    },
+}
 
-# ─── Search History ────────────────────────────────────────────
+# ─── History Reading ────────────────────────────────────────────────
 
-def search_browser_history(
-    query: str,
-    max_results: int = 10,
-    browser_name: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """
-    Search browser history across all browsers or a specific one.
-    Returns time-ordered results (most recent first).
-    """
-    if not BROWSER_HISTORY_AVAILABLE:
-        return [{"error": "browser-history package not installed"}]
-    
-    results = []
-    query_lower = query.lower()
-    
+def _get_history_db_path(browser: str) -> Optional[str]:
+    """Get the path to the history database for a browser."""
+    if browser not in BROWSER_PATHS:
+        return None
+    info = BROWSER_PATHS[browser]
+    db_path = os.path.join(info["path"], info["history_file"])
+    return db_path if os.path.exists(db_path) else None
+
+def _copy_history_db(src: str) -> str:
+    """Copy the history DB to a temp file (since Chrome locks it)."""
+    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, f"history_temp_{int(time.time())}.db")
     try:
-        if browser_name:
-            # Search specific browser
-            browser_class = getattr(browsers, browser_name, None)
-            if not browser_class:
-                return [{"error": f"Browser '{browser_name}' not supported"}]
-            browser = browser_class()
-            histories = browser.fetch_history().histories
-        else:
-            # Search all browsers
-            all_histories = get_history()
-            histories = all_histories.histories if all_histories else []
-        
-        # Filter by query and format results
-        for timestamp, url, title in histories:
-            if not url or not url.startswith(("http://", "https://")):
-                continue
-            
-            title_str = str(title) if title else ""
-            url_str = str(url)
-            
-            # Match query against title and URL
-            if (query_lower in title_str.lower() or 
-                query_lower in url_str.lower()):
-                
-                results.append({
-                    "timestamp": timestamp.isoformat() if timestamp else "",
-                    "url": url_str,
-                    "title": title_str,
-                    "datetime": timestamp.strftime("%Y-%m-%d %H:%M:%S") if timestamp else "",
-                })
-        
-        # Sort by timestamp (most recent first)
-        results.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-        
-        return results[:max_results]
-    
+        shutil.copy2(src, temp_path)
+        return temp_path
     except Exception as e:
-        return [{"error": str(e)}]
+        # If copy fails (very fresh Chrome), try direct
+        return src
 
-
-def find_and_open_url(
-    query: str,
-    browser_name: Optional[str] = None,
-    open_in_browser: bool = True,
-) -> str:
-    """
-    Search history for a URL, find the most recent match, and optionally open it.
-    Returns a formatted report.
-    """
-    results = search_browser_history(query, max_results=5, browser_name=browser_name)
-    
-    if not results:
-        return f"No results found for '{query}' in browser history."
-    
-    if "error" in results[0]:
-        return f"Search error: {results[0]['error']}"
-    
-    if not results:
-        return f"No history entries found matching '{query}'."
-    
-    # Get the most recent result
-    best = results[0]
-    url = best["url"]
-    title = best.get("title", "Unknown")
-    dt = best.get("datetime", "Unknown time")
-    
-    report_lines = [
-        f"### Browser History Search: '{query}'",
-        f"**Found:** {len(results)} result(s)",
-        f"**Most Recent:**",
-        f"- Title: {title}",
-        f"- URL: {url}",
-        f"- Time: {dt}",
-        "",
-    ]
-    
-    # Add more results
-    if len(results) > 1:
-        report_lines.append("**Other Results:**")
-        for i, r in enumerate(results[1:5], 2):
-            report_lines.append(
-                f"{i}. {r.get('title', 'Unknown')} - {r.get('datetime', '')}\n   {r['url']}"
-            )
-    
-    # Open in browser if requested
-    if open_in_browser and url:
-        try:
-            webbrowser.open(url)
-            report_lines.append(f"\n✅ Opened in browser: {url}")
-        except Exception as e:
-            report_lines.append(f"\n❌ Failed to open browser: {e}")
-    
-    return "\n".join(report_lines)
-
-
-def get_history_for_date(
-    date: str,
-    browser_name: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """
-    Get all history entries for a specific date (format: YYYY-MM-DD).
-    """
-    if not BROWSER_HISTORY_AVAILABLE:
-        return []
-    
+def _read_history(db_path: str, days_back: int = 30, limit: int = 1000) -> List[Dict[str, Any]]:
+    """Read history entries from a Chrome-format history DB."""
+    temp_path = None
     try:
-        if browser_name:
-            browser_class = getattr(browsers, browser_name, None)
-            if not browser_class:
-                return []
-            browser = browser_class()
-            histories = browser.fetch_history().histories
-        else:
-            histories = get_history().histories
+        # Copy to avoid lock
+        temp_path = _copy_history_db(db_path)
+        
+        conn = sqlite3.connect(temp_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Calculate cutoff
+        cutoff = int((datetime.now() - timedelta(days=days_back)).timestamp() * 1_000_000)
+        
+        query = """
+            SELECT url, title, last_visit_time, visit_count
+            FROM urls
+            WHERE last_visit_time > ?
+            ORDER BY last_visit_time DESC
+            LIMIT ?
+        """
+        cursor.execute(query, (cutoff, limit))
+        rows = cursor.fetchall()
+        conn.close()
         
         results = []
-        for timestamp, url, title in histories:
-            if timestamp and timestamp.strftime("%Y-%m-%d") == date:
-                results.append({
-                    "timestamp": timestamp.isoformat(),
-                    "url": str(url),
-                    "title": str(title) if title else "",
-                    "datetime": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                })
+        for row in rows:
+            # Chrome time: microseconds since Jan 1, 1601
+            chrome_time = row["last_visit_time"]
+            if chrome_time:
+                # Convert to Unix timestamp
+                unix_time = (chrome_time / 1_000_000) - 11644473600
+                dt = datetime.fromtimestamp(unix_time)
+            else:
+                dt = None
+            
+            results.append({
+                "url": row["url"],
+                "title": row["title"] or "",
+                "visited_at": dt.isoformat() if dt else "",
+                "visit_count": row["visit_count"] or 1,
+            })
         
-        results.sort(key=lambda x: x.get("timestamp", ""))
         return results
     
     except Exception as e:
-        print(f"[BrowserHistory] Date filter error: {e}")
-        return []
+        return [{"error": str(e)}]
+    finally:
+        # Cleanup temp
+        if temp_path and temp_path != db_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
 
-
-def check_visited_today(url_pattern: str) -> bool:
+def search_all_history(query: str, days_back: int = 30, limit_per_browser: int = 50) -> str:
     """
-    Check if a URL pattern was visited today.
-    Used by goal enforcement system.
+    Search all installed browsers for a query in URL or title.
+    Returns the most recent matching entry across all browsers.
     """
-    today = datetime.now().strftime("%Y-%m-%d")
-    entries = get_history_for_date(today)
+    all_results = []
     
-    for entry in entries:
-        if url_pattern.lower() in entry.get("url", "").lower():
-            return True
-    return False
-
-
-def format_history_report(results: List[Dict[str, Any]]) -> str:
-    """Format history results into a readable report."""
-    if not results:
-        return "No history entries found."
+    for browser_key, info in BROWSER_PATHS.items():
+        db_path = _get_history_db_path(browser_key)
+        if not db_path:
+            continue
+        
+        entries = _read_history(db_path, days_back=days_back, limit=limit_per_browser)
+        
+        for entry in entries:
+            if "error" in entry:
+                continue
+            url_lower = entry["url"].lower()
+            title_lower = entry["title"].lower()
+            query_lower = query.lower()
+            
+            if query_lower in url_lower or query_lower in title_lower:
+                all_results.append({
+                    "browser": info["name"],
+                    "url": entry["url"],
+                    "title": entry["title"],
+                    "visited_at": entry["visited_at"],
+                    "visit_count": entry["visit_count"],
+                })
     
-    if "error" in results[0]:
-        return f"Error: {results[0]['error']}"
+    if not all_results:
+        return f"❌ No history entries found matching '{query}' in any browser."
     
-    lines = ["### Browser History Results", ""]
-    for i, r in enumerate(results, 1):
-        lines.append(f"{i}. **{r.get('title', 'Unknown')}**")
-        lines.append(f"   URL: {r['url']}")
-        lines.append(f"   Time: {r.get('datetime', 'Unknown')}")
+    # Sort by visit time (most recent first)
+    all_results.sort(key=lambda x: x["visited_at"], reverse=True)
+    
+    # Format output
+    lines = [f"### BROWSER HISTORY SEARCH: '{query}'", ""]
+    lines.append(f"Found {len(all_results)} matching entries (showing top 10):\n")
+    
+    for i, entry in enumerate(all_results[:10]):
+        lines.append(f"**{i+1}. {entry['title'] or '(No title)'}**")
+        lines.append(f"   URL: {entry['url']}")
+        lines.append(f"   Browser: {entry['browser']}")
+        lines.append(f"   Visited: {entry['visited_at']} (count: {entry['visit_count']})")
         lines.append("")
     
     return "\n".join(lines)
 
+def find_latest_by_keyword(keyword: str, days_back: int = 90) -> Optional[Dict[str, Any]]:
+    """
+    Find the most recent history entry matching a keyword.
+    Returns the entry dict or None.
+    """
+    all_results = []
+    
+    for browser_key, info in BROWSER_PATHS.items():
+        db_path = _get_history_db_path(browser_key)
+        if not db_path:
+            continue
+        
+        entries = _read_history(db_path, days_back=days_back, limit=200)
+        
+        for entry in entries:
+            if "error" in entry:
+                continue
+            url_lower = entry["url"].lower()
+            title_lower = entry["title"].lower()
+            
+            if keyword.lower() in url_lower or keyword.lower() in title_lower:
+                all_results.append(entry)
+    
+    if not all_results:
+        return None
+    
+    # Sort by visit time
+    all_results.sort(key=lambda x: x["visited_at"], reverse=True)
+    return all_results[0]
+
+def open_latest_in_browser(query: str) -> str:
+    """
+    Find the most recent history entry matching query and open it in the default browser.
+    This is the "Friday open the repo I was seeing about jarvis" feature.
+    """
+    # First, try to find in history
+    entry = find_latest_by_keyword(query, days_back=90)
+    
+    if not entry:
+        return f"❌ No recent history found for '{query}'.\n\nTrying web search instead..."
+    
+    url = entry["url"]
+    title = entry["title"] or url
+    
+    try:
+        import webbrowser
+        webbrowser.open(url)
+        return f"✅ Opened in browser:\n\n**{title}**\nURL: {url}\n\n(From {entry['visited_at']})"
+    except Exception as e:
+        return f"❌ Failed to open browser: {e}\n\nURL was: {url}"
+
+def list_browser_histories(days_back: int = 7, limit: int = 20) -> str:
+    """List recent history from all browsers."""
+    all_entries = []
+    
+    for browser_key, info in BROWSER_PATHS.items():
+        db_path = _get_history_db_path(browser_key)
+        if not db_path:
+            continue
+        
+        entries = _read_history(db_path, days_back=days_back, limit=limit)
+        for entry in entries:
+            if "error" not in entry:
+                entry["browser"] = info["name"]
+                all_entries.append(entry)
+    
+    if not all_entries:
+        return "❌ No recent history found in any browser."
+    
+    # Sort all by time
+    all_entries.sort(key=lambda x: x["visited_at"], reverse=True)
+    
+    lines = [f"### RECENT BROWSER HISTORY (Last {days_back} days)", ""]
+    
+    for i, entry in enumerate(all_entries[:limit]):
+        lines.append(f"**{i+1}. {entry['title'] or '(No title)'}**")
+        lines.append(f"   {entry['url'][:80]}")
+        lines.append(f"   {entry['browser']} | {entry['visited_at']}")
+        lines.append("")
+    
+    return "\n".join(lines)
+
+def check_visited_today(url_pattern: str) -> bool:
+    """Check if a URL pattern was visited today."""
+    today = datetime.now().date()
+    
+    for browser_key in BROWSER_PATHS:
+        db_path = _get_history_db_path(browser_key)
+        if not db_path:
+            continue
+        
+        entries = _read_history(db_path, days_back=1, limit=500)
+        
+        for entry in entries:
+            if "error" in entry:
+                continue
+            
+            # Check if visited today
+            try:
+                visit_date = datetime.fromisoformat(entry["visited_at"]).date()
+                if visit_date == today and url_pattern.lower() in entry["url"].lower():
+                    return True
+            except:
+                pass
+    
+    return False
+
+def get_browser_status() -> str:
+    """Check which browsers are installed and their history availability."""
+    lines = ["### BROWSER HISTORY STATUS", ""]
+    
+    for browser_key, info in BROWSER_PATHS.items():
+        db_path = _get_history_db_path(browser_key)
+        if db_path:
+            lines.append(f"✅ {info['name']}: History available at {db_path}")
+        else:
+            lines.append(f"❌ {info['name']}: Not installed or history not found")
+    
+    return "\n".join(lines)
 
 # ─── Integration with Friday Tools ────────────────────────────────
 
-def browser_history_search(query: str, max_results: int = 5) -> str:
+def browser_history_tool(action: str = "status", query: str = "", **kwargs) -> str:
     """
-    Search browser history by natural language query.
-    This function is exposed as a Friday tool.
+    Friday tool for browser history operations.
+    Actions: status, search, open_latest, list_recent
     """
-    if not BROWSER_HISTORY_AVAILABLE:
-        return "Browser history package not installed. Install with: pip install browser-history"
+    if action == "status":
+        return get_browser_status()
     
-    results = search_browser_history(query, max_results=max_results)
+    if action == "search":
+        if not query:
+            return "❌ Query required for search."
+        return search_all_history(query, days_back=kwargs.get("days_back", 30))
     
-    if not results:
-        return f"No browser history found matching '{query}'."
+    if action == "open_latest":
+        if not query:
+            return "❌ Query required. Example: 'open_latest' with query='jarvis'"
+        return open_latest_in_browser(query)
     
-    if "error" in results[0]:
-        return f"Search error: {results[0]['error']}"
+    if action == "list_recent":
+        return list_browser_histories(
+            days_back=kwargs.get("days_back", 7),
+            limit=kwargs.get("limit", 20)
+        )
     
-    return format_history_report(results)
-
-
-def browser_history_open(query: str) -> str:
-    """
-    Search for a URL in history and open the most recent match.
-    Example: "open the repo I was seeing about jarvis by vierisid"
-    """
-    return find_and_open_url(query, open_in_browser=True)
-
-
-def browser_history_check_today(url_pattern: str) -> str:
-    """
-    Check if a URL pattern was visited today.
-    Returns a simple yes/no + details.
-    """
-    visited = check_visited_today(url_pattern)
-    
-    if visited:
-        # Get today's entries that match
-        today = datetime.now().strftime("%Y-%m-%d")
-        entries = get_history_for_date(today)
-        matching = [e for e in entries if url_pattern.lower() in e.get("url", "").lower()]
-        
-        lines = [f"✅ Visited {len(matching)} time(s) today matching '{url_pattern}':"]
-        for e in matching[:5]:
-            lines.append(f"  - {e.get('title', 'Unknown')} at {e.get('datetime', '')}")
-        return "\n".join(lines)
-    
-    return f"❌ No visits today matching '{url_pattern}'."
-
+    return f"Unknown action: {action}"
 
 if __name__ == "__main__":
-    # Test
-    print("Testing Browser History...")
+    print("Testing Browser History Tools...\n")
     
-    # Search test
-    print("\n--- Search Test ---")
-    results = search_browser_history("github", max_results=3)
-    print(format_history_report(results))
+    # Test status
+    print("--- Browser Status ---")
+    print(browser_history_tool("status"))
     
-    # Check today test
-    print("\n--- Today Check Test ---")
-    print(browser_history_check_today("github"))
+    # Test listing recent
+    print("\n--- Recent History (if any) ---")
+    print(browser_history_tool("list_recent", days_back=1, limit=5))
+    
+    # Test search (if you have something in history)
+    # print(browser_history_tool("search", query="github"))

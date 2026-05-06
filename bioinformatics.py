@@ -411,7 +411,7 @@ def bioinfo_tool(
     """
     if action == "analyze":
         if not sequence:
-            return "❌ Sequence required."
+            return "[FAIL] Sequence required."
         
         dna = DNASequence(sequence)
         lines = [f"### DNA ANALYSIS: {dna.name}", ""]
@@ -423,14 +423,14 @@ def bioinfo_tool(
     
     if action == "align":
         if not sequence or not sequence2:
-            return "❌ Two sequences required."
+            return "[FAIL] Two sequences required."
         
         if algorithm == "global":
             aligned1, aligned2, score = SequenceAlignment.needleman_wunsch(sequence, sequence2)
         elif algorithm == "local":
             aligned1, aligned2, score = SequenceAlignment.smith_waterman(sequence, sequence2)
         else:
-            return f"❌ Unknown algorithm: {algorithm}"
+            return f"[FAIL] Unknown algorithm: {algorithm}"
         
         lines = [f"### SEQUENCE ALIGNMENT ({algorithm.upper()})", ""]
         lines.append(f"**Score**: {score}")
@@ -441,7 +441,7 @@ def bioinfo_tool(
     
     if action == "genetic":
         if not sequence:
-            return "❌ Fitness function not defined. Use custom implementation."
+            return "[FAIL] Fitness function not defined. Use custom implementation."
         
         # Simple example: maximize number of 'A's
         ga = GeneticAlgorithm(population_size=50, generations=100)
@@ -463,7 +463,7 @@ def bioinfo_tool(
     
     if action == "fold":
         if not sequence:
-            return "❌ Protein sequence required."
+            return "[FAIL] Protein sequence required."
         
         protein = ProteinFolding(sequence)
         energy = protein.fold()
@@ -478,7 +478,7 @@ def bioinfo_tool(
     
     if action == "translate":
         if not sequence:
-            return "❌ RNA sequence required."
+            return "[FAIL] RNA sequence required."
         
         rna = RNASequence(sequence)
         protein = rna.translate()

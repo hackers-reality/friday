@@ -1,6 +1,6 @@
 """
 Quick test script for Friday core features.
-Run: python test_friday.py
+Run: python test_friday_simple.py
 """
 import sys
 import os
@@ -16,28 +16,28 @@ def test(name, func):
     """Run a test."""
     try:
         result = func()
-        # Clean for Windows console
+        # Clean for Windows console - remove non-ASCII
         import re
         clean = re.sub(r'[^\x00-\x7F]+', '', str(result))[:100]
-        print(f"  ✅ {name}: {clean}")
+        print("[PASS] {0}: {1}".format(name, clean))
         results["pass"] += 1
         return True
     except Exception as e:
-        print(f"  ❌ {name}: {e}")
+        print("[FAIL] {0}: {1}".format(name, str(e)[:100]))
         results["fail"] += 1
         return False
 
-# ─── Test 1: Screen Watcher ─────────────────────────────
+# Test 1: Screen Watcher
 print("\n### 1. SCREEN WATCHER ###")
 
 def test_screen_watcher():
     from screen_watcher import get_active_window_info
     info = get_active_window_info()
-    return f"Active: {info.get('title', 'Unknown')[:30]}"
+    return "Active: {0}".format(info.get('title', 'Unknown')[:30])
 
 test("Active Window Detection", test_screen_watcher)
 
-# ─── Test 2: Browser History ───────────────────────────────
+# Test 2: Browser History
 print("\n### 2. BROWSER HISTORY ###")
 
 def test_browser_status():
@@ -46,7 +46,7 @@ def test_browser_status():
 
 test("Browser Status Check", test_browser_status)
 
-# ─── Test 3: File Generator ────────────────────────────────
+# Test 3: File Generator
 print("\n### 3. FILE GENERATOR ###")
 
 def test_file_gen():
@@ -62,7 +62,7 @@ def test_file_create():
 
 test("File Creation", test_file_create)
 
-# ─── Test 4: Goal Memory ──────────────────────────────────
+# Test 4: Goal Memory
 print("\n### 4. GOAL MEMORY ###")
 
 def test_goal_profile():
@@ -87,7 +87,7 @@ def test_goal_add():
 
 test("Add Goal", test_goal_add)
 
-# ─── Test 5: Startup Integration ─────────────────────────
+# Test 5: Startup Integration
 print("\n### 5. STARTUP INTEGRATION ###")
 
 def test_startup():
@@ -96,24 +96,36 @@ def test_startup():
 
 test("Startup Status", test_startup)
 
-# ─── Test 6: Friday Tools Integration ──────────────────
-print("\n### 6. FRIDAY TOOLS (friday_tools.py) ###")
+# Test 6: Friday Tools Integration
+print("\n### 6. FRIDAY TOOLS ###")
 
 def test_tools_import():
-    from friday_tools import see_screen, search_browser_history
-    return "Tools imported successfully"
+    import friday_tools
+    return "friday_tools module loaded"
 
-test("Tools Import", test_tools_import)
+test("Tools Module Import", test_tools_import)
 
-# ─── Summary ───────────────────────────────────────────
+def test_see_screen():
+    from friday_tools import see_screen
+    return see_screen("What is on screen?")
+
+test("See Screen Tool", test_see_screen)
+
+def test_search_history():
+    from friday_tools import search_browser_history
+    return search_browser_history("test", 7)
+
+test("Search History Tool", test_search_history)
+
+# Summary
 print("\n" + "=" * 60)
-print(f"RESULTS: {results['pass']} passed, {results['fail']} failed")
+print("RESULTS: {0} passed, {1} failed".format(results['pass'], results['fail']))
 print("=" * 60)
 
 if results["fail"] > 0:
-    print("\n⚠️  Some tests failed. Check the errors above.")
+    print("\nSome tests failed. Check the errors above.")
 else:
-    print("\n✅ All core features working!")
+    print("\nAll core features working!")
 
 # Cleanup
 import shutil
