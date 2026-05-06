@@ -398,7 +398,7 @@ class ContentExtractor:
             
             # Date
             date = None
-            for selector in ["[itemprop=datePublished]", ".date", ".published", "time"):
+            for selector in ["[itemprop=datePublished]", ".date", ".published", "time"]:
                 elem = soup.select_one(selector)
                 if elem:
                     date_str = elem.get("datetime") or elem.get_text(strip=True)

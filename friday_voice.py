@@ -409,7 +409,7 @@ def voice_tool(
             return "❌ Text required for speech."
         tts = TextToSpeech()
         result = tts.speak(text)
-        return f"### SPEAK\n\n{'✅ Spoke text' if result['success'] else f'❌ {result[\"error\"]}'}"
+        return f"### SPEAK\n\nSuccess: Spoke text" if result['success'] else f"### SPEAK\n\nError: {result.get('error', 'Unknown')}"
     
     if action == "listen":
         stt = SpeechToText()
