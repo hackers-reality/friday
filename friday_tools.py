@@ -2,7 +2,7 @@
 Friday Tools - Utility functions and helpers.
 File operations, text processing, data conversion, system utilities.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

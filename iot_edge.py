@@ -2,7 +2,7 @@
 Friday IoT/Edge Computing - Internet of Things and edge processing.
 MQTT, sensor networks, edge AI inference.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import json
 import time

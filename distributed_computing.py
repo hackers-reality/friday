@@ -2,7 +2,7 @@
 Friday Distributed Computing - Parallel processing and clustering.
 MapReduce, distributed tasks, cluster management.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json

@@ -2,7 +2,7 @@
 Friday Advanced Robotics - Robot control and automation.
 Supports robot simulation, control systems, and automation protocols.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json

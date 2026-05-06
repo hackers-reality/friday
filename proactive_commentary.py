@@ -2,7 +2,7 @@
 Friday Proactive Commentary - Phase 2.3 & 2.4
 Vision + LLM pipeline for proactive screen watching and commentary.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys`

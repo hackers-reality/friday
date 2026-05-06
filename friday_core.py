@@ -2,7 +2,7 @@
 Friday Core - Main AI Assistant.
 Integrates all advanced modules: networking, crypto, web, automation, etc.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

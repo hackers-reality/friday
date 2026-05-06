@@ -2,7 +2,7 @@
 Friday Blockchain - Blockchain and cryptocurrency.
 Implements blockchain, smart contracts, and crypto operations.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import hashlib
 import json

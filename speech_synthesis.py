@@ -2,7 +2,7 @@
 Friday Speech Synthesis - TTS engines and voice cloning.
 Multiple TTS engines, voice management, SSML support.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json

@@ -2,7 +2,7 @@
 Friday Package - Phase 6.4
 Package Friday as standalone .exe using PyInstaller with spec file.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

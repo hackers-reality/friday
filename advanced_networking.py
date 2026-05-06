@@ -2,7 +2,7 @@
 Friday Advanced Networking - Protocols and communication.
 HTTP/2, WebSockets, MQTT, gRPC, network diagnostics.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json

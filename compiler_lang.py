@@ -2,7 +2,7 @@
 Friday Compiler/Interpreter - Language processing.
 Lexer, parser, AST, and simple language interpreter.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import re
 import math

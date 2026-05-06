@@ -3,7 +3,7 @@ Friday Browser History - Phase 3.1-3.4
 Search across all browsers: Chrome, Brave, Edge, Opera, Firefox, Vivaldi.
 Natural language query + time-ordered results.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

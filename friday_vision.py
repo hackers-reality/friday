@@ -2,7 +2,7 @@
 Friday Vision - Image processing and computer vision.
 OCR, face detection, object detection, image filters, QR codes.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

@@ -2,7 +2,7 @@
 Friday Desktop App Framework - Phase 6.2-6.4
 PyTauri integration for native desktop app with UI.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys
@@ -105,7 +105,7 @@ def create_pytauri_app(
 Friday Desktop App - PyTauri
 Native desktop application for Friday Sovereign AI.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

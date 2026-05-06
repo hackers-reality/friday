@@ -2,7 +2,7 @@
 Friday Advanced Analytics - Predictive analytics and insights.
 Time series analysis, trend detection, anomaly detection.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import json
 from typing import Dict, Any, List, Optional, Tuple

@@ -2,7 +2,7 @@
 Friday Startup Integration - Phase 6.1
 Add Friday to Windows startup folder for automatic launch.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os`
 import sys`

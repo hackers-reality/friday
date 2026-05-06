@@ -1,0 +1,9 @@
+{
+    "music": "playing",
+    "current_task": "diagnostic_complete",
+    "active_window": "Google Chrome",
+    "session_status": "active",
+    "capabilities": {
+        "stark_doctor": true
+    }
+}

@@ -2,7 +2,7 @@
 Friday Database - Data persistence and storage.
 SQLite, JSON, key-value stores, vector databases, and query engines.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json

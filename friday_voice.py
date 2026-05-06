@@ -2,7 +2,7 @@
 Friday Voice - Speech recognition and text-to-speech.
 Wake word detection, voice commands, TTS output.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

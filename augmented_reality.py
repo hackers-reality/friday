@@ -2,7 +2,7 @@
 Friday Augmented Reality - AR core and visualization.
 Marker detection, 3D rendering, AR scene management.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import math
 from typing import Dict, Any, List, Optional, Tuple

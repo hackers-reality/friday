@@ -2,7 +2,7 @@
 Friday Web - Web scraping, search engines, and API interactions.
 Advanced web automation, content extraction, search, and API clients.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

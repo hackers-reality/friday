@@ -2,7 +2,7 @@
 Friday AI - LLM integration and AI capabilities.
 Support for OpenAI, Anthropic, local models, embeddings, and AI agents.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys

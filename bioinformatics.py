@@ -2,7 +2,7 @@
 Friday Bioinformatics - DNA/RNA analysis and genetic algorithms.
 Protein folding, sequence alignment, genetic algorithms.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import random
 import math

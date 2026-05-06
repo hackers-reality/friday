@@ -2,7 +2,7 @@
 Friday Neural Architecture - Neural networks and deep learning.
 Build, train, and use neural networks for various tasks.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json

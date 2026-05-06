@@ -2,7 +2,7 @@
 Friday File Generator - Phase 5.1-5.3
 Universal file generator with template library and coding sub-agent support.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json
@@ -19,7 +19,7 @@ _TEMPLATES = {
 """
 {description}
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 """
 {name} - {description}
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 

@@ -2,7 +2,7 @@
 Friday Quantum Computing - Quantum algorithms and simulation.
 Simulate quantum circuits, run quantum algorithms.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json

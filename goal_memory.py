@@ -2,7 +2,7 @@
 Friday Goal Memory System - Phase 4.1-4.6
 Goal tracking, user profile, calendar integration, enforcement.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import json

@@ -2,7 +2,7 @@
 Friday Advanced Cryptography - Modern crypto algorithms.
 AES, RSA, ECC, hashing, digital signatures, zero-knowledge proofs.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import hashlib

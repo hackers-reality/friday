@@ -2,7 +2,7 @@
 Friday Neural Style Transfer - Artistic image generation.
 Transfer style from one image to another using neural networks.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import math
