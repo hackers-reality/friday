@@ -11,7 +11,20 @@ import subprocess
 import shutil
 import glob
 import psutil
+import shutil
+from datetime import datetime
 from typing import Dict, Any, List, Optional
+
+_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB log rotation
+
+def stark_log(entry: str) -> str:
+    """Log to stark_logs.txt with rotation."""
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stark_logs.txt")
+    if os.path.exists(log_path) and os.path.getsize(log_path) > _LOG_MAX_BYTES:
+        shutil.move(log_path, log_path.replace(".txt", "_archive.txt"))
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {entry}\n")
+    return "Entry logged."
 
 #  Import available modules #
 
@@ -617,25 +630,36 @@ def netflix_play(title: str) -> str:
         # Open Netflix search URL in Chrome
         search_url = f"https://www.netflix.com/search?q={title.replace(' ', '+')}"
         webbrowser.open(search_url)
-        time.sleep(3)  # Wait for page load
+        time.sleep(4)
 
-        # Confirm Netflix loaded
-        netflix_windows = [w for w in gw.getAllTitles() if 'Netflix' in w]
-        if not netflix_windows:
-            return "[FAIL] Netflix page didn't load properly"
-
-        # Find and click the first search result
-        pyautogui.press('tab')  # Navigate to first result
-        time.sleep(1)
-        pyautogui.press('enter')  # Click first result
+        # Try direct play URL first (works for known titles)
+        direct_url = f"https://www.netflix.com/search?q={title.replace(' ', '+')}&play=true"
+        webbrowser.open(direct_url)
         time.sleep(3)
 
-        # Try to find and click Play button
-        pyautogui.press('tab')  # Navigate to Play button
-        time.sleep(0.5)
-        pyautogui.press('enter')
+        # Confirm page loaded - look for any browser window
+        browser_windows = [w for w in gw.getAllTitles() if any(b in w for b in ['Chrome', 'Edge', 'Browser', 'Netflix', 'Mozilla Firefox'])]
+        if not browser_windows:
+            return f"[OK] Opened Netflix search for '{title}'. Please click the result to play."
 
-        return f"[OK] Started playing '{title}' on Netflix. Playback should begin shortly."
+        # Focus browser window
+        for w in browser_windows:
+            try:
+                gw.getWindowsWithTitle(w)[0].activate()
+                break
+            except Exception:
+                pass
+
+        time.sleep(1)
+        # Try to click first search result using Enter key
+        pyautogui.press('enter')
+        time.sleep(3)
+
+        # Try to play
+        pyautogui.press('enter')
+        time.sleep(1)
+
+        return f"[OK] Started playing '{title}' on Netflix."
 
     except ImportError:
         return "[FAIL] pygetwindow or pyautogui not installed. Install: pip install pygetwindow pyautogui"
@@ -696,30 +720,50 @@ def draft_email(context: str, recipient: str) -> str:
 #  Instagram Messaging 
 
 def send_instagram_dm(username: str, message: str) -> str:
-    """Send Instagram DM using browser automation."""
+    """Send Instagram DM using browser automation. Must be logged into Instagram in the default browser."""
     try:
         import webbrowser
         import pygetwindow as gw
         import pyautogui
         import time
+        import urllib.parse
 
-        # Check if we have session cookies / logged in
-        dm_url = f"https://www.instagram.com/direct/new/?text={username}"
+        # Use Instagram's direct message URL — recipient is entered via search
+        dm_url = "https://www.instagram.com/direct/new/"
         webbrowser.open(dm_url)
-        time.sleep(4)  # Wait for page load
+        time.sleep(4)
 
-        # Verify Instagram loaded
-        ig_windows = [w for w in gw.getAllTitles() if 'Instagram' in w]
-        if not ig_windows:
+        # Try focusing an Instagram or browser window
+        target_titles = ['Instagram', 'Chrome', 'Edge', 'Mozilla Firefox', 'Brave', 'Opera']
+        browser_windows = [w for w in gw.getAllTitles() if any(b in w for b in target_titles)]
+        if not browser_windows:
             return "[FAIL] Instagram didn't load. Please log in to Instagram in Chrome first."
 
-        # Type message in the message field
-        pyautogui.press('tab')  # Navigate to message field
-        time.sleep(1)
-        pyautogui.typewrite(message)
+        for w in browser_windows:
+            try:
+                gw.getWindowsWithTitle(w)[0].activate()
+                break
+            except Exception:
+                pass
         time.sleep(1)
 
-        # Send (Enter key)
+        # Type the username to search for the recipient
+        pyautogui.typewrite(username)
+        time.sleep(2)
+
+        # Select the first result
+        pyautogui.press('enter')
+        time.sleep(1)
+
+        # Navigate to message input
+        pyautogui.press('tab')
+        time.sleep(0.5)
+
+        # Type the message
+        pyautogui.typewrite(message)
+        time.sleep(0.5)
+
+        # Send
         pyautogui.press('enter')
 
         return f"[OK] Message sent to {username} via Instagram"
@@ -795,8 +839,29 @@ def alexa_command(command: str) -> str:
 
 
 def alexa_poll(action: str = "status") -> str:
-    """Poll Alexa bridge status."""
-    return "[Stub] Alexa poll - bridge status unknown."
+    """Poll Alexa bridge for pending commands."""
+    import os
+    alexa_url = os.environ.get("ALEXA_WEBHOOK_URL")
+    if not alexa_url:
+        return "[FAIL] Alexa webhook URL not configured. Set ALEXA_WEBHOOK_URL."
+    try:
+        import requests
+        secret = os.environ.get("FRIDAY_WEBHOOK_SECRET", "")
+        response = requests.get(
+            f"{alexa_url}/friday/poll",
+            headers={"X-Friday-Secret": secret},
+            timeout=5
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("commands"):
+                return f"[OK] Pending Alexa commands: {', '.join(data['commands'])}"
+            return "[OK] No pending commands from Alexa."
+        return f"[FAIL] Alexa poll error: {response.status_code}"
+    except ImportError:
+        return "[FAIL] requests module not installed."
+    except Exception as e:
+        return f"[FAIL] Alexa poll error: {e}"
 
 
 def home_assistant_command(command: str, entity: str = "all") -> str:
@@ -925,6 +990,128 @@ def smart_home_command(device: str, action: str) -> str:
     return home_assistant_command(action, entity=device)
 
 
+#  OpenCLI Bridge Tools #
+
+def opencli_init_bridge() -> str:
+    """Initialize the OpenCLI browser bridge."""
+    try:
+        from opencli_bridge import opencli_init
+        return opencli_init()
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI init error: {e}"
+
+
+def opencli_navigate(url: str) -> str:
+    """Open a URL in the OpenCLI browser automation window."""
+    try:
+        from opencli_bridge import opencli_open
+        return opencli_open(url)
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI navigate error: {e}"
+
+
+def opencli_click(target: str) -> str:
+    """Click an element in the browser by selector or text."""
+    try:
+        from opencli_bridge import opencli_click
+        return opencli_click(target)
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI click error: {e}"
+
+
+def opencli_type(target: str, text: str) -> str:
+    """Type text into a browser element."""
+    try:
+        from opencli_bridge import opencli_type
+        return opencli_type(target, text)
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI type error: {e}"
+
+
+def opencli_extract() -> str:
+    """Extract page content as markdown from the current browser page."""
+    try:
+        from opencli_bridge import opencli_extract
+        return opencli_extract()
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI extract error: {e}"
+
+
+def opencli_screenshot(path: str = None) -> str:
+    """Take a screenshot of the current browser page."""
+    try:
+        from opencli_bridge import opencli_screenshot
+        return opencli_screenshot(path)
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI screenshot error: {e}"
+
+
+def opencli_scroll(direction: str = "down") -> str:
+    """Scroll the browser page (down, up, top, bottom)."""
+    try:
+        from opencli_bridge import opencli_scroll
+        return opencli_scroll(direction)
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI scroll error: {e}"
+
+
+def opencli_keys(key: str) -> str:
+    """Press a keyboard key in the browser (Enter, Escape, Tab, etc.)."""
+    try:
+        from opencli_bridge import opencli_keys
+        return opencli_keys(key)
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI key error: {e}"
+
+
+def opencli_eval(js: str) -> str:
+    """Execute JavaScript in the browser page."""
+    try:
+        from opencli_bridge import opencli_eval
+        return opencli_eval(js)
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI eval error: {e}"
+
+
+def opencli_state() -> str:
+    """Get current browser page state (URL, title, interactive elements)."""
+    try:
+        from opencli_bridge import opencli_state
+        return opencli_state()
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI state error: {e}"
+
+
+def opencli_doctor() -> str:
+    """Diagnose OpenCLI browser bridge connectivity."""
+    try:
+        from opencli_bridge import opencli_doctor
+        return opencli_doctor()
+    except ImportError:
+        return "[FAIL] opencli_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI doctor error: {e}"
+
 
 #  Export list for friday_live.py #
 
@@ -951,6 +1138,9 @@ __all__ = [
     "alexa_command", "alexa_poll", "home_assistant_command",
     "multi_task", "queue_task", "queue_status", "queue_result",
     "type_text", "take_snapshot", "recall_snapshot", "smart_home_command",
+    "opencli_init_bridge", "opencli_navigate", "opencli_click", "opencli_type",
+    "opencli_extract", "opencli_screenshot", "opencli_scroll",
+    "opencli_keys", "opencli_eval", "opencli_state", "opencli_doctor",
 ]
 
 if __name__ == "__main__":
