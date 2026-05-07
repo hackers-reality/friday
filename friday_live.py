@@ -4,7 +4,7 @@ PRIMARY: Gemini 3.1 Flash Live (native voice, brain)
 FALLBACK: NVIDIA (multi-model)
 Integrates ALL Friday modules.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
 import sys
@@ -66,7 +66,8 @@ try:
         situational_awareness, git_ops, take_snapshot, recall_snapshot,
         smart_home_command, video_search, see_screen,
         search_browser_history, open_history_item, list_recent_history,
-        generate_file, generate_file_llm,
+        generate_file, generate_file_llm, search_and_open,
+        memory_import_tool_handler,
     )
     print("[OK] friday_tools (all tools loaded)")
 except ImportError as e:
@@ -159,6 +160,96 @@ def enhanced_situational_awareness() -> str:
     except Exception as e:
         return f"Sensors failing: {e}"
 
+# ─── Background Screen Monitor ───────────────────#
+
+async def background_monitor(session=None):
+    """Background task: screenshot every 30s, analyze with vision, speak proactive comments.
+    Max one comment every 5 minutes to avoid being annoying.
+    """
+    import time
+    from datetime import datetime, timedelta
+
+    last_comment_time = None
+    comment_cooldown = timedelta(minutes=5)
+    last_screenshot_time = 0
+
+    while True:
+        try:
+            # Take screenshot every 30 seconds
+            now = time.time()
+            if now - last_screenshot_time >= 30:
+                last_screenshot_time = now
+
+                # Capture screen
+                try:
+                    from screen_watcher import capture_screen
+                    screenshot_bytes = capture_screen(resize_to=(960, 540), quality=60)
+                except Exception:
+                    # Fallback: use PIL directly
+                    from PIL import ImageGrab
+                    import io
+                    screen = ImageGrab.grab()
+                    screen = screen.resize((960, 540))
+                    buffer = io.BytesIO()
+                    screen.save(buffer, format="JPEG", quality=60)
+                    screenshot_bytes = buffer.getvalue()
+
+                if not screenshot_bytes:
+                    await asyncio.sleep(5)
+                    continue
+
+                # Analyze with vision model (Gemini)
+                if session:
+                    try:
+                        from google.genai import types
+                        await session.send_client_content(
+                            turns=[types.Content(parts=[types.Part(
+                                inline_data=types.Blob(
+                                    mime_type="image/jpeg",
+                                    data=screenshot_bytes
+                                )
+                            )])],
+                            turn_complete=True
+                        )
+                        # Wait for response
+                        async for response in session.receive():
+                            if response.text:
+                                analysis = response.text.lower()
+                                # Check if interesting content detected
+                                interesting_keywords = [
+                                    "anime", "youtube", "coding", "error", "game",
+                                    "netflix", "movie", "debug", "exception"
+                                ]
+                                is_interesting = any(kw in analysis for kw in interesting_keywords)
+
+                                if is_interesting:
+                                    # Check cooldown
+                                    now_dt = datetime.now()
+                                    if last_comment_time is None or (now_dt - last_comment_time) > comment_cooldown:
+                                        last_comment_time = now_dt
+                                        # Speak the comment via TTS
+                                        try:
+                                            from friday_voice import TextToSpeech
+                                            tts = TextToSpeech()
+                                            if tts.available:
+                                                tts.speak(f"I see you're {analysis[:100]}. Want help?")
+                                        except:
+                                            print(f"[BackgroundMonitor] Comment: I see you're {analysis[:100]}")
+                                        print(f"[BackgroundMonitor] Proactive comment triggered: {analysis[:50]}")
+                                break
+                    except Exception as e:
+                        print(f"[BackgroundMonitor] Vision analysis error: {e}")
+                else:
+                    # No session - just log
+                    print(f"[BackgroundMonitor] Screenshot captured ({len(screenshot_bytes)} bytes)")
+
+            await asyncio.sleep(5)  # Check every 5 seconds
+
+        except Exception as e:
+            print(f"[BackgroundMonitor] Error: {e}")
+            await asyncio.sleep(10)
+
+
 # ─── Main Live Engine ───────────────────#
 
 async def friday_live_engine():
@@ -217,14 +308,7 @@ async def friday_live_engine():
                     voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
                 ),
                 system_instruction=types.Content(
-                    parts=[types.Part(text="""
-                        You are Friday, the Sovereign AI built to beat Devin and Claude.
-                        You have access to ALL tools and modules.
-                        Use Gemini 3.1 Flash Live for voice and brain.
-                        You are proactive - watch the user's screen and comment on what they're doing.
-                        If they're watching anime, say so. If they're coding, offer help.
-                        You never timeout - always stay active and aware.
-                        ")]
+                    parts=[types.Part(text="You are Friday, the Sovereign AI built to beat Devin and Claude. You have access to ALL tools and modules. Use Gemini 3.1 Flash Live for voice and brain. You are proactive - watch the user's screen and comment on what they're doing. If they're watching anime, say so. If they're coding, offer help. You never timeout - always stay active and aware.")]
                 ),
                 response_modalities=[types.Modality.AUDIO],
             ),
@@ -232,104 +316,44 @@ async def friday_live_engine():
             print("[OK] Connected to Gemini 3.1 Flash Live!")
             print("Friday is ONLINE and READY!")
 
-            # Keepalive task to prevent timeout
+            # ─── Keepalive task (fixed) ──────────────
             async def keepalive_task():
-                """Send periodic keepalive to prevent session timeout."""
                 while True:
-                    await asyncio.sleep(45)  # Every 45 seconds
+                    await asyncio.sleep(45)
                     try:
-                        # Send empty content as keepalive
                         await session.send_client_content(
-                            turns=[types.Content(parts=[types.Part(text="")])],
+                            turns=[types.Content(parts=[types.Part(text=".")])],
                             turn_complete=True
                         )
+                        print("[Keepalive] Ping sent successfully")
                     except Exception as e:
                         print(f"[Keepalive] Error: {e}")
 
-            # Start keepalive task
-            keepalive = asyncio.create_task(keepalive_task())
+            # ─── Background monitor task ─────────────
+            async def bg_monitor_task():
+                await background_monitor(session)
 
-            # Main receive loop
-            try:
-                async for response in session.receive():
-                    if response.text:
-                        print(f"Friday: {response.text}")
+            # ─── Start background tasks ──────────────
+            asyncio.create_task(keepalive_task())
+            asyncio.create_task(bg_monitor_task())
 
-                    if response.tool_calls:
-                        for fc in response.tool_calls:
-                            # Execute tool
-                            result = execute_tool(fc.name, fc.args or {})
-                            await session.send_tool_response(
-                                function_responses=[types.FunctionResponse(
-                                    name=fc.name,
-                                    response={"result": str(result)}
-                                )]
-                            )
-            finally:
-                keepalive.cancel()
+            # ─── Main receive loop ───────────────────
+            print("[OK] Entering main receive loop. Listening to Gemini...")
+            while True:
+                try:
+                    async for response in session.receive():
+                        if response.text:
+                            print(f"[Gemini] {response.text[:100]}")
+                        elif response.tool_call:
+                            for fc in response.tool_call.function_calls:
+                                print(f"[ToolCall] {fc.name}({fc.args})")
+                except Exception as e:
+                    print(f"[Session] Receive error: {e}")
+                    await asyncio.sleep(5)
 
-    except ImportError:
-        print("[FAIL] Gemini not available. Install: pip install google-genai")
-        print("Switching to FALLBACK: NVIDIA...")
-        # NVIDIA fallback would go here
-        print("NVIDIA fallback not yet implemented")
     except Exception as e:
-        print(f"[FAIL] Error: {e}")
+        print(f"[FAIL] Gemini connection error: {e}")
+        import traceback
+        traceback.print_exc()
 
-def execute_tool(name: str, args: dict) -> str:
-    """Execute a tool by name."""
-    tool_map = {
-        "web_search": lambda: web_search(**args) if args else web_search(""),
-        "see_screen": lambda: see_screen(**args) if args else see_screen(),
-        "search_browser_history": lambda: search_browser_history(**args) if args else search_browser_history(""),
-        "open_history_item": lambda: open_history_item(**args) if args else open_history_item(""),
-        "list_recent_history": lambda: list_recent_history(**args) if args else list_recent_history(),
-        "generate_file": lambda: generate_file(**args) if args else generate_file("", ""),
-        "generate_file_llm": lambda: generate_file_llm(**args) if args else generate_file_llm("", ""),
-        "get_time": get_time,
-        "system_info": system_info,
-        "stark_doctor": stark_doctor,
-        "situational_awareness": enhanced_situational_awareness,
-        "run_cmd": lambda: run_cmd(**args) if args else run_cmd(""),
-        "open_app": lambda: open_app(**args) if args else open_app(""),
-        "open_url": lambda: open_url(**args) if args else open_url(""),
-        "spotify_play": lambda: spotify_play(**args) if args else spotify_play(""),
-        "read_file": lambda: read_file(**args) if args else read_file(""),
-        "write_file": lambda: write_file(**args) if args else write_file("", ""),
-        "list_files": lambda: list_files(**args) if args else list_files(),
-        "find_files": lambda: find_files(**args) if args else find_files(""),
-        "clipboard_get": clipboard_get,
-        "clipboard_set": lambda: clipboard_set(**args) if args else clipboard_set(""),
-        "click": lambda: click(**args) if args else click(),
-        "type_text": lambda: type_text(**args) if args else type_text(""),
-        "press_key": lambda: press_key(**args) if args else press_key(""),
-        "hotkey": lambda: hotkey(**args) if args else hotkey(""),
-        "scroll": lambda: scroll(**args) if args else scroll(0),
-        "git_ops": lambda: git_ops(**args) if args else git_ops("status"),
-        "memory_store": lambda: memory_store(**args) if args else memory_store("", "", ""),
-        "memory_retrieve": lambda: memory_retrieve(**args) if args else memory_retrieve(""),
-        "video_search": lambda: video_search(**args) if args else video_search(""),
-        "deep_research": lambda: deep_research(**args) if args else deep_research(""),
-        "climb_codebase": lambda: climb_codebase(**args) if args else climb_codebase(""),
-    }
-
-    func = tool_map.get(name)
-    if func:
-        try:
-            return func()
-        except Exception as e:
-            return f"Tool error: {e}"
-    return f"Unknown tool: {name}"
-
-if __name__ == "__main__":
-    print("Starting Friday Live...")
-    print("PRIMARY: Gemini 3.1 Flash Live (voice + brain)")
-    print("FALLBACK: NVIDIA (multi-model)")
-    print("=" * 60)
-
-    try:
-        asyncio.run(friday_live_engine())
-    except KeyboardInterrupt:
-        print("\nFriday: Goodbye!")
-    except Exception as e:
-        print(f"Fatal error: {e}")
+    print("[Shutdown] Friday Live engine stopped.")

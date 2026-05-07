@@ -198,9 +198,8 @@ def find_latest_by_keyword(keyword: str, days_back: int = 90) -> Optional[Dict[s
 def open_latest_in_browser(query: str) -> str:
     """
     Find the most recent history entry matching query and open it in the default browser.
-    This is the "Friday open the repo I was seeing about jarvis" feature.
+    General-purpose: works for ANYTHING - anime, repos, chats, blogs, courses, etc.
     """
-    # First, try to find in history
     entry = find_latest_by_keyword(query, days_back=90)
     
     if not entry:
@@ -215,6 +214,228 @@ def open_latest_in_browser(query: str) -> str:
         return f"✅ Opened in browser:\n\n**{title}**\nURL: {url}\n\n(From {entry['visited_at']})"
     except Exception as e:
         return f"❌ Failed to open browser: {e}\n\nURL was: {url}"
+
+
+# ─── URL Categorization ────────────────────────────────────
+
+def categorize_url(url: str, title: str = "") -> str:
+    """
+    Categorize a URL/title into a content type.
+    Returns: anime, chat, repo, blog, social, video, music, education, shopping, news, email, other
+    """
+    url_lower = url.lower()
+    title_lower = title.lower()
+    
+    # Anime / Streaming
+    anime_domains = ["hianime", "animekai", "animepahe", "9anime", "gogoanime",
+                     "crunchyroll", "funimation", "hidive", "anime", "aniwatch",
+                     "zoro.to", "kaido.to", "anix"]
+    if any(d in url_lower for d in anime_domains):
+        return "anime"
+    
+    # Chat / Messaging
+    chat_domains = ["discord.com/channels", "discord.com/app", "instagram.com/direct",
+                    "web.whatsapp.com", "wa.me", "telegram.org", "t.me",
+                    "messenger.com", "slack.com", "chat.openai.com", "claude.ai"]
+    if any(d in url_lower for d in chat_domains):
+        return "chat"
+    
+    # Video / Movies (check BEFORE social to catch Netflix, YouTube, etc)
+    video_domains = ["youtube.com", "youtu.be", "netflix.com", "primevideo.com",
+                     "hotstar.com", "hulu.com", "disneyplus.com", "hbomax.com",
+                     "sonyliv.com", "vimeo.com", "dailymotion.com", "twitch.tv"]
+    if any(d in url_lower for d in video_domains):
+        return "video"
+    
+    # Social Media
+    social_domains = ["instagram.com", "facebook.com", "x.com", "twitter.com",
+                      "reddit.com", "tiktok.com", "snapchat.com", "linkedin.com",
+                      "pinterest.com", "tumblr.com"]
+    if any(d in url_lower for d in social_domains):
+        return "social"
+    
+    # Music
+    music_domains = ["spotify.com", "soundcloud.com", "music.youtube.com",
+                     "apple.music.com", "deezer.com", "bandcamp.com"]
+    if any(d in url_lower for d in music_domains):
+        return "music"
+    
+    # Repository / Code
+    repo_keywords = ["github.com", "gitlab.com", "bitbucket.org", "sourceforge.net",
+                     "coder.com", "replit.com", "codesandbox.io", "colab.research.google.com"]
+    if any(d in url_lower for d in repo_keywords):
+        return "repo"
+    
+    # Educational
+    edu_domains = ["coursera.org", "udemy.com", "edx.org", "khanacademy.org",
+                   "brilliant.org", "iitm", "byjus.com", "unacademy.com",
+                   "vedantu.com", "physicswallah", "pw.live",
+                   "classroom.google.com", "meet.google.com"]
+    if any(d in url_lower for d in edu_domains):
+        return "education"
+    
+    # Blog / Reading
+    blog_keywords = ["medium.com", "blog.", "substack.com", "wordpress.com",
+                     "blogger.com", "ghost.org", "dev.to", "hashnode.com",
+                     "notion.so", "evernote.com", "obsidian"]
+    if any(d in url_lower for d in blog_keywords):
+        return "blog"
+    
+    # News
+    news_domains = ["cnn.com", "bbc.com", "bbc.co.uk", "nytimes.com", "reuters.com",
+                    "theguardian.com", "wsj.com", "bloomberg.com", "forbes.com",
+                    "timesofindia.com", "hindustantimes.com", "ndtv.com"]
+    if any(d in url_lower for d in news_domains):
+        return "news"
+    
+    # Shopping
+    shop_domains = ["amazon", "flipkart", "myntra", "ajio", "ebay", "walmart",
+                    "aliexpress", "etsy.com", "bestbuy.com", "shopify.com"]
+    if any(d in url_lower for d in shop_domains):
+        return "shopping"
+    
+    # Email
+    email_domains = ["mail.google.com", "outlook.live.com", "outlook.office.com",
+                     "mail.yahoo.com", "protonmail.com"]
+    if any(d in url_lower for d in email_domains):
+        return "email"
+    
+    return "other"
+
+
+def search_and_open(query: str, category_hint: str = None) -> str:
+    """
+    Ultimate general-purpose function: search browser history for ANYTHING
+    and open the most relevant result.
+    
+    Handles: anime, repos, chats, blogs, courses, social media, videos, etc.
+    
+    Args:
+        query: What to search for (e.g. "onepiece", "my chat with arnav", "openclaw repo")
+        category_hint: Optional category filter (anime, repo, chat, blog, etc.)
+    
+    Returns:
+        Status string with what was opened or error
+    """
+    all_results = []
+    
+    for browser_key, info in BROWSER_PATHS.items():
+        db_path = _get_history_db_path(browser_key)
+        if not db_path:
+            continue
+        
+        entries = _read_history(db_path, days_back=90, limit=500)
+        
+        for entry in entries:
+            if "error" in entry:
+                continue
+            url_lower = entry["url"].lower()
+            title_lower = entry["title"].lower()
+            query_lower = query.lower()
+            
+            # Tokenize query for better matching
+            query_tokens = query_lower.split()
+            
+            # Check if ALL significant tokens appear somewhere
+            matches = 0
+            for token in query_tokens:
+                if len(token) > 2:  # Skip very short tokens
+                    if token in url_lower or token in title_lower:
+                        matches += 1
+            
+            if matches > 0:
+                entry["browser"] = info["name"]
+                entry["match_score"] = matches  # More matches = better
+            else:
+                continue
+            
+            # Apply category filter if provided
+            if category_hint:
+                entry_category = categorize_url(entry["url"], entry["title"])
+                if entry_category != category_hint:
+                    continue
+            
+            all_results.append(entry)
+    
+    if not all_results:
+        msg = f"❌ No history entries found matching '{query}'"
+        if category_hint:
+            msg += f" in category '{category_hint}'"
+        msg += ".\n\nTrying web search instead..."
+        return msg
+    
+    # Sort by match score (descending) then by visit time (descending)
+    all_results.sort(key=lambda x: (x.get("match_score", 0), x.get("visited_at", "")), reverse=True)
+    
+    best = all_results[0]
+    url = best["url"]
+    title = best["title"] or url
+    category = categorize_url(url, title)
+    
+    try:
+        import webbrowser
+        webbrowser.open(url)
+        
+        result = f"✅ Found and opened:\n\n"
+        result += f"**{title}**\n"
+        result += f"URL: {url}\n"
+        result += f"Category: {category}\n"
+        result += f"Browser: {best['browser']}\n"
+        result += f"Visited: {best['visited_at']}\n"
+        
+        # Show total matches found
+        if len(all_results) > 1:
+            result += f"\nℹ️ Also found {len(all_results) - 1} other matching entries."
+        
+        return result
+    except Exception as e:
+        return f"❌ Failed to open browser: {e}\n\nURL was: {url}"
+
+
+def search_by_category(query: str, category: str) -> str:
+    """
+    Search history for a query within a specific category.
+    """
+    all_results = []
+    
+    for browser_key, info in BROWSER_PATHS.items():
+        db_path = _get_history_db_path(browser_key)
+        if not db_path:
+            continue
+        
+        entries = _read_history(db_path, days_back=90, limit=500)
+        
+        for entry in entries:
+            if "error" in entry:
+                continue
+            url_lower = entry["url"].lower()
+            title_lower = entry["title"].lower()
+            query_lower = query.lower()
+            
+            if query_lower not in url_lower and query_lower not in title_lower:
+                continue
+            
+            entry_category = categorize_url(entry["url"], entry["title"])
+            if entry_category == category:
+                entry["browser"] = info["name"]
+                all_results.append(entry)
+    
+    if not all_results:
+        return f"❌ No {category} entries found matching '{query}'."
+    
+    all_results.sort(key=lambda x: x["visited_at"], reverse=True)
+    
+    lines = [f"### {category.upper()} SEARCH: '{query}'", ""]
+    lines.append(f"Found {len(all_results)} matching entries (showing top 10):\n")
+    
+    for i, entry in enumerate(all_results[:10]):
+        lines.append(f"**{i+1}. {entry['title'] or '(No title)'}**")
+        lines.append(f"   URL: {entry['url']}")
+        lines.append(f"   Browser: {entry['browser']}")
+        lines.append(f"   Visited: {entry['visited_at']}")
+        lines.append("")
+    
+    return "\n".join(lines)
 
 def list_browser_histories(days_back: int = 7, limit: int = 20) -> str:
     """List recent history from all browsers."""
@@ -290,7 +511,7 @@ def get_browser_status() -> str:
 def browser_history_tool(action: str = "status", query: str = "", **kwargs) -> str:
     """
     Friday tool for browser history operations.
-    Actions: status, search, open_latest, list_recent
+    Actions: status, search, open_latest, list_recent, find_and_open, search_category, categorize
     """
     if action == "status":
         return get_browser_status()
@@ -310,6 +531,26 @@ def browser_history_tool(action: str = "status", query: str = "", **kwargs) -> s
             days_back=kwargs.get("days_back", 7),
             limit=kwargs.get("limit", 20)
         )
+    
+    if action == "find_and_open":
+        """General-purpose: search history for ANYTHING and open the best match."""
+        if not query:
+            return "❌ Query required. Example: 'find_and_open' with query='onepiece episode 1100'"
+        category = kwargs.get("category") or kwargs.get("category_hint")
+        return search_and_open(query, category_hint=category)
+    
+    if action == "search_category":
+        """Search within a specific category (anime, repo, chat, blog, etc)."""
+        if not query or not kwargs.get("category"):
+            return "❌ Query and category required. Example: 'search_category' with query='naruto' and category='anime'"
+        return search_by_category(query, kwargs["category"])
+    
+    if action == "categorize":
+        """Categorize a URL to understand what type of content it is."""
+        url = kwargs.get("url", query)
+        title = kwargs.get("title", "")
+        cat = categorize_url(url, title)
+        return f"Category: {cat}\nURL: {url}\nTitle: {title}"
     
     return f"Unknown action: {action}"
 
