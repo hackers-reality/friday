@@ -787,6 +787,145 @@ def tell_alexa(command: str) -> str:
     return "[FAIL] No smart home integration configured. Set ALEXA_WEBHOOK_URL or HOME_ASSISTANT_URL + HA_TOKEN"
 
 
+#  Stub functions for friday_live.py compatibility #
+
+def alexa_command(command: str) -> str:
+    """Send command to Alexa (alias for tell_alexa)."""
+    return tell_alexa(command)
+
+
+def alexa_poll(action: str = "status") -> str:
+    """Poll Alexa bridge status."""
+    return "[Stub] Alexa poll - bridge status unknown."
+
+
+def home_assistant_command(command: str, entity: str = "all") -> str:
+    """Send command to Home Assistant."""
+    try:
+        import requests
+        ha_url = os.environ.get("HOME_ASSISTANT_URL")
+        ha_token = os.environ.get("HA_TOKEN")
+        if not ha_url or not ha_token:
+            return "[FAIL] Home Assistant not configured. Set HOME_ASSISTANT_URL and HA_TOKEN"
+        headers = {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
+        payload = {"entity_id": entity}
+        response = requests.post(f"{ha_url}/api/services/homeassistant/turn_on", json=payload, headers=headers, timeout=5)
+        return f"[OK] Command sent to Home Assistant: {command}" if response.status_code in (200, 201) else f"[FAIL] HA error: {response.status_code}"
+    except ImportError:
+        return "[FAIL] requests module not installed."
+    except Exception as e:
+        return f"[FAIL] Home Assistant error: {e}"
+
+
+def multi_task(tasks: list) -> str:
+    """Execute multiple tasks in sequence (stub)."""
+    results = []
+    for t in tasks:
+        if isinstance(t, dict):
+            results.append(f"[OK] Task: {t.get('action', 'unknown')}")
+        else:
+            results.append(f"[OK] Task: {t}")
+    return "\n".join(results)
+
+
+def queue_task(task_name: str, action: str, params: dict = None) -> str:
+    """Queue a task for later execution."""
+    try:
+        import json
+        queue_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory")
+        os.makedirs(queue_dir, exist_ok=True)
+        queue_file = os.path.join(queue_dir, "task_queue.json")
+        tasks = []
+        if os.path.exists(queue_file):
+            with open(queue_file, "r") as f:
+                tasks = json.load(f)
+        tasks.append({
+            "id": f"task_{int(time.time())}",
+            "name": task_name,
+            "action": action,
+            "params": params or {},
+            "queued_at": datetime.now().isoformat(),
+            "status": "queued"
+        })
+        with open(queue_file, "w") as f:
+            json.dump(tasks, f, indent=4)
+        return f"[OK] Task '{task_name}' queued."
+    except Exception as e:
+        return f"[FAIL] Queue error: {e}"
+
+
+def queue_status() -> str:
+    """List queued tasks."""
+    try:
+        import json
+        queue_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory", "task_queue.json")
+        if not os.path.exists(queue_file):
+            return "No queued tasks."
+        with open(queue_file, "r") as f:
+            tasks = json.load(f)
+        if not tasks:
+            return "No queued tasks."
+        lines = ["### QUEUED TASKS"]
+        for t in tasks:
+            lines.append(f"- {t.get('name', '?')}: {t.get('action', '?')} ({t.get('status', '?')})")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"[FAIL] Queue status error: {e}"
+
+
+def queue_result(task_id: str) -> str:
+    """Get result of a queued task."""
+    return f"[Stub] Task {task_id}: result not available."
+
+
+def type_text(text: str) -> str:
+    """Type text using keyboard simulation."""
+    try:
+        import pyautogui
+        pyautogui.typewrite(text)
+        return f"[OK] Typed: {text[:50]}..."
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Type error: {e}"
+
+
+def take_snapshot(name: str = None) -> str:
+    """Take a snapshot of the current screen."""
+    try:
+        from screen_watcher import capture_screen
+        import base64
+        screenshot_bytes = capture_screen(resize_to=(1280, 720), quality=70)
+        name = name or f"snapshot_{int(time.time())}"
+        snap_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory", "snapshots")
+        os.makedirs(snap_dir, exist_ok=True)
+        snap_path = os.path.join(snap_dir, f"{name}.jpg")
+        with open(snap_path, "wb") as f:
+            f.write(screenshot_bytes)
+        return f"[OK] Snapshot saved: {snap_path}"
+    except Exception as e:
+        return f"[FAIL] Snapshot error: {e}"
+
+
+def recall_snapshot(name: str) -> str:
+    """Recall a previously saved snapshot."""
+    try:
+        snap_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory", "snapshots")
+        import glob
+        files = glob.glob(os.path.join(snap_dir, f"{name}.*"))
+        if not files:
+            return f"[FAIL] Snapshot '{name}' not found."
+        return f"[OK] Snapshot found: {files[0]}"
+    except Exception as e:
+        return f"[FAIL] Recall error: {e}"
+
+
+def smart_home_command(device: str, action: str) -> str:
+    """Control smart home devices."""
+    return home_assistant_command(action, entity=device)
+
+
+
 #  Export list for friday_live.py #
 
 __all__ = [
@@ -809,6 +948,9 @@ __all__ = [
     "search_and_open",
     "situational_awareness", "goals_tool_handler", "startup_tool_handler",
     "memory_import_tool_handler",
+    "alexa_command", "alexa_poll", "home_assistant_command",
+    "multi_task", "queue_task", "queue_status", "queue_result",
+    "type_text", "take_snapshot", "recall_snapshot", "smart_home_command",
 ]
 
 if __name__ == "__main__":

@@ -45,11 +45,15 @@ except ImportError as e:
 
 # AI
 try:
-    from friday_ai import ai_tool, FridayAI
+    from friday_ai import ai_tool
     print("[OK] friday_ai")
 except ImportError as e:
     print(f"[FAIL] friday_ai: {e}")
     ai_tool = None
+try:
+    from friday_ai import FridayAI
+except ImportError:
+    FridayAI = None
 
 # Tools
 try:
@@ -115,25 +119,41 @@ except ImportError as e:
 
 # Automation
 try:
-    from friday_automation import automation_tool
-    print("[OK] friday_automation")
-except ImportError as e:
+    import friday_automation
+    automation_tool = getattr(friday_automation, 'automation_tool', None)
+    if automation_tool:
+        print("[OK] friday_automation")
+    else:
+        print("[OK] friday_automation (no automation_tool)")
+except Exception as e:
     print(f"[FAIL] friday_automation: {e}")
     automation_tool = None
 
 # Monitor
 try:
-    from friday_monitor import monitor_tool
-    print("[OK] friday_monitor")
-except ImportError as e:
+    import friday_monitor
+    monitor_tool = getattr(friday_monitor, 'monitor_tool', None)
+    if not monitor_tool:
+        MonitorClass = getattr(friday_monitor, 'FridayMonitor', None)
+        if MonitorClass:
+            monitor_tool = MonitorClass()
+    if monitor_tool:
+        print("[OK] friday_monitor")
+    else:
+        print("[OK] friday_monitor (loaded)")
+except Exception as e:
     print(f"[FAIL] friday_monitor: {e}")
     monitor_tool = None
 
 # Scheduler
 try:
-    from friday_scheduler import scheduler_tool
-    print("[OK] friday_scheduler")
-except ImportError as e:
+    import friday_scheduler
+    scheduler_tool = getattr(friday_scheduler, 'scheduler_tool', None)
+    if scheduler_tool:
+        print("[OK] friday_scheduler")
+    else:
+        print("[OK] friday_scheduler (no scheduler_tool)")
+except Exception as e:
     print(f"[FAIL] friday_scheduler: {e}")
     scheduler_tool = None
 
@@ -357,3 +377,16 @@ async def friday_live_engine():
         traceback.print_exc()
 
     print("[Shutdown] Friday Live engine stopped.")
+
+
+# ─── Entry Point ──────────────────────────────
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(friday_live_engine())
+    except KeyboardInterrupt:
+        print("\n[Shutdown] Friday terminated by user.")
+    except Exception as e:
+        print(f"[FAIL] Friday crashed: {e}")
+        import traceback
+        traceback.print_exc()
