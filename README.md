@@ -95,9 +95,9 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 🤖 AI & LLM
 | Feature | Status | Details |
 |---------|--------|---------|
-| Gemini Live (primary) | ✅ Working | Cloud-hosted, real-time audio |
-| Ollama (local LLMs) | ✅ Working | Via `OLLAMA_BASE_URL` env var |
-| Multi-LLM switching | 🔧 In Progress | `llm_manager.py` — Claude, GPT, Groq |
+| Gemini Live (primary) | ✅ Working | Cloud-hosted, real-time audio (only LLM supported right now) |
+| Other LLMs (Claude, GPT, Groq, Ollama) | 🔧 Coming Soon | Use Gemini API key for now |
+| Multi-LLM switching | 📋 Planned | `llm_manager.py` — coming soon |
 | LangGraph orchestration | 🔧 In Progress | `friday_langgraph.py` (syntax fixed) |
 | Deep research tool | ✅ Working | Real-time web research + reports |
 | Self-modifying code | 🔧 In Progress | `self_modification.py` |
@@ -219,8 +219,12 @@ D:\F.R.I.D.A.Y\
 - Windows 10 or 11
 - Python 3.11+
 - Node.js 21+ (for OpenCLI)
-- Google API key (Gemini Live)
-- Groq API key (optional, for Whisper STT)
+- [Google API key (Gemini Live)](https://ai.google.dev/) — required
+- [Picovoice Access Key](https://console.picovoice.ai/) — required
+- [Spotify API credentials](https://developer.spotify.com/dashboard) — required
+- [Groq API key](https://console.groq.com/) (optional, for Whisper STT)
+
+Other LLM providers (Claude, OpenAI, Groq text, Ollama) are coming soon — use your Gemini API key for now.
 
 ### Installation
 
@@ -249,31 +253,43 @@ copy .env.example .env
 # OR Command Prompt:
 install.cmd
 
-# One-liner (PowerShell, full install)
-powershell -ExecutionPolicy Bypass -NoProfile -Command "git clone https://github.com/hackers-reality/friday.git; Set-Location friday; pip install -r requirements.txt; npm install -g @jackwener/opencli; opencli browser install; Copy-Item .env.example .env; .\\install.ps1"
+# One-liner (PowerShell, full install + prompts)
+powershell -ExecutionPolicy Bypass -NoProfile -Command "& { git clone https://github.com/hackers-reality/friday.git; Set-Location friday; pip install -r requirements.txt; npm install -g @jackwener/opencli; opencli browser install; Copy-Item .env.example .env; $google=Read-Host 'GOOGLE_API_KEY (Gemini - required)'; $picovoice=Read-Host 'PICOVOICE_ACCESS_KEY (required)'; $spotifyId=Read-Host 'SPOTIFY_CLIENT_ID (required)'; $spotifySecret=Read-Host 'SPOTIFY_CLIENT_SECRET (required)'; $spotifyRedirect=Read-Host 'SPOTIFY_REDIRECT_URI (required, e.g. http://localhost:8888/callback)'; $groq=''; if ((Read-Host 'Have GROQ_API_KEY for Whisper STT? (y/n)') -match '^[Yy]') { $groq=Read-Host 'GROQ_API_KEY' }; $anthropic=''; if ((Read-Host 'Have ANTHROPIC_API_KEY (coming soon)? (y/n)') -match '^[Yy]') { $anthropic=Read-Host 'ANTHROPIC_API_KEY' }; $openai=''; if ((Read-Host 'Have OPENAI_API_KEY (coming soon)? (y/n)') -match '^[Yy]') { $openai=Read-Host 'OPENAI_API_KEY' }; $ollama=''; if ((Read-Host 'Use Ollama base URL (coming soon)? (y/n)') -match '^[Yy]') { $ollama=Read-Host 'OLLAMA_BASE_URL (e.g. http://192.168.1.x:11434)' }; $alexa=''; if ((Read-Host 'Have ALEXA_WEBHOOK_URL? (y/n)') -match '^[Yy]') { $alexa=Read-Host 'ALEXA_WEBHOOK_URL' }; $haUrl=''; $haToken=''; if ((Read-Host 'Use Home Assistant? (y/n)') -match '^[Yy]') { $haUrl=Read-Host 'HOME_ASSISTANT_URL'; $haToken=Read-Host 'HA_TOKEN' }; $envLines=@("GOOGLE_API_KEY=$google","PICOVOICE_ACCESS_KEY=$picovoice","SPOTIFY_CLIENT_ID=$spotifyId","SPOTIFY_CLIENT_SECRET=$spotifySecret","SPOTIFY_REDIRECT_URI=$spotifyRedirect"); if ($groq) { $envLines+="GROQ_API_KEY=$groq" }; if ($anthropic) { $envLines+="ANTHROPIC_API_KEY=$anthropic" }; if ($openai) { $envLines+="OPENAI_API_KEY=$openai" }; if ($ollama) { $envLines+="OLLAMA_BASE_URL=$ollama" }; if ($alexa) { $envLines+="ALEXA_WEBHOOK_URL=$alexa" }; if ($haUrl) { $envLines+="HOME_ASSISTANT_URL=$haUrl" }; if ($haToken) { $envLines+="HA_TOKEN=$haToken" }; Set-Content -Path .env -Value $envLines -Encoding UTF8; .\\install.ps1 }"
 ```
 
 ### Environment Variables
+
+Gemini Live is the only supported LLM right now. Other LLM keys are stored for coming-soon support.
+
+Get your keys/URLs here:
+- Gemini API: https://ai.google.dev/
+- Picovoice: https://console.picovoice.ai/
+- Spotify: https://developer.spotify.com/dashboard
+- Groq: https://console.groq.com/
+- Anthropic: https://console.anthropic.com/ (coming soon)
+- OpenAI: https://platform.openai.com/ (coming soon)
+- Ollama: https://ollama.com/ (coming soon)
+- Home Assistant: https://www.home-assistant.io/
 
 Create a `.env` file in the root directory:
 
 ```env
 # Required
 GOOGLE_API_KEY=your_gemini_api_key_here
+PICOVOICE_ACCESS_KEY=your_porcupine_key_here
+
+# Spotify (required) — https://developer.spotify.com/dashboard
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
 
 # Optional — enables additional features
 GROQ_API_KEY=your_groq_api_key_here
 ANTHROPIC_API_KEY=your_claude_key_here
 OPENAI_API_KEY=your_openai_key_here
-PICOVOICE_ACCESS_KEY=your_porcupine_key_here
 
-# Ollama (never localhost — use actual IP or hostname)
+# Ollama (coming soon; never localhost — use actual IP or hostname)
 OLLAMA_BASE_URL=http://192.168.1.x:11434
-
-# Spotify (get from https://developer.spotify.com/dashboard)
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
 
 # Smart home
 ALEXA_WEBHOOK_URL=your_alexa_webhook_url
