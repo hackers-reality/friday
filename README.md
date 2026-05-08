@@ -4,7 +4,7 @@
 ### *Female Replacement Intelligent Digital Assistant Youth*
 
 **A fully autonomous, Iron Man-inspired AI agent for Windows**  
-Built by [hackers-reality](https://github.com/hackers-reality) · [NexSemble](https://github.com/hackers-reality)
+Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble](https://github.com/hackers-reality)
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Gemini Live](https://img.shields.io/badge/Gemini-Live%20Audio-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev)
@@ -421,7 +421,7 @@ Friday responds to natural language. No rigid syntax required.
 
 ## Contributing
 
-Friday is a community-driven open source project built under [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community based in Pune, India.
+Friday is an open source project built solely by Arnav, shared publicly through [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community in Pune, India.
 
 Pull requests are welcome. For major changes, open an issue first.
 
@@ -466,8 +466,8 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## Author
 
-Built by **Arnav** ([@hackers-reality](https://github.com/hackers-reality))  
-Co-lead of **NexSemble** — a peer-learning and collaborative tech community based in Pune, Maharashtra, India.
+**Friday is solely built by Arnav** ([@hackers-reality](https://github.com/hackers-reality))  
+Co-leader of [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community based in Pune, Maharashtra, India.
 
 > *"This is not Open Interpreter. This is Friday — the real one."*
 
@@ -475,13 +475,13 @@ Co-lead of **NexSemble** — a peer-learning and collaborative tech community ba
 
 ## Community — Join NexSemble
 
-Friday is built in public as part of **NexSemble** — a community of builders, hackers, and learners who ship real projects together. Come talk Friday, AI agents, and whatever you're building.
+Friday is built in public and shared through **NexSemble** — a community of builders, hackers, and learners who ship real projects together. Come talk Friday, AI agents, and whatever you're building.
 
 <div align="center">
 
-<iframe src="https://discord.com/widget?id=1483417587034493009&theme=dark" width="350" height="500" allowtransparency="true" frameborder="0" sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"></iframe>
+[![Discord](https://img.shields.io/discord/1483417587034493009?style=for-the-badge&logo=discord&logoColor=white&label=NexSemble%20Discord&color=5865F2)](https://discord.com/widget?id=1483417587034493009)
 
-**→ [Join the Discord](https://discord.gg/nexsemble) to chat, contribute, and get help with Friday**
+**[→ Join the NexSemble Discord](https://discord.com/widget?id=1483417587034493009)**
 
 </div>
 
