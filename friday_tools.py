@@ -1442,10 +1442,10 @@ def stayfree_week() -> str:
 def opencli_init_bridge() -> str:
     """Initialize the OpenCLI browser bridge."""
     try:
-        from opencli_bridge import opencli_init
+        from opencli_integration import opencli_init
         return opencli_init()
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI init error: {e}"
 
@@ -1453,10 +1453,10 @@ def opencli_init_bridge() -> str:
 def opencli_navigate(url: str) -> str:
     """Open a URL in the OpenCLI browser automation window."""
     try:
-        from opencli_bridge import opencli_open
-        return opencli_open(url)
+        from opencli_integration import opencli_navigate
+        return opencli_navigate(url)
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI navigate error: {e}"
 
@@ -1464,10 +1464,10 @@ def opencli_navigate(url: str) -> str:
 def opencli_click(target: str) -> str:
     """Click an element in the browser by selector or text."""
     try:
-        from opencli_bridge import opencli_click
+        from opencli_integration import opencli_click
         return opencli_click(target)
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI click error: {e}"
 
@@ -1475,10 +1475,10 @@ def opencli_click(target: str) -> str:
 def opencli_type(target: str, text: str) -> str:
     """Type text into a browser element."""
     try:
-        from opencli_bridge import opencli_type
+        from opencli_integration import opencli_type
         return opencli_type(target, text)
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI type error: {e}"
 
@@ -1486,10 +1486,10 @@ def opencli_type(target: str, text: str) -> str:
 def opencli_extract() -> str:
     """Extract page content as markdown from the current browser page."""
     try:
-        from opencli_bridge import opencli_extract
+        from opencli_integration import opencli_extract
         return opencli_extract()
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI extract error: {e}"
 
@@ -1497,10 +1497,10 @@ def opencli_extract() -> str:
 def opencli_screenshot(path: str = None) -> str:
     """Take a screenshot of the current browser page."""
     try:
-        from opencli_bridge import opencli_screenshot
+        from opencli_integration import opencli_screenshot
         return opencli_screenshot(path)
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI screenshot error: {e}"
 
@@ -1508,10 +1508,10 @@ def opencli_screenshot(path: str = None) -> str:
 def opencli_scroll(direction: str = "down") -> str:
     """Scroll the browser page (down, up, top, bottom)."""
     try:
-        from opencli_bridge import opencli_scroll
+        from opencli_integration import opencli_scroll
         return opencli_scroll(direction)
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI scroll error: {e}"
 
@@ -1519,10 +1519,10 @@ def opencli_scroll(direction: str = "down") -> str:
 def opencli_keys(key: str) -> str:
     """Press a keyboard key in the browser (Enter, Escape, Tab, etc.)."""
     try:
-        from opencli_bridge import opencli_keys
+        from opencli_integration import opencli_keys
         return opencli_keys(key)
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI key error: {e}"
 
@@ -1530,10 +1530,10 @@ def opencli_keys(key: str) -> str:
 def opencli_eval(js: str) -> str:
     """Execute JavaScript in the browser page."""
     try:
-        from opencli_bridge import opencli_eval
+        from opencli_integration import opencli_eval
         return opencli_eval(js)
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI eval error: {e}"
 
@@ -1541,10 +1541,10 @@ def opencli_eval(js: str) -> str:
 def opencli_state() -> str:
     """Get current browser page state (URL, title, interactive elements)."""
     try:
-        from opencli_bridge import opencli_state
+        from opencli_integration import opencli_state
         return opencli_state()
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI state error: {e}"
 
@@ -1552,10 +1552,10 @@ def opencli_state() -> str:
 def opencli_doctor() -> str:
     """Diagnose OpenCLI browser bridge connectivity."""
     try:
-        from opencli_bridge import opencli_doctor
+        from opencli_integration import opencli_doctor
         return opencli_doctor()
     except ImportError:
-        return "[FAIL] opencli_bridge.py not available."
+        return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] OpenCLI doctor error: {e}"
 
