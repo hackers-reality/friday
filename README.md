@@ -23,11 +23,11 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
 
 ## What is Friday?
 
-Friday is not a chatbot. It is a **fully autonomous desktop AI agent** that lives on your Windows machine, watches your screen, listens to your voice, understands your goals, and takes action — without you needing to type a single command.
+Friday is not a chatbot. It is a **fully autonomous desktop AI agent** that lives on your Windows machine, watches your screen, listens to your voice, understands your goals, and takes action — [...]
 
-Think of it as having a real-world version of Tony Stark's FRIDAY running on your PC. It monitors what you're doing, proactively comments and helps, controls your entire desktop via voice, manages your goals and deadlines, integrates with your browser history, smart home devices, email, and social media — and it does all of this continuously in the background.
+Think of it as having a real-world version of Tony Stark's FRIDAY running on your PC. It monitors what you're doing, proactively comments and helps, controls your entire desktop via voice, manages[...]
 
-What makes Friday different from other agents: **she learns who you are**. Import your conversation history from Claude, ChatGPT, or Gemini and Friday extracts your preferences, communication style, likes, and dislikes — so from day one she already knows you, and speaks to you like she's been around for years.
+What makes Friday different from other agents: **she learns who you are**. Import your conversation history from Claude, ChatGPT, or Gemini and Friday extracts your preferences, communication styl[...]
 
 Friday is **open source**, **Windows-native**, **self-hosted**, and built to eventually compete with commercial agents like Devin, Cline, and Claude Code.
 
@@ -241,6 +241,16 @@ opencli browser install
 # Set up environment variables
 copy .env.example .env
 # Edit .env and add your API keys
+
+# Run the Windows setup script (recommended)
+# PowerShell:
+.\install.ps1
+
+# OR Command Prompt:
+install.cmd
+
+# One-liner (PowerShell)
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 ### Environment Variables
@@ -443,7 +453,7 @@ Friday responds to natural language. No rigid syntax required.
 
 ## Contributing
 
-Friday is an open source project built solely by Arnav, shared publicly through [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community in Pune, India.
+Friday is an open source project built solely by Arnav, shared publicly through [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community in Pune, India[...]
 
 Pull requests are welcome. For major changes, open an issue first.
 
@@ -497,7 +507,7 @@ Co-leader of [NexSemble](https://github.com/hackers-reality) — a peer-learning
 
 ## Community — Join NexSemble
 
-Friday is built in public and shared through **NexSemble** — a community of builders, hackers, and learners who ship real projects together. Come talk Friday, AI agents, and whatever you're building.
+Friday is built in public and shared through **NexSemble** — a community of builders, hackers, and learners who ship real projects together. Come talk Friday, AI agents, and whatever you're bui[...]
 
 <div align="center">
 
