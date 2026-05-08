@@ -58,7 +58,7 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 |---------|--------|---------|
 | Mouse & keyboard control | ✅ Working | pyautogui-based via `friday_tools.py` |
 | App launching & closing | ✅ Working | `open_app()`, `close_app()` |
-| Spotify control | ✅ Working | Media keys + window focus |
+| Spotify control | ✅ Working | Full Spotify API (Client ID + Secret) — search, play, queue, volume |
 | Netflix/streaming control | 🔧 In Progress | Vision-based navigation |
 | File system access | ✅ Working | With authority checks |
 | RPA workflows | ✅ Working | `friday_automation.py` |
@@ -248,6 +248,11 @@ PICOVOICE_ACCESS_KEY=your_porcupine_key_here
 # Ollama (never localhost — use actual IP or hostname)
 OLLAMA_BASE_URL=http://192.168.1.x:11434
 
+# Spotify (get from https://developer.spotify.com/dashboard)
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
+
 # Smart home
 ALEXA_WEBHOOK_URL=your_alexa_webhook_url
 
@@ -384,7 +389,7 @@ Friday responds to natural language. No rigid syntax required.
 - [x] App launching
 - [x] Deep research tool
 - [x] File generation
-- [x] Session keepalive
+- [x] Spotify API integration (Client ID + Secret)
 
 ### v1.1 — Intelligence Layer 🔧
 - [ ] Active window detection (stable)
@@ -459,12 +464,26 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## Author & Community
+## Author
 
 Built by **Arnav** ([@hackers-reality](https://github.com/hackers-reality))  
-Co-lead of **NexSemble** — a peer-learning tech community in Pune, Maharashtra, India.
+Co-lead of **NexSemble** — a peer-learning and collaborative tech community based in Pune, Maharashtra, India.
 
 > *"This is not Open Interpreter. This is Friday — the real one."*
+
+---
+
+## Community — Join NexSemble
+
+Friday is built in public as part of **NexSemble** — a community of builders, hackers, and learners who ship real projects together. Come talk Friday, AI agents, and whatever you're building.
+
+<div align="center">
+
+<iframe src="https://discord.com/widget?id=1483417587034493009&theme=dark" width="350" height="500" allowtransparency="true" frameborder="0" sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"></iframe>
+
+**→ [Join the Discord](https://discord.gg/nexsemble) to chat, contribute, and get help with Friday**
+
+</div>
 
 ---
 
