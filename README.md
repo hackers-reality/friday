@@ -11,7 +11,7 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/hackers-reality/friday)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)]()
-[![Version](https://img.shields.io/badge/Version-1.1.0-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases/tag/v1.1.0)
+[![Version](https://img.shields.io/badge/Version-1.2.0-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases/tag/v1.2.0)
 
 ---
 
@@ -72,95 +72,96 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 🎙️ Voice & Audio
 | Feature | Status | Details |
 |---------|--------|---------|
-| Gemini Live native audio | ✅ Working | Primary voice interface via `friday_live.py` |
-| Groq Whisper STT | ✅ Working | Fallback speech-to-text |
-| Porcupine wake word | ✅ Working | "Hey Friday" detection via `voice_wake.py` |
+| Gemini Live native audio | [OK] Working | Primary voice interface via `friday_live.py` |
+| Groq Whisper STT | [OK] Working | Fallback speech-to-text |
+| Porcupine wake word | [OK] Working | "Hey Friday" detection via `voice_wake.py` |
 | Multi-TTS engine support | 🔧 In Progress | ElevenLabs, Google TTS, pyttsx3 |
-| ✅ Working | 🔧 In Progress | Typing effect output |
+| Typing effect output | [OK] Working | Terminal typing effect for responses |
 
 ### 👁️ Vision & Screen Awareness
 | Feature | Status | Details |
 |---------|--------|---------|
-| Real-time screen capture | ✅ Working | `friday_vision.py` via PIL/mss |
-| Active window detection | ✅ Working | `screen_watcher.py` via pywinctl |
-| Gemini Vision analysis | ✅ Working | Screen-to-description pipeline |
-| Vision-grounded clicking | 🔧 In Progress | `vision_click()` — finds elements by description |
-| ✅ Working | 🔧 In Progress | Background monitor with unsolicited observations |
+| Real-time screen capture | [OK] Working | `friday_vision.py` via PIL/mss |
+| Active window detection | [OK] Working | `screen_watcher.py` via pywinctl |
+| Gemini Vision analysis | [OK] Working | Screen-to-description pipeline |
+| Vision-grounded clicking | [OK] Working | `vision_click()` — finds elements by description |
+| Background monitor with proactivity | [OK] Working | Unsolicited observations via Gemini proactivity |
 | Error detection on screen | 🔧 In Progress | Detects visible Python/JS errors |
-| Visual search | ✅ Working | "Friday find the word X on screen" |
+| Visual search | [OK] Working | "Friday find the word X on screen" |
 
 ### 🖥️ Desktop Automation & Control
 | Feature | Status | Details |
 |---------|--------|---------|
-| Mouse & keyboard control | ✅ Working | pyautogui-based via `friday_tools.py` |
-| App launching & closing | ✅ Working | `open_app()`, `close_app()` |
-| Spotify control | ✅ Working (Web API + keyboard fallback) | Full Spotify API (Client ID + Secret) — search, play, queue, volume |
+| Mouse & keyboard control | [OK] Working | pyautogui-based via `friday_tools.py` |
+| App launching & closing | [OK] Working | `open_app()`, `close_app()` |
+| Spotify control | [OK] Working (Web API + keyboard fallback) | Full Spotify API (Client ID + Secret) — search, play, queue, volume |
 | Netflix/streaming control | 🔧 In Progress | Vision-based navigation |
-| File system access | ✅ Working | With authority checks |
-| RPA workflows | ✅ Working | `friday_automation.py` |
+| File system access | [OK] Working | With authority checks |
+| RPA workflows | [OK] Working | `friday_automation.py` |
 | Game launching | 🔧 In Progress | e.g., "Play Bloxfruits on Roblox" |
 
 ### 🌐 Browser Integration
 | Feature | Status | Details |
 |---------|--------|---------|
-| ✅ Working | 🔧 In Progress | Chrome, Brave, Edge, Opera SQLite |
-| ✅ Working | 🔧 In Progress | "Open that Jarvis repo I was looking at" |
-| OpenCLI browser automation | ✅ Working | CDP-based + `@jackwener/opencli` |
-| Browser navigation by voice | ✅ Working | Opens URLs, searches |
+| Cross-browser history search | [OK] Working | Chrome, Brave, Edge, Opera SQLite |
+| History-based recall & open | [OK] Working | "Open that Jarvis repo I was looking at" |
+| OpenCLI browser automation | [OK] Working | CDP-based + `@jackwener/opencli` |
+| Browser navigation by voice | [OK] Working | Opens URLs, searches |
 
 ### 🎯 Goals & Productivity Enforcement
 | Feature | Status | Details |
 |---------|--------|---------|
-| ✅ Working | 🔧 In Progress | `goal_memory.py` + `friday_memory/goals.json` |
-| Course/deadline tracking | 🔧 In Progress | Monitors browser history for progress |
-| Google Calendar integration | 📋 Planned | Class times, exams, events |
-| ✅ Working | 🔧 In Progress | Escalating intervention system |
-| Tab closing enforcement | 🔧 In Progress | Closes distracting tabs, reopens course URL |
-| StayFree integration | 🔧 In Progress | Reads local usage data, triggers blocks |
+| Goal tracking & persistence | [OK] Working | `goal_memory.py` + `friday_memory/goals.json` |
+| Course/deadline tracking | [OK] Working | Monitors browser history for progress |
+| Google Calendar integration | [OK] Working | List events + sync to goals via `calendar_tool_handler` |
+| Escalating intervention system | [OK] Working | Scolding counts + enforcement actions |
+| Tab closing enforcement | [OK] Working | Closes distracting tabs, reopens course URL |
+| StayFree integration | [OK] Working | Reads local usage data, triggers blocks |
 
 ### 📬 Communication & Messaging
 | Feature | Status | Details |
 |---------|--------|---------|
-| ✅ Working | 🔧 In Progress | `friday_gmail.py` via Gmail API |
-| ✅ Working | 🔧 In Progress | `instagram_messenger.py` via OpenCLI |
-| ✅ Working | 🔧 In Progress | `alexa_webhook_server.py` |
+| Gmail read/send | [OK] Working | `friday_gmail.py` via Gmail API |
+| Instagram DM | [OK] Working | `instagram_messenger.py` via OpenCLI |
+| Alexa smart home | [OK] Working | `alexa_webhook_server.py` |
 | WhatsApp messaging | 📋 Planned | Via web automation |
 
 ### 🤖 AI & LLM
 | Feature | Status | Details |
 |---------|--------|---------|
-| Gemini Live (primary) | ✅ Working | Cloud-hosted, real-time audio (only LLM supported right now) |
+| Gemini Live (primary) | [OK] Working | Cloud-hosted, real-time audio (only LLM supported right now) |
 | Other LLMs (Claude, GPT, Groq, Ollama) | 🔧 Coming Soon | Use Gemini API key for now |
 | Multi-LLM switching | 📋 Planned | `llm_manager.py` — coming soon |
 | LangGraph orchestration | 🔧 In Progress | `friday_langgraph.py` (syntax fixed) |
-| ✅ Working | ✅ Working | Real-time web research + reports |
+| [OK] Working | [OK] Working | Real-time web research + reports |
 | Self-modifying code | 🔧 In Progress | `self_modification.py` |
 
 ### 🧠 Memory & User Understanding
 | Feature | Status | Details |
 |---------|--------|---------|
-| Cross-chatbot history import | ✅ Working | Import chats from Claude, ChatGPT, Gemini — Friday reads and learns from them |
-| Preference extraction | ✅ Working | Parses imported conversations to build a user profile: likes, dislikes, habits, tone |
-| Personality adaptation | ✅ Working | Friday adjusts how she speaks based on your learned profile — no cold starts |
+| Cross-chatbot history import | [OK] Working | Import chats from Claude, ChatGPT, Gemini — Friday reads and learns from them |
+| Preference extraction | [OK] Working | Parses imported conversations to build a user profile: likes, dislikes, habits, tone |
+| Personality adaptation | [OK] Working | Friday adjusts how she speaks based on your learned profile — no cold starts |
 | Persistent memory vault | 🔧 In Progress | `vector_memory.py` — stores facts, preferences, patterns across sessions |
 | Semantic memory search | 🔧 In Progress | Pulls relevant past context before every response |
 | Knowledge vault | 🔧 In Progress | Combined LLM knowledge + everything Friday has learned about you |
 
 
+### 📄 File Generation
 | Feature | Status | Details |
 |---------|--------|---------|
-| ✅ Working | 🔧 In Progress | `file_generator.py` — all formats |
-| Code files | ✅ Working | .py, .js, .ts, .html, .css, .sh, .yaml |
+| Universal file generator | [OK] Working | `file_generator.py` — all formats |
+| Code files | [OK] Working | .py, .js, .ts, .html, .css, .sh, .yaml |
 | Documents | 🔧 In Progress | .md, .txt, .docx, .pdf |
 | Config/server files | 🔧 In Progress | Dockerfile, nginx.conf, .env |
 
 ### 🚀 System & Startup
 | Feature | Status | Details |
 |---------|--------|---------|
-| Windows startup on boot | 🔧 In Progress | `startup_integration.py` via Task Scheduler |
-| ✅ Working | ✅ Working | `keepalive_task()` prevents Gemini timeout |
-| ✅ Working | ✅ Working | 5s reconnect loop |
-| Background operation | ✅ Working | asyncio task-based |
+| Windows startup on boot | [OK] Working | `startup_integration.py` via Task Scheduler |
+| Keepalive (prevents GOAWAY) | [OK] Working | `keepalive_task()` pings every 45s |
+| Auto-reconnect | [OK] Working | 5s reconnect loop on disconnect |
+| Background operation | [OK] Working | asyncio task-based |
 
 ### 🖼️ Dashboard & UI
 | Feature | Status | Details |
@@ -468,7 +469,7 @@ Friday responds to natural language. No rigid syntax required.
 
 ## Development Roadmap
 
-### v1.0 — Foundation ✅
+### v1.0 — Foundation [OK]
 - [x] Gemini Live voice interface
 - [x] Groq Whisper STT
 - [x] Porcupine wake word detection
@@ -481,20 +482,20 @@ Friday responds to natural language. No rigid syntax required.
 - [x] Cross-chatbot history import (Claude, ChatGPT, Gemini)
 - [x] User preference extraction from imported chats
 
-### v1.1 — Intelligence Layer 🔧
+### v1.1 — Intelligence Layer [OK]
 - [x] Active window detection (stable)
-- [ ] Proactive screen commentary (non-command-triggered)
+- [x] Proactive screen commentary (non-command-triggered)
 - [x] Vision-grounded clicking (`vision_click`)
-- [ ] Cross-browser history search
-- [ ] Goal memory + enforcement system
-- [ ] Real OpenCLI browser control
+- [x] Cross-browser history search
+- [x] Goal memory + enforcement system
+- [x] Real OpenCLI browser control (95 tools)
 - [x] StayFree integration
-- [ ] Instagram DM (working)
-- [ ] Gmail integration
+- [x] Instagram DM (working)
+- [x] Gmail integration
 
-### v1.2 — Autonomy 📋
-- [ ] Google Calendar integration
-- [ ] Windows startup (Task Scheduler)
+### v1.2 — Autonomy [OK]
+- [x] Google Calendar integration
+- [x] Windows startup (Task Scheduler)
 - [ ] Multi-LLM switching (all providers)
 - [ ] LangGraph orchestration
 - [ ] Semantic memory with pruning
@@ -545,6 +546,9 @@ git push origin feature/your-feature-name
 | pyautogui coordinates break on resolution change | In Progress | Use vision_click() instead |
 | friday_langgraph.py syntax errors | Fixed | Trailing quotes removed |
 | OpenCLI not installed (autocli.exe mistake) | Fixed | `npm install -g @jackwener/opencli` |
+| Spotify "No active device" error | In Progress | Open Spotify app first, then retry |
+| See_screen Gemini API 429 (rate limit) | Workaround | Falls back to Gemini 1.5 Flash automatically |
+| close_app fails if process name has wrong extension | Fixed | Now tries both with/without .exe suffix |
 
 ---
 

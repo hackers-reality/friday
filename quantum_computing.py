@@ -321,12 +321,12 @@ def quantum_tool(
     
     if action == "run":
         if not gates:
-            return "❌ Gates required (JSON array)."
+            return "[FAIL] Gates required (JSON array)."
         
         try:
             gate_list = json.loads(gates)
         except:
-            return "❌ Invalid gates format. Use JSON: [['H', 0], ['X', 1]]"
+            return "[FAIL] Invalid gates format. Use JSON: [['H', 0], ['X', 1]]"
         
         circuit = QuantumCircuit(num_qubits)
         for gate_spec in gate_list:
@@ -340,7 +340,7 @@ def quantum_tool(
     
     if action == "algorithm":
         if not algorithm:
-            return "❌ Algorithm name required (deutsch, grovers, teleportation)."
+            return "[FAIL] Algorithm name required (deutsch, grovers, teleportation)."
         
         if algorithm == "deutsch":
             # Test with constant function
@@ -356,7 +356,7 @@ def quantum_tool(
         elif algorithm == "teleportation":
             return f"### QUANTUM TELEPORTATION\n\n{QuantumAlgorithms.quantum_teleportation()}"
         
-        return f"❌ Unknown algorithm: {algorithm}"
+        return f"[FAIL] Unknown algorithm: {algorithm}"
     
     if action == "qft":
         circuit = QuantumCircuit(num_qubits)

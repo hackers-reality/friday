@@ -212,20 +212,20 @@ def api_tool(
         api = FridayAPI(host, port)
         result = api.start()
         if result.get("success"):
-            return f"### API START\n\n✅ Server started at http://{host}:{port}"
+            return f"### API START\n\n[OK] Server started at http://{host}:{port}"
         else:
-            return f"❌ Start error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Start error: {result.get('error', 'Unknown')}"
     
     if action == "stop":
         # In a real implementation, would signal the server to stop
-        return "### API STOP\n\n✅ Server stop signal sent (not implemented)."
+        return "### API STOP\n\n[OK] Server stop signal sent (not implemented)."
     
     if action == "call":
         if not tool:
-            return "❌ Tool name required."
+            return "[FAIL] Tool name required."
         endpoint = APIEndpoints.get_endpoint(tool)
         if not endpoint:
-            return f"❌ Unknown tool: {tool}"
+            return f"[FAIL] Unknown tool: {tool}"
         return f"### API CALL\n\nTool: {tool}\nEndpoint: {endpoint}\nParams: {json.dumps(params, indent=2)}"
     
     if action == "endpoints":
@@ -237,14 +237,14 @@ def api_tool(
     
     if action == "client_request":
         if not tool:
-            return "❌ Endpoint required."
+            return "[FAIL] Endpoint required."
         client = FridayAPIClient(params.get("base_url", "http://127.0.0.1:8000"))
         method = params.get("method", "GET")
         result = client.request(method, tool, json=params.get("data"))
         if result["success"]:
             return f"### API REQUEST\n\n**Status**: {result['status_code']}\n**Response**: {json.dumps(result['data'], indent=2)[:500]}"
         else:
-            return f"❌ Request error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Request error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

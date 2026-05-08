@@ -349,31 +349,31 @@ def distributed_tool(
     
     if action == "add_worker":
         if not node_id:
-            return "❌ node_id required."
+            return "[FAIL] node_id required."
         
         cluster = get_cluster(cluster_id)
         worker = WorkerNode(node_id)
         if cluster.add_worker(worker):
-            return f"✅ Added worker: {node_id}"
-        return f"❌ Worker already exists: {node_id}"
+            return f"[OK] Added worker: {node_id}"
+        return f"[FAIL] Worker already exists: {node_id}"
     
     if action == "submit_task":
         if not task_id:
-            return "❌ task_id required."
+            return "[FAIL] task_id required."
         
         cluster = get_cluster(cluster_id)
         task = DistributedTask(task_id, "default_func")
         cluster.submit_task(task)
-        return f"✅ Task {task_id} submitted."
+        return f"[OK] Task {task_id} submitted."
     
     if action == "mapreduce":
         if not task_id:  # Reuse param for data JSON
-            return "❌ data (as JSON) required in task_id."
+            return "[FAIL] data (as JSON) required in task_id."
         
         try:
             data = json.loads(task_id)
         except:
-            return "❌ Invalid data format. Use JSON array."
+            return "[FAIL] Invalid data format. Use JSON array."
         
         # Example map/reduce for word count
         def map_func(doc):
@@ -394,15 +394,15 @@ def distributed_tool(
     
     if action == "lock":
         if not task_id or not node_id:  # Reuse params
-            return "❌ lock_id (task_id) and worker_id required."
+            return "[FAIL] lock_id (task_id) and worker_id required."
         
         lock = DistributedLock(task_id)
         if "acquire" in node_id:
             acquired = lock.acquire("worker1")
-            return f"{'✅' if acquired else '❌'} Lock {task_id} acquired."
+            return f"{'[OK]' if acquired else '[FAIL]'} Lock {task_id} acquired."
         elif "release" in node_id:
             released = lock.release("worker1")
-            return f"{'✅' if released else '❌'} Lock {task_id} released."
+            return f"{'[OK]' if released else '[FAIL]'} Lock {task_id} released."
         return f"Unknown lock action: {node_id}"
     
     return f"Unknown action: {action}"

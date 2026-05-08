@@ -42,7 +42,7 @@ class ModuleLoader:
             self.modules[module_name] = module
             return module
         except Exception as e:
-            print(f"❌ Error loading {module_name}: {e}")
+            print(f"[FAIL] Error loading {module_name}: {e}")
             return None
     
     def get_tool(self, module_name: str, tool_name: str) -> Optional[Callable]:
@@ -84,9 +84,9 @@ class FridayCore:
         for module_name in self.config["modules"]:
             module = self.loader.load_module(module_name)
             if module:
-                lines.append(f"  ✅ {module_name}")
+                lines.append(f"  [OK] {module_name}")
             else:
-                lines.append(f"  ❌ {module_name} (not found)")
+                lines.append(f"  [FAIL] {module_name} (not found)")
         
         lines.append("")
         lines.append("**Ready for commands.**")
@@ -129,7 +129,7 @@ class FridayCore:
         """Route networking commands."""
         tool = self.loader.get_tool("advanced_networking", "network_tool")
         if not tool:
-            return "❌ Networking module not loaded."
+            return "[FAIL] Networking module not loaded."
         
         # Parse action from command
         if "http2" in command.lower():
@@ -156,7 +156,7 @@ class FridayCore:
         """Route crypto commands."""
         tool = self.loader.get_tool("advanced_crypto", "crypto_tool")
         if not tool:
-            return "❌ Crypto module not loaded."
+            return "[FAIL] Crypto module not loaded."
         
         cmd_lower = command.lower()
         
@@ -165,20 +165,20 @@ class FridayCore:
             return tool("hash", data=data) if data else tool("hash", data="test")
         elif "aes" in cmd_lower and "encrypt" in cmd_lower:
             data = self._extract_data(command)
-            return tool("aes_encrypt", data=data) if data else "❌ Data required."
+            return tool("aes_encrypt", data=data) if data else "[FAIL] Data required."
         elif "aes" in cmd_lower and "decrypt" in cmd_lower:
             return tool("aes_decrypt")
         elif "rsa" in cmd_lower and "encrypt" in cmd_lower:
             data = self._extract_data(command)
-            return tool("rsa_encrypt", data=data) if data else "❌ Data required."
+            return tool("rsa_encrypt", data=data) if data else "[FAIL] Data required."
         elif "rsa" in cmd_lower and "sign" in cmd_lower:
             data = self._extract_data(command)
-            return tool("rsa_sign", data=data) if data else "❌ Data required."
+            return tool("rsa_sign", data=data) if data else "[FAIL] Data required."
         elif "ecc" in cmd_lower:
             return tool("ecc_gen")
         elif "ecdsa" in cmd_lower:
             data = self._extract_data(command)
-            return tool("ecdsa_sign", data=data) if data else "❌ Data required."
+            return tool("ecdsa_sign", data=data) if data else "[FAIL] Data required."
         elif "zkp" in cmd_lower or "zero" in cmd_lower:
             data = self._extract_data(command)
             return tool("zkp", data=data) if data else tool("zkp", data="secret")
@@ -237,14 +237,14 @@ class FridayCore:
         
         for module_name in self.config["modules"]:
             module = self.loader.load_module(module_name)
-            lines.append(f"  - {module_name}: {'✅ Loaded' if module else '❌ Not loaded'}")
+            lines.append(f"  - {module_name}: {'[OK] Loaded' if module else '[FAIL] Not loaded'}")
         
         return "\n".join(lines)
     
     def _execute_command(self, cmd: str) -> str:
         """Execute a system command."""
         if not cmd:
-            return "❌ No command provided."
+            return "[FAIL] No command provided."
         
         try:
             result = subprocess.run(
@@ -257,14 +257,14 @@ class FridayCore:
             output = result.stdout or result.stderr
             return f"### EXECUTION RESULT\n\n```\n{output}\n```"
         except subprocess.TimeoutExpired:
-            return "❌ Command timed out."
+            return "[FAIL] Command timed out."
         except Exception as e:
-            return f"❌ Execution error: {e}"
+            return f"[FAIL] Execution error: {e}"
     
     def _execute_python(self, code: str) -> str:
         """Execute Python code."""
         if not code:
-            return "❌ No code provided."
+            return "[FAIL] No code provided."
         
         try:
             # Create a restricted globals dict
@@ -280,9 +280,9 @@ class FridayCore:
             }
             
             exec(code, globals_dict)
-            return "✅ Python code executed successfully."
+            return "[OK] Python code executed successfully."
         except Exception as e:
-            return f"❌ Python execution error: {e}"
+            return f"[FAIL] Python execution error: {e}"
     
     def _default_response(self, command: str) -> str:
         """Default response for unrecognized commands."""
@@ -351,7 +351,7 @@ def main():
             print("\nFriday: Goodbye!")
             break
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"[FAIL] Error: {e}")
 
 
 if __name__ == "__main__":

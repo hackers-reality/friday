@@ -3,20 +3,20 @@ Friday LangGraph Orchestrator - Phase 10
 LangGraph-based agent orchestration for Friday.
 Provides better state management, checkpointing, human-in-the-loop.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
-import os'
-import sys'
-import json'
-from typing import Dict, Any, List, Optional'
+import os
+import sys
+import json
+from typing import Dict, Any, List, Optional
 
 try:
-    from langgraph.graph import StateGraph, END'
-    from langchain_core.messages import HumanMessage, AIMessage'
-    from langchain_core.tools import tool'
-    LANGGRAPH_AVAILABLE = True'
+    from langgraph.graph import StateGraph, END
+    from langchain_core.messages import HumanMessage, AIMessage
+    from langchain_core.tools import tool
+    LANGGRAPH_AVAILABLE = True
 except ImportError:
-    LANGGRAPH_AVAILABLE = False'
+    LANGGRAPH_AVAILABLE = False
     print("LangGraph not available. Install: pip install langgraph langchain-core")
 
 # ─── Agent State ──────────────────────────────────#
@@ -190,10 +190,10 @@ def get_langgraph_status() -> str:
     """Get LangGraph integration status."""
     lines = ["### LANGRAPH ORCHESTRATION STATUS", ""]
     if LANGGRAPH_AVAILABLE:
-        lines.append("✅ LangGraph available")
-        lines.append("✅ Friday agent graph ready")
+        lines.append("[OK] LangGraph available")
+        lines.append("[OK] Friday agent graph ready")
     else:
-        lines.append("❌ LangGraph not available")
+        lines.append("[FAIL] LangGraph not available")
         lines.append("Install: pip install langgraph langchain-core")
     return "\n".join(lines)
 

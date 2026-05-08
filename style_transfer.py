@@ -93,11 +93,11 @@ class StyleTransfer:
         print("[StyleTransfer] Extracting features...")
         content_features = self.extract_features(content_image)
         if "error" in content_features:
-            return f"❌ Content image error: {content_features['error']}"
+            return f"[FAIL] Content image error: {content_features['error']}"
         
         style_features = self.extract_features(style_image)
         if "error" in style_features:
-            return f"❌ Style image error: {style_features['error']}"
+            return f"[FAIL] Style image error: {style_features['error']}"
         
         # Initialize generated image (simplified: copy content)
         generated_features = {
@@ -143,7 +143,7 @@ class StyleTransfer:
             with open(output_path, 'w') as f:
                 f.write("Style transfer complete (PIL not available for image generation)")
         
-        return f"✅ Style transfer complete! Result: {output_path}"
+        return f"[OK] Style transfer complete! Result: {output_path}"
 
 
 # ─── Artistic Filters ───────────────────────────#
@@ -164,12 +164,12 @@ class ArtisticFilters:
             
             output = f"oil_painting_{Path(image_path).name}"
             img.save(output)
-            return f"✅ Oil painting effect applied: {output}"
+            return f"[OK] Oil painting effect applied: {output}"
             
         except ImportError:
-            return "❌ PIL not available. Run: pip install Pillow"
+            return "[FAIL] PIL not available. Run: pip install Pillow"
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
     
     @staticmethod
     def apply_watercolor(image_path: str) -> str:
@@ -185,12 +185,12 @@ class ArtisticFilters:
             
             output = f"watercolor_{Path(image_path).name}"
             img.save(output)
-            return f"✅ Watercolor effect applied: {output}"
+            return f"[OK] Watercolor effect applied: {output}"
             
         except ImportError:
-            return "❌ PIL not available. Run: pip install Pillow"
+            return "[FAIL] PIL not available. Run: pip install Pillow"
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
     
     @staticmethod
     def apply_pointillism(image_path: str, dot_size: int = 5) -> str:
@@ -214,12 +214,12 @@ class ArtisticFilters:
             
             output = f"pointillism_{Path(image_path).name}"
             img.save(output)
-            return f"✅ Pointillism effect applied: {output}"
+            return f"[OK] Pointillism effect applied: {output}"
             
         except ImportError:
-            return "❌ PIL not available. Run: pip install Pillow"
+            return "[FAIL] PIL not available. Run: pip install Pillow"
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
 
 
 # ─── Tool Function for Friday ───────────────────────────#
@@ -249,29 +249,29 @@ def style_transfer_tool(
     
     if action == "transfer":
         if not content_image or not style_image:
-            return "❌ Content image and style image required."
+            return "[FAIL] Content image and style image required."
         
         if not Path(content_image).exists():
-            return f"❌ Content image not found: {content_image}"
+            return f"[FAIL] Content image not found: {content_image}"
         if not Path(style_image).exists():
-            return f"❌ Style image not found: {style_image}"
+            return f"[FAIL] Style image not found: {style_image}"
         
         transfer = StyleTransfer()
         return transfer.transfer_style(content_image, style_image, iterations)
     
     if action == "oil_painting":
         if not content_image:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         return ArtisticFilters.apply_oil_painting(content_image)
     
     if action == "watercolor":
         if not content_image:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         return ArtisticFilters.apply_watercolor(content_image)
     
     if action == "pointillism":
         if not content_image:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         return ArtisticFilters.apply_pointillism(content_image)
     
     return f"Unknown action: {action}"

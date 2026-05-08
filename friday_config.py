@@ -333,32 +333,32 @@ def config_tool(
     
     if action == "load":
         if not name:
-            return "❌ Config name required."
+            return "[FAIL] Config name required."
         config_mgr = ConfigManager()
         result = config_mgr.load_json(name)
         if result["success"]:
-            return f"### CONFIG LOAD\n\n✅ Loaded from {result['source']}\n{json.dumps(result['config'], indent=2)[:500]}"
+            return f"### CONFIG LOAD\n\n[OK] Loaded from {result['source']}\n{json.dumps(result['config'], indent=2)[:500]}"
         else:
             # Try INI
             result = config_mgr.load_ini(name)
             if result["success"]:
-                return f"### CONFIG LOAD\n\n✅ Loaded from {result['source']}\n{json.dumps(result['config'], indent=2)[:500]}"
+                return f"### CONFIG LOAD\n\n[OK] Loaded from {result['source']}\n{json.dumps(result['config'], indent=2)[:500]}"
             else:
-                return f"❌ Load error: {result.get('error', 'Unknown')}"
+                return f"[FAIL] Load error: {result.get('error', 'Unknown')}"
     
     if action == "save":
         if not name or "config" not in params:
-            return "❌ Name and config required."
+            return "[FAIL] Name and config required."
         config_mgr = ConfigManager()
         result = config_mgr.save_json(name, params["config"])
         if result["success"]:
-            return f"### CONFIG SAVE\n\n✅ Saved to {result['path']}"
+            return f"### CONFIG SAVE\n\n[OK] Saved to {result['path']}"
         else:
-            return f"❌ Save error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Save error: {result.get('error', 'Unknown')}"
     
     if action == "get":
         if not name:
-            return "❌ Config name required."
+            return "[FAIL] Config name required."
         config_mgr = ConfigManager()
         key = params.get("key")
         value = config_mgr.get(name, key)
@@ -366,66 +366,66 @@ def config_tool(
     
     if action == "set":
         if not name or "key" not in params or "value" not in params:
-            return "❌ Name, key, and value required."
+            return "[FAIL] Name, key, and value required."
         config_mgr = ConfigManager()
         result = config_mgr.set(name, params["key"], params["value"])
         if result["success"]:
-            return f"### CONFIG SET\n\n✅ Set {name}.{params['key']} = {json.dumps(params['value'])[:100]}"
+            return f"### CONFIG SET\n\n[OK] Set {name}.{params['key']} = {json.dumps(params['value'])[:100]}"
         else:
-            return f"❌ Set error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Set error: {result.get('error', 'Unknown')}"
     
     if action == "env_get":
         if not name:
-            return "❌ Variable name required."
+            return "[FAIL] Variable name required."
         env_mgr = EnvManager()
         value = env_mgr.get(name)
         return f"### ENV GET\n\n**{name}**: {value or '(not set)'}"
     
     if action == "env_set":
         if not name or "value" not in params:
-            return "❌ Variable name and value required."
+            return "[FAIL] Variable name and value required."
         env_mgr = EnvManager()
         result = env_mgr.set(name, params["value"], permanent=params.get("permanent", False))
         if result["success"]:
-            return f"### ENV SET\n\n✅ Set {name} = {params['value'][:50]}..."
+            return f"### ENV SET\n\n[OK] Set {name} = {params['value'][:50]}..."
         else:
-            return f"❌ Set error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Set error: {result.get('error', 'Unknown')}"
     
     if action == "settings_load":
         config_mgr = ConfigManager()
         settings_mgr = SettingsManager(config_mgr)
         settings_mgr.load_settings(name or "settings")
-        return f"### SETTINGS LOAD\n\n✅ Loaded settings ({len(settings_mgr.settings)} settings)"
+        return f"### SETTINGS LOAD\n\n[OK] Loaded settings ({len(settings_mgr.settings)} settings)"
     
     if action == "settings_save":
         config_mgr = ConfigManager()
         settings_mgr = SettingsManager(config_mgr)
         result = settings_mgr.save_settings(name or "settings")
         if result["success"]:
-            return f"### SETTINGS SAVE\n\n✅ Saved settings"
+            return f"### SETTINGS SAVE\n\n[OK] Saved settings"
         else:
-            return f"❌ Save error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Save error: {result.get('error', 'Unknown')}"
     
     if action == "profile_create":
         if not name:
-            return "❌ Profile name required."
+            return "[FAIL] Profile name required."
         profile_mgr = ProfileManager()
         settings = params.get("settings", {})
         result = profile_mgr.create_profile(name, settings)
         if result["success"]:
-            return f"### PROFILE CREATE\n\n✅ Created profile: {name}"
+            return f"### PROFILE CREATE\n\n[OK] Created profile: {name}"
         else:
-            return f"❌ Create error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Create error: {result.get('error', 'Unknown')}"
     
     if action == "profile_switch":
         if not name:
-            return "❌ Profile name required."
+            return "[FAIL] Profile name required."
         profile_mgr = ProfileManager()
         result = profile_mgr.switch_profile(name)
         if result["success"]:
-            return f"### PROFILE SWITCH\n\n✅ Switched to profile: {name}"
+            return f"### PROFILE SWITCH\n\n[OK] Switched to profile: {name}"
         else:
-            return f"❌ Switch error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Switch error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

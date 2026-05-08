@@ -337,10 +337,10 @@ def update_tool(
         result = checker.check_for_updates()
         
         if "error" in result:
-            return f"❌ Update check failed: {result['error']}"
+            return f"[FAIL] Update check failed: {result['error']}"
         
         if not result["available"]:
-            return f"✅ Friday is up to date (commit {result['current']})"
+            return f"[OK] Friday is up to date (commit {result['current']})"
         
         lines = [
             f"### UPDATE AV以上就是AILABLE",
@@ -371,9 +371,9 @@ def update_tool(
         result = applier.apply_update(create_backup=True)
         
         if result["success"]:
-            return f"✅ Update applied successfully!\n{result['message'][:500]}"
+            return f"[OK] Update applied successfully!\n{result['message'][:500]}"
         else:
-            msg = f"❌ Update failed: {result['message'][:300]}"
+            msg = f"[FAIL] Update failed: {result['message'][:300]}"
             if result.get("rolled_back"):
                 msg += "\n🔄 System rolled back to previous version."
             return msg
@@ -404,7 +404,7 @@ def update_tool(
     if action == "scheduler_start":
         scheduler = get_update_scheduler()
         scheduler.start()
-        return "✅ Update scheduler started."
+        return "[OK] Update scheduler started."
     
     if action == "scheduler_stop":
         scheduler = get_update_scheduler()

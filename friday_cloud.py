@@ -230,7 +230,7 @@ def cloud_tool(
                 lines.append(f"  - {bucket}")
             return "\n".join(lines)
         else:
-            return f"❌ AWS S3 error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] AWS S3 error: {result.get('error', 'Unknown')}"
     
     if action == "aws_ec2_list":
         aws = AWSClient(
@@ -245,7 +245,7 @@ def cloud_tool(
                 lines.append(f"  - {instance['id']}: {instance['type']} ({instance['state']})")
             return "\n".join(lines)
         else:
-            return f"❌ AWS EC2 error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] AWS EC2 error: {result.get('error', 'Unknown')}"
     
     if action == "gcp_buckets":
         gcp = GCPClient(
@@ -259,7 +259,7 @@ def cloud_tool(
                 lines.append(f"  - {bucket}")
             return "\n".join(lines)
         else:
-            return f"❌ GCP error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] GCP error: {result.get('error', 'Unknown')}"
     
     if action == "azure_groups":
         azure = AzureClient(
@@ -273,7 +273,7 @@ def cloud_tool(
                 lines.append(f"  - {group}")
             return "\n".join(lines)
         else:
-            return f"❌ Azure error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Azure error: {result.get('error', 'Unknown')}"
     
     if action == "do_droplets":
         do = DigitalOceanClient(token=params.get("token"))
@@ -284,7 +284,7 @@ def cloud_tool(
                 lines.append(f"  - {droplet['name']}: {droplet['status']} (IP: {droplet.get('ip', 'N/A')})")
             return "\n".join(lines)
         else:
-            return f"❌ DigitalOcean error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] DigitalOcean error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

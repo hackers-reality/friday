@@ -160,7 +160,7 @@ def clean_temp_files() -> str:
         except:
             pass
     
-    return f"✅ Cleaned {cleaned} temporary files."
+    return f"[OK] Cleaned {cleaned} temporary files."
 
 
 def kill_process_by_name(name: str) -> str:
@@ -175,11 +175,11 @@ def kill_process_by_name(name: str) -> str:
                     killed += 1
             except:
                 pass
-        return f"✅ Killed {killed} process(es) matching '{name}'"
+        return f"[OK] Killed {killed} process(es) matching '{name}'"
     except ImportError:
-        return "❌ psutil not installed."
+        return "[FAIL] psutil not installed."
     except Exception as e:
-        return f"❌ Error: {e}"
+        return f"[FAIL] Error: {e}"
 
 
 def get_top_resource_hogs() -> str:
@@ -189,7 +189,7 @@ def get_top_resource_hogs() -> str:
         if not processes:
             return "No processes found."
         if "error" in processes[0]:
-            return f"❌ {processes[0]['error']}"
+            return f"[FAIL] {processes[0]['error']}"
         
         lines = ["### TOP RESOURCE HOGS", ""]
         for i, p in enumerate(processes, 1):
@@ -201,7 +201,7 @@ def get_top_resource_hogs() -> str:
             )
         return "\n".join(lines)
     except Exception as e:
-        return f"❌ Error: {e}"
+        return f"[FAIL] Error: {e}"
 
 
 # ─── Full System Report ────────────────────────────────────#
@@ -260,24 +260,24 @@ def system_monitor_tool(
     
     if action == "cpu":
         cpu = get_cpu_usage()
-        return f"CPU Usage: {cpu:.1f}%" if cpu >= 0 else "❌ Could not get CPU usage."
+        return f"CPU Usage: {cpu:.1f}%" if cpu >= 0 else "[FAIL] Could not get CPU usage."
     
     if action == "memory":
         mem = get_memory_usage()
         if "error" in mem:
-            return f"❌ {mem['error']}"
+            return f"[FAIL] {mem['error']}"
         return f"Memory: {mem['used_gb']}GB / {mem['total_gb']}GB ({mem['percent']}%)"
     
     if action == "disk":
         disk = get_disk_usage(target or "C:\\")
         if "error" in disk:
-            return f"❌ {disk['error']}"
+            return f"[FAIL] {disk['error']}"
         return f"Disk: {disk['used_gb']}GB / {disk['total_gb']}GB ({disk['percent']}%)"
     
     if action == "network":
         net = get_network_stats()
         if "error" in net:
-            return f"❌ {net['error']}"
+            return f"[FAIL] {net['error']}"
         return f"Network: ↓ {net['bytes_recv_mb']}MB | ↑ {net['bytes_sent_mb']}MB"
     
     if action == "processes":
@@ -286,7 +286,7 @@ def system_monitor_tool(
     if action == "battery":
         battery = get_battery_info()
         if "error" in battery:
-            return f"❌ {battery['error']}"
+            return f"[FAIL] {battery['error']}"
         if "status" in battery:
             return battery["status"]
         return f"Battery: {battery['percent']}%"
@@ -296,7 +296,7 @@ def system_monitor_tool(
     
     if action == "kill":
         if not target:
-            return "❌ Process name required for kill action."
+            return "[FAIL] Process name required for kill action."
         return kill_process_by_name(target)
     
     if action == "uptime":

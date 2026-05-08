@@ -402,8 +402,8 @@ def vision_tool(
     if action == "status":
         processor = ImageProcessor()
         lines = ["### VISION STATUS", ""]
-        lines.append(f"**PIL/Pillow**: {'✅ Available' if processor.pil_available else '❌ Not available'}")
-        lines.append(f"**OpenCV**: {'✅ Available' if processor.cv2_available else '❌ Not available'}")
+        lines.append(f"**PIL/Pillow**: {'[OK] Available' if processor.pil_available else '[FAIL] Not available'}")
+        lines.append(f"**OpenCV**: {'[OK] Available' if processor.cv2_available else '[FAIL] Not available'}")
         lines.append("")
         lines.append("**Available Operations**:")
         lines.append("  - Image processing (resize, crop, rotate, convert)")
@@ -414,98 +414,98 @@ def vision_tool(
     
     if action == "resize":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         processor = ImageProcessor()
         width = params.get("width", 100)
         height = params.get("height", 100)
         result = processor.resize(image_path, width, height, params.get("output"))
         if result["success"]:
-            return f"### RESIZE\n\n✅ Saved to {result['output']}\nOriginal: {result['original_size']} -> New: {result['new_size']}"
+            return f"### RESIZE\n\n[OK] Saved to {result['output']}\nOriginal: {result['original_size']} -> New: {result['new_size']}"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "convert":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         processor = ImageProcessor()
         fmt = params.get("format", "PNG")
         result = processor.convert_format(image_path, fmt, params.get("output"))
         if result["success"]:
-            return f"### CONVERT\n\n✅ Saved to {result['output']} (format: {result['format']})"
+            return f"### CONVERT\n\n[OK] Saved to {result['output']} (format: {result['format']})"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "rotate":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         processor = ImageProcessor()
         degrees = params.get("degrees", 90)
         result = processor.rotate(image_path, degrees, params.get("output"))
         if result["success"]:
-            return f"### ROTATE\n\n✅ Saved to {result['output']} (rotated {result['degrees']}°)"
+            return f"### ROTATE\n\n[OK] Saved to {result['output']} (rotated {result['degrees']}°)"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "crop":
         if not image_path or "box" not in params:
-            return "❌ Image path and box required."
+            return "[FAIL] Image path and box required."
         processor = ImageProcessor()
         result = processor.crop(image_path, tuple(params["box"]), params.get("output"))
         if result["success"]:
-            return f"### CROP\n\n✅ Saved to {result['output']}\nBox: {result['box']}, Size: {result['size']}"
+            return f"### CROP\n\n[OK] Saved to {result['output']}\nBox: {result['box']}, Size: {result['size']}"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "dominant_colors":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         processor = ImageProcessor()
         result = processor.get_dominant_colors(image_path, params.get("num_colors", 5))
         if result["success"]:
             colors_preview = "\n".join([f"  - {c['hex']} (RGB: {c['rgb']})" for c in result["colors"]])
             return f"### DOMINANT COLORS\n\n{colors_preview}"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "ocr":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         ocr = OCRProcessor()
         result = ocr.extract_text(image_path, params.get("lang", "eng"))
         if result["success"]:
             return f"### OCR\n\n**Extracted Text**:\n{result['text'][:500]}"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "qr_generate":
         if "data" not in params:
-            return "❌ Data required for QR code."
+            return "[FAIL] Data required for QR code."
         qr = QRCodeProcessor()
         result = qr.generate(params["data"], params.get("output", "qrcode.png"))
         if result["success"]:
-            return f"### QR GENERATE\n\n✅ Saved to {result['output']}\nData: {result['data'][:50]}..."
+            return f"### QR GENERATE\n\n[OK] Saved to {result['output']}\nData: {result['data'][:50]}..."
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "qr_read":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         qr = QRCodeProcessor()
         result = qr.read(image_path)
         if result["success"]:
             return f"### QR READ\n\n**Data**: {result['data']}"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "face_detect":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         detector = FaceDetector()
         result = detector.detect(image_path)
         if result["success"]:
             return f"### FACE DETECTION\n\nFound {result['count']} face(s)."
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

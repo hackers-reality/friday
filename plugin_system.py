@@ -204,28 +204,28 @@ def plugin_tool(
     
     if action == "load":
         if not plugin_name:
-            return "❌ Plugin name required."
+            return "[FAIL] Plugin name required."
         success = manager.load_plugin(plugin_name)
-        return f"{'✅' if success else '❌'} Load plugin '{plugin_name}'"
+        return f"{'[OK]' if success else '[FAIL]'} Load plugin '{plugin_name}'"
     
     if action == "load_all":
         manager.load_all_plugins()
-        return "✅ Loaded all plugins."
+        return "[OK] Loaded all plugins."
     
     if action == "unload":
         if not plugin_name:
-            return "❌ Plugin name required."
+            return "[FAIL] Plugin name required."
         manager.unload_plugin(plugin_name)
-        return f"✅ Unloaded '{plugin_name}'"
+        return f"[OK] Unloaded '{plugin_name}'"
     
     if action == "call":
         if not plugin_name or not tool_name:
-            return "❌ Plugin and tool name required."
+            return "[FAIL] Plugin and tool name required."
         plugin = manager.get_plugin(plugin_name)
         if not plugin:
-            return f"❌ Plugin '{plugin_name}' not loaded."
+            return f"[FAIL] Plugin '{plugin_name}' not loaded."
         if tool_name not in plugin.tools:
-            return f"❌ Tool '{tool_name}' not found in plugin '{plugin_name}'."
+            return f"[FAIL] Tool '{tool_name}' not found in plugin '{plugin_name}'."
         func = plugin.tools[tool_name]["function"]
         return func(**kwargs)
     

@@ -123,24 +123,24 @@ class Actuator(IoTDevice):
         
     def turn_on(self) -> str:
         if not self.online:
-            return f"❌ {self.device_id} is offline"
+            return f"[FAIL] {self.device_id} is offline"
         self.state["status"] = "on"
         self.last_seen = time.time()
-        return f"✅ {self.device_id} turned ON"
+        return f"[OK] {self.device_id} turned ON"
     
     def turn_off(self) -> str:
         if not self.online:
-            return f"❌ {self.device_id} is offline"
+            return f"[FAIL] {self.device_id} is offline"
         self.state["status"] = "off"
         self.last_seen = time.time()
-        return f"✅ {self.device_id} turned OFF"
+        return f"[OK] {self.device_id} turned OFF"
     
     def set_value(self, value: float) -> str:
         if not self.online:
-            return f"❌ {self.device_id} is offline"
+            return f"[FAIL] {self.device_id} is offline"
         self.state["value"] = value
         self.last_seen = time.time()
-        return f"✅ {self.device_id} set to {value}"
+        return f"[OK] {self.device_id} set to {value}"
 
 
 # ─── Edge Gateway ───────────────────────────#
@@ -157,14 +157,14 @@ class EdgeGateway(IoTDevice):
     def connect_device(self, device_id: str) -> str:
         if device_id not in self.connected_devices:
             self.connected_devices.append(device_id)
-            return f"✅ Device {device_id} connected to gateway"
+            return f"[OK] Device {device_id} connected to gateway"
         return f"Device {device_id} already connected"
     
     def disconnect_device(self, device_id: str) -> str:
         if device_id in self.connected_devices:
             self.connected_devices.remove(device_id)
-            return f"✅ Device {device_id} disconnected"
-        return f"❌ Device {device_id} not connected"
+            return f"[OK] Device {device_id} disconnected"
+        return f"[FAIL] Device {device_id} not connected"
     
     def run_edge_inference(self, model_name: str, input_data: Any) -> Any:
         """Run AI inference at the edge."""
@@ -351,13 +351,13 @@ def iot_tool(
         lines.append("")
         lines.append("**Devices**:")
         for did, dev in network.devices.items():
-            status = "🟢" if dev.online else "🔴"
+            status = "[OK]" if dev.online else "🔴"
             lines.append(f"  {status} {did} ({dev.device_type})")
         return "\n".join(lines)
     
     if action == "add_device":
         if not device_id or not device_type or not location:
-            return "❌ device_id, device_type, and location required."
+            return "[FAIL] device_id, device_type, and location required."
         
         if device_type == "sensor":
             sensor_type = device_id.split("_")[0] if "_" in device_id else "generic"
@@ -368,15 +368,15 @@ def iot_tool(
             device = IoTDevice(device_id, device_type, location)
         
         if network.add_device(device):
-            return f"✅ Added device: {device_id}"
-        return f"❌ Device already exists: {device_id}"
+            return f"[OK] Added device: {device_id}"
+        return f"[FAIL] Device already exists: {device_id}"
     
     if action == "remove_device":
         if not device_id:
-            return "❌ device_id required."
+            return "[FAIL] device_id required."
         if network.remove_device(device_id):
-            return f"✅ Removed device: {device_id}"
-        return f"❌ Device not found: {device_id}"
+            return f"[OK] Removed device: {device_id}"
+        return f"[FAIL] Device not found: {device_id}"
     
     if action == "poll":
         readings = network.poll_sensors()
@@ -403,7 +403,7 @@ def iot_tool(
     if action == "anomalies":
         anomalies = network.check_anomalies()
         if not anomalies:
-            return "✅ No anomalies detected."
+            return "[OK] No anomalies detected."
         
         lines = [f"### ANOMALIES DETECTED ({len(anomalies)})", ""]
         for a in anomalies:
@@ -412,7 +412,7 @@ def iot_tool(
     
     if action == "edge_inference":
         if not device_id or not value:
-            return "❌ device_id (model) and value (input) required."
+            return "[FAIL] device_id (model) and value (input) required."
         
         # Find gateway
         gateway = None
@@ -422,7 +422,7 @@ def iot_tool(
                 break
         
         if not gateway:
-            return "❌ No online gateway found."
+            return "[FAIL] No online gateway found."
         
         result = gateway.run_edge_inference(device_id, value)
         return f"### EDGE INFERENCE\n\n{json.dumps(result, indent=2)}"

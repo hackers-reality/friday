@@ -66,9 +66,9 @@ def simple_scrape(url: str, extract: str = "text") -> str:
         return soup.get_text()[:3000]
         
     except ImportError:
-        return "❌ BeautifulSoup not installed. Run: pip install beautifulsoup4"
+        return "[FAIL] BeautifulSoup not installed. Run: pip install beautifulsoup4"
     except Exception as e:
-        return f"❌ Scraping error: {e}"
+        return f"[FAIL] Scraping error: {e}"
 
 
 # ─── Advanced Scraper (Playwright for JS sites) ────────────────────────────#
@@ -101,9 +101,9 @@ def advanced_scrape(url: str, wait_for: str = "body", timeout: int = 30000) -> s
             return f"URL: {url}\n\n{text[:5000]}"
             
     except ImportError:
-        return "❌ Playwright not installed. Run: pip install playwright && playwright install chromium"
+        return "[FAIL] Playwright not installed. Run: pip install playwright && playwright install chromium"
     except Exception as e:
-        return f"❌ Advanced scraping error: {e}"
+        return f"[FAIL] Advanced scraping error: {e}"
 
 
 # ─── Web Research Tool ────────────────────────────────────#
@@ -120,7 +120,7 @@ def web_research_tool(
     If search_first=True, will search for query and scrape top result.
     """
     if not url and not query:
-        return "❌ URL or query required."
+        return "[FAIL] URL or query required."
     
     # Search first if needed
     if search_first and query:
@@ -132,17 +132,17 @@ def web_research_tool(
             if urls:
                 url = urls[0]
             else:
-                return f"❌ No URLs found for query: {query}"
+                return f"[FAIL] No URLs found for query: {query}"
         except Exception as e:
-            return f"❌ Search error: {e}"
+            return f"[FAIL] Search error: {e}"
     
     if not url:
-        return "❌ No URL to scrape."
+        return "[FAIL] No URL to scrape."
     
     # Validate URL
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
-        return f"❌ Invalid URL: {url}"
+        return f"[FAIL] Invalid URL: {url}"
     
     # Choose scraper
     if use_advanced:

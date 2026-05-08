@@ -67,7 +67,7 @@ class ModuleRegistry:
             self.modules[module_name] = module
             return module
         except Exception as e:
-            print(f"❌ Error loading {module_name}: {e}")
+            print(f"[FAIL] Error loading {module_name}: {e}")
             return None
     
     def get_tool(self, module_name: str, tool_name: str = None) -> Optional[Callable]:
@@ -127,7 +127,7 @@ class FridayAssistant:
         
         for module_name in self.registry.list_modules():
             module = self.registry.load_module(module_name)
-            status = "✅ Loaded" if module else "❌ Not loaded"
+            status = "[OK] Loaded" if module else "[FAIL] Not loaded"
             lines.append(f"  - {module_name}: {status}")
         
         lines.append("")
@@ -139,7 +139,7 @@ class FridayAssistant:
     def process(self, command: str) -> str:
         """Process a user command."""
         if not command or not command.strip():
-            return "❌ Empty command."
+            return "[FAIL] Empty command."
         
         command = command.strip()
         self._log_command(command)
@@ -164,7 +164,7 @@ class FridayAssistant:
         # Clear history
         if cmd == "clear":
             self.history = []
-            return "✅ History cleared."
+            return "[OK] History cleared."
         
         # Exit
         if cmd in ("exit", "quit", "bye"):
@@ -174,7 +174,7 @@ class FridayAssistant:
         try:
             return self._route_command(cmd, args)
         except Exception as e:
-            error_msg = f"❌ Error processing command: {e}"
+            error_msg = f"[FAIL] Error processing command: {e}"
             if self.config.get("debug"):
                 error_msg += f"\n\nTraceback:\n{traceback.format_exc()}"
             return error_msg
@@ -187,70 +187,70 @@ class FridayAssistant:
             tool = self.registry.get_tool("advanced_networking", "network_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Networking module not available."
+            return "[FAIL] Networking module not available."
         
         # Crypto commands
         if cmd in ("crypto", "encrypt", "decrypt", "hash", "aes", "rsa", "ecc"):
             tool = self.registry.get_tool("advanced_crypto", "crypto_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Crypto module not available."
+            return "[FAIL] Crypto module not available."
         
         # Web commands
         if cmd in ("web", "fetch", "scrape", "search"):
             tool = self.registry.get_tool("friday_web", "web_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Web module not available."
+            return "[FAIL] Web module not available."
         
         # Automation commands
         if cmd in ("automate", "browser", "rpa"):
             tool = self.registry.get_tool("friday_automation", "automation_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Automation module not available."
+            return "[FAIL] Automation module not available."
         
         # Database commands
         if cmd in ("db", "database", "sql", "query"):
             tool = self.registry.get_tool("friday_database", "database_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Database module not available."
+            return "[FAIL] Database module not available."
         
         # AI commands
         if cmd in ("ai", "chat", "ask"):
             tool = self.registry.get_tool("friday_ai", "ai_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ AI module not available."
+            return "[FAIL] AI module not available."
         
         # Tools commands
         if cmd in ("tools", "convert", "calc", "calculate"):
             tool = self.registry.get_tool("friday_tools", "tools_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Tools module not available."
+            return "[FAIL] Tools module not available."
         
         # Vision commands
         if cmd in ("vision", "image", "ocr", "qr"):
             tool = self.registry.get_tool("friday_vision", "vision_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Vision module not available."
+            return "[FAIL] Vision module not available."
         
         # Security commands
         if cmd in ("security", "scan", "ssl", "password"):
             tool = self.registry.get_tool("friday_security", "security_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Security module not available."
+            return "[FAIL] Security module not available."
         
         # Voice commands
         if cmd in ("voice", "speak", "listen"):
             tool = self.registry.get_tool("friday_voice", "voice_tool")
             if tool:
                 return tool(cmd, args)
-            return "❌ Voice module not available."
+            return "[FAIL] Voice module not available."
         
         # Unknown command
         return f"""### UNKNOWN COMMAND
@@ -309,7 +309,7 @@ Try `help` to see available commands."""
         
         for module_name in self.registry.list_modules():
             module = self.registry.load_module(module_name)
-            status = "✅" if module else "❌"
+            status = "[OK]" if module else "[FAIL]"
             lines.append(f"  {status} {module_name}")
         
         return "\n".join(lines)
@@ -323,7 +323,7 @@ Try `help` to see available commands."""
         
         for i, module_name in enumerate(self.registry.list_modules(), 1):
             module = self.registry.load_module(module_name)
-            status = "✅ Loaded" if module else "❌ Not loaded"
+            status = "[OK] Loaded" if module else "[FAIL] Not loaded"
             lines.append(f"{i}. **{module_name}** - {status}")
         
         return "\n".join(lines)
@@ -377,7 +377,7 @@ def main():
             print("\nFriday: Goodbye!")
             break
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
+            print(f"[FAIL] Unexpected error: {e}")
             if friday.config.get("debug"):
                 traceback.print_exc()
 

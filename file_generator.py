@@ -229,7 +229,7 @@ def generate_file(
         if content:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
-            return f"✅ File generated: {path} ({len(content)} bytes written)"
+            return f"[OK] File generated: {path} ({len(content)} bytes written)"
         
         # Determine file type
         if file_type == "auto":
@@ -278,10 +278,10 @@ def generate_file(
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
         
-        return f"✅ File generated: {path}\nType: {file_type}\nSize: {len(content)} bytes"
+        return f"[OK] File generated: {path}\nType: {file_type}\nSize: {len(content)} bytes"
     
     except Exception as e:
-        return f"❌ File generation error: {str(e)}"
+        return f"[FAIL] File generation error: {str(e)}"
 
 
 def generate_from_llm(
@@ -315,7 +315,7 @@ The content should be complete and ready to write directly to disk.
                     with open(path, "w", encoding="utf-8") as f:
                         f.write(content)
                     
-                    return f"✅ LLM-generated file: {path}\nSize: {len(content)} bytes"
+                    return f"[OK] LLM-generated file: {path}\nSize: {len(content)} bytes"
         except Exception as e:
             pass
         
@@ -323,7 +323,7 @@ The content should be complete and ready to write directly to disk.
         return generate_file(path, description=prompt)
     
     except Exception as e:
-        return f"❌ LLM file generation error: {str(e)}"
+        return f"[FAIL] LLM file generation error: {str(e)}"
 
 
 def batch_generate(files: list) -> str:
@@ -347,8 +347,8 @@ def batch_generate(files: list) -> str:
 def get_generator_status() -> str:
     """Get status of file generator."""
     lines = ["### FILE GENERATOR STATUS", ""]
-    lines.append(f"✅ Available code templates: {len(CODE_TEMPLATES)}")
-    lines.append(f"✅ Available document templates: {len(DOCUMENT_TEMPLATES)}")
+    lines.append(f"[OK] Available code templates: {len(CODE_TEMPLATES)}")
+    lines.append(f"[OK] Available document templates: {len(DOCUMENT_TEMPLATES)}")
     lines.append("")
     lines.append("**Supported types:**")
     for t in sorted(CODE_TEMPLATES.keys()):
@@ -375,12 +375,12 @@ def file_generator_tool(
     
     if action == "generate":
         if not path:
-            return "❌ Path required for file generation."
+            return "[FAIL] Path required for file generation."
         return generate_file(path, file_type, description, content)
     
     if action == "generate_llm":
         if not path or not prompt:
-            return "❌ Path and prompt required for LLM generation."
+            return "[FAIL] Path and prompt required for LLM generation."
         return generate_from_llm(path, prompt)
     
     if action == "batch":
@@ -388,7 +388,7 @@ def file_generator_tool(
             files = json.loads(content) if content else []
             return batch_generate(files)
         except Exception as e:
-            return f"❌ Batch generation error: {e}"
+            return f"[FAIL] Batch generation error: {e}"
     
     return f"Unknown action: {action}"
 

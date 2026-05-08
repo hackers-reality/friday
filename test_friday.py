@@ -19,11 +19,11 @@ def test(name, func):
         # Clean for Windows console
         import re
         clean = re.sub(r'[^\x00-\x7F]+', '', str(result))[:100]
-        print(f"  ✅ {name}: {clean}")
+        print(f"  [OK] {name}: {clean}")
         results["pass"] += 1
         return True
     except Exception as e:
-        print(f"  ❌ {name}: {e}")
+        print(f"  [FAIL] {name}: {e}")
         results["fail"] += 1
         return False
 
@@ -111,9 +111,9 @@ print(f"RESULTS: {results['pass']} passed, {results['fail']} failed")
 print("=" * 60)
 
 if results["fail"] > 0:
-    print("\n⚠️  Some tests failed. Check the errors above.")
+    print("\n[WARN]  Some tests failed. Check the errors above.")
 else:
-    print("\n✅ All core features working!")
+    print("\n[OK] All core features working!")
 
 # Cleanup
 import shutil

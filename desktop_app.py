@@ -66,7 +66,7 @@ def list_frameworks() -> str:
     lines = ["### DESKTOP FRAMEWORK OPTIONS", ""]
     
     for key, info in SUPPORTED_FRAMEWORKS.items():
-        rec = "✅ RECOMMENDED" if info.get("recommended") else ""
+        rec = "[OK] RECOMMENDED" if info.get("recommended") else ""
         lines.append(f"**{info['name']}** {rec}")
         lines.append(f"  {info['description']}")
         lines.append(f"  Install: `{info['install']}`")
@@ -92,7 +92,7 @@ def create_pytauri_app(
         import pytauri
         PYTAURI_AVAILABLE = True
     except ImportError:
-        return "❌ PyTauri not installed. Install: pip install pytauri"
+        return "[FAIL] PyTauri not installed. Install: pip install pytauri"
     
     # Create app directory structure
     app_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_desktop")
@@ -340,7 +340,7 @@ if __name__ == "__main__":
     ui_dir = os.path.join(app_dir, "ui")
     os.makedirs(ui_dir, exist_ok=True)
     
-    return f"✅ PyTauri app created at: {main_py}"
+    return f"[OK] PyTauri app created at: {main_py}"
 
 
 # ─── Package as .exe (Phase 6.4) ──────────────────────────────
@@ -428,7 +428,7 @@ coll = COLLECT(
     with open(spec_path, "w", encoding="utf-8") as f:
         f.write(spec_content)
     
-    return f"✅ Spec file created: {spec_path}\nBuild with: pyinstaller {exe_name}.spec"
+    return f"[OK] Spec file created: {spec_path}\nBuild with: pyinstaller {exe_name}.spec"
 
 
 # ─── Integration Tool ────────────────────────────────────────────

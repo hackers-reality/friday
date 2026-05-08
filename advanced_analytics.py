@@ -334,23 +334,23 @@ def analytics_tool(
     
     if action == "create":
         if not series_name:
-            return "❌ Series name required."
+            return "[FAIL] Series name required."
         engine.create_series(series_name, metric or "value")
-        return f"✅ Created series: {series_name}"
+        return f"[OK] Created series: {series_name}"
     
     if action == "add":
         if not series_name or value is None:
-            return "❌ Series name and value required."
+            return "[FAIL] Series name and value required."
         engine.add_data_point(series_name, value)
-        return f"✅ Added value {value} to {series_name}"
+        return f"[OK] Added value {value} to {series_name}"
     
     if action == "analyze":
         if not series_name:
-            return "❌ Series name required."
+            return "[FAIL] Series name required."
         
         result = engine.analyze_series(series_name)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         
         lines = [f"### ANALYSIS: {series_name}", ""]
         lines.append(f"**Data Points**: {result['data_points']}")
@@ -372,21 +372,21 @@ def analytics_tool(
     
     if action == "forecast":
         if not series_name:
-            return "❌ Series name required."
+            return "[FAIL] Series name required."
         
         result = engine.analyze_series(series_name)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         
         return f"### FORECAST: {series_name}\n\nNext 5 values: {result['forecast']}"
     
     if action == "correlate":
         if not series_name or not metric:
-            return "❌ Provide two series names: series_name and metric (as second series)."
+            return "[FAIL] Provide two series names: series_name and metric (as second series)."
         
         result = engine.correlate_series(series_name, metric)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         
         return f"""### CORRELATION ANALYSIS
 **Series 1**: {result['series1']}
@@ -397,11 +397,11 @@ def analytics_tool(
     
     if action == "stats":
         if not series_name:
-            return "❌ Series name required."
+            return "[FAIL] Series name required."
         
         result = engine.analyze_series(series_name)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         
         stats = result["statistics"]
         lines = [f"### STATISTICS: {series_name}", ""]

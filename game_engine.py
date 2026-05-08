@@ -305,18 +305,18 @@ def game_tool(
     
     if action == "add_object":
         if not object_name:
-            return "❌ Object name required."
+            return "[FAIL] Object name required."
         
         obj = GameObject(object_name, Vector2(x, y))
         obj.velocity = Vector2(vx, vy)
         
         if scene.add_object(obj):
-            return f"✅ Added object: {object_name}"
-        return f"❌ Object '{object_name}' already exists."
+            return f"[OK] Added object: {object_name}"
+        return f"[FAIL] Object '{object_name}' already exists."
     
     if action == "update":
         scene.update(0.016)  # ~60 FPS
-        return "✅ Scene updated."
+        return "[OK] Scene updated."
     
     if action == "render":
         return f"### SCENE RENDER\n\n{scene.render()}"
@@ -324,7 +324,7 @@ def game_tool(
     if action == "loop":
         loop = GameLoop(scene)
         loop.start(max_frames=50)
-        return "✅ Game loop completed."
+        return "[OK] Game loop completed."
     
     return f"Unknown action: {action}"
 

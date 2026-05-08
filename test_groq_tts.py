@@ -44,9 +44,9 @@ for voice, text, filename in tests:
         )
         path = f"tts_test/{filename}.wav"
         response.write_to_file(path)
-        print(f"   ✅ Saved: {path}")
+        print(f"   [OK] Saved: {path}")
     except Exception as e:
-        print(f"   ❌ Error: {e}")
+        print(f"   [FAIL] Error: {e}")
 
 print("\n🎧 All done! Playing samples back-to-back...")
 

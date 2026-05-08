@@ -147,7 +147,7 @@ def search_all_history(query: str, days_back: int = 30, limit_per_browser: int =
                 })
     
     if not all_results:
-        return f"❌ No history entries found matching '{query}' in any browser."
+        return f"[FAIL] No history entries found matching '{query}' in any browser."
     
     # Sort by visit time (most recent first)
     all_results.sort(key=lambda x: x["visited_at"], reverse=True)
@@ -203,7 +203,7 @@ def open_latest_in_browser(query: str) -> str:
     entry = find_latest_by_keyword(query, days_back=90)
     
     if not entry:
-        return f"❌ No recent history found for '{query}'.\n\nTrying web search instead..."
+        return f"[FAIL] No recent history found for '{query}'.\n\nTrying web search instead..."
     
     url = entry["url"]
     title = entry["title"] or url
@@ -211,9 +211,9 @@ def open_latest_in_browser(query: str) -> str:
     try:
         import webbrowser
         webbrowser.open(url)
-        return f"✅ Opened in browser:\n\n**{title}**\nURL: {url}\n\n(From {entry['visited_at']})"
+        return f"[OK] Opened in browser:\n\n**{title}**\nURL: {url}\n\n(From {entry['visited_at']})"
     except Exception as e:
-        return f"❌ Failed to open browser: {e}\n\nURL was: {url}"
+        return f"[FAIL] Failed to open browser: {e}\n\nURL was: {url}"
 
 
 # ─── URL Categorization ────────────────────────────────────
@@ -358,7 +358,7 @@ def search_and_open(query: str, category_hint: str = None) -> str:
             all_results.append(entry)
     
     if not all_results:
-        msg = f"❌ No history entries found matching '{query}'"
+        msg = f"[FAIL] No history entries found matching '{query}'"
         if category_hint:
             msg += f" in category '{category_hint}'"
         msg += ".\n\nTrying web search instead..."
@@ -376,7 +376,7 @@ def search_and_open(query: str, category_hint: str = None) -> str:
         import webbrowser
         webbrowser.open(url)
         
-        result = f"✅ Found and opened:\n\n"
+        result = f"[OK] Found and opened:\n\n"
         result += f"**{title}**\n"
         result += f"URL: {url}\n"
         result += f"Category: {category}\n"
@@ -385,11 +385,11 @@ def search_and_open(query: str, category_hint: str = None) -> str:
         
         # Show total matches found
         if len(all_results) > 1:
-            result += f"\nℹ️ Also found {len(all_results) - 1} other matching entries."
+            result += f"\n[i] Also found {len(all_results) - 1} other matching entries."
         
         return result
     except Exception as e:
-        return f"❌ Failed to open browser: {e}\n\nURL was: {url}"
+        return f"[FAIL] Failed to open browser: {e}\n\nURL was: {url}"
 
 
 def search_by_category(query: str, category: str) -> str:
@@ -421,7 +421,7 @@ def search_by_category(query: str, category: str) -> str:
                 all_results.append(entry)
     
     if not all_results:
-        return f"❌ No {category} entries found matching '{query}'."
+        return f"[FAIL] No {category} entries found matching '{query}'."
     
     all_results.sort(key=lambda x: x["visited_at"], reverse=True)
     
@@ -453,7 +453,7 @@ def list_browser_histories(days_back: int = 7, limit: int = 20) -> str:
                 all_entries.append(entry)
     
     if not all_entries:
-        return "❌ No recent history found in any browser."
+        return "[FAIL] No recent history found in any browser."
     
     # Sort all by time
     all_entries.sort(key=lambda x: x["visited_at"], reverse=True)
@@ -500,9 +500,9 @@ def get_browser_status() -> str:
     for browser_key, info in BROWSER_PATHS.items():
         db_path = _get_history_db_path(browser_key)
         if db_path:
-            lines.append(f"✅ {info['name']}: History available at {db_path}")
+            lines.append(f"[OK] {info['name']}: History available at {db_path}")
         else:
-            lines.append(f"❌ {info['name']}: Not installed or history not found")
+            lines.append(f"[FAIL] {info['name']}: Not installed or history not found")
     
     return "\n".join(lines)
 
@@ -518,12 +518,12 @@ def browser_history_tool(action: str = "status", query: str = "", **kwargs) -> s
     
     if action == "search":
         if not query:
-            return "❌ Query required for search."
+            return "[FAIL] Query required for search."
         return search_all_history(query, days_back=kwargs.get("days_back", 30))
     
     if action == "open_latest":
         if not query:
-            return "❌ Query required. Example: 'open_latest' with query='jarvis'"
+            return "[FAIL] Query required. Example: 'open_latest' with query='jarvis'"
         return open_latest_in_browser(query)
     
     if action == "list_recent":
@@ -535,14 +535,14 @@ def browser_history_tool(action: str = "status", query: str = "", **kwargs) -> s
     if action == "find_and_open":
         """General-purpose: search history for ANYTHING and open the best match."""
         if not query:
-            return "❌ Query required. Example: 'find_and_open' with query='onepiece episode 1100'"
+            return "[FAIL] Query required. Example: 'find_and_open' with query='onepiece episode 1100'"
         category = kwargs.get("category") or kwargs.get("category_hint")
         return search_and_open(query, category_hint=category)
     
     if action == "search_category":
         """Search within a specific category (anime, repo, chat, blog, etc)."""
         if not query or not kwargs.get("category"):
-            return "❌ Query and category required. Example: 'search_category' with query='naruto' and category='anime'"
+            return "[FAIL] Query and category required. Example: 'search_category' with query='naruto' and category='anime'"
         return search_by_category(query, kwargs["category"])
     
     if action == "categorize":

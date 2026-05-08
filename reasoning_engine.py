@@ -389,7 +389,7 @@ def reasoning_tool(
     Actions: cot (Chain-of-Thought), tot (Tree-of-Thought), react, compare
     """
     if not problem:
-        return "❌ Problem or task required for reasoning."
+        return "[FAIL] Problem or task required for reasoning."
     
     if action == "cot":
         cot = ChainOfThought()
@@ -432,7 +432,7 @@ def reasoning_tool(
         
         lines = ["### REACT REASONING", ""]
         lines.append(f"**Task**: {result['task']}")
-        lines.append(f"**Success**: {'✅' if result['success'] else '❌'}")
+        lines.append(f"**Success**: {'[OK]' if result['success'] else '[FAIL]'}")
         lines.append(f"**Iterations**: {result['iterations']}")
         lines.append("")
         lines.append("**Trajectory**:")

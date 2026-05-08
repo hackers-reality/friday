@@ -304,28 +304,28 @@ def ar_tool(
     
     if action == "add_object":
         if not object_name:
-            return "❌ Object name required."
+            return "[FAIL] Object name required."
         
         obj = ARObject(object_name, geometry, Transform(Vector3(x, y, z)))
         if scene.add_object(obj):
-            return f"✅ Added object: {object_name}"
-        return f"❌ Object '{object_name}' already exists."
+            return f"[OK] Added object: {object_name}"
+        return f"[FAIL] Object '{object_name}' already exists."
     
     if action == "remove_object":
         if not object_name:
-            return "❌ Object name required."
+            return "[FAIL] Object name required."
         if scene.remove_object(object_name):
-            return f"✅ Removed object: {object_name}"
-        return f"❌ Object '{object_name}' not found."
+            return f"[OK] Removed object: {object_name}"
+        return f"[FAIL] Object '{object_name}' not found."
     
     if action == "add_marker":
         if not marker_id:
-            return "❌ Marker ID required."
+            return "[FAIL] Marker ID required."
         
         marker = ARMarker(marker_id)
         if scene.add_marker(marker):
-            return f"✅ Added marker: {marker_id}"
-        return f"❌ Marker '{marker_id}' already exists."
+            return f"[OK] Added marker: {marker_id}"
+        return f"[FAIL] Marker '{marker_id}' already exists."
     
     if action == "render":
         renderer = get_ar_renderer()
@@ -333,7 +333,7 @@ def ar_tool(
     
     if action == "update_camera":
         scene.camera_transform.position = Vector3(x, y, z)
-        return f"✅ Camera moved to ({x}, {y}, {z})"
+        return f"[OK] Camera moved to ({x}, {y}, {z})"
     
     return f"Unknown action: {action}"
 

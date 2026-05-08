@@ -348,8 +348,8 @@ def analytics_tool(
         analyzer = DataAnalyzer()
         visualizer = Visualizer()
         lines = ["### ANALYTICS STATUS", ""]
-        lines.append(f"**pandas Available**: {'✅' if analyzer.pandas_available else '❌'}")
-        lines.append(f"**matplotlib Available**: {'✅' if visualizer.matplotlib_available else '❌'}")
+        lines.append(f"**pandas Available**: {'[OK]' if analyzer.pandas_available else '[FAIL]'}")
+        lines.append(f"**matplotlib Available**: {'[OK]' if visualizer.matplotlib_available else '[FAIL]'}")
         lines.append("")
         lines.append("**Available Features**:")
         lines.append("  - CSV/JSON analysis")
@@ -361,7 +361,7 @@ def analytics_tool(
     
     if action == "analyze_csv":
         if not data:
-            return "❌ File path required."
+            return "[FAIL] File path required."
         analyzer = DataAnalyzer()
         result = analyzer.analyze_csv(data)
         if result["success"]:
@@ -374,30 +374,30 @@ def analytics_tool(
                 lines.append(f"  {col}: mean={stats.get('mean', 0):.2f}, min={stats.get('min', 0)}, max={stats.get('max', 0)}")
             return "\n".join(lines)
         else:
-            return f"❌ Analysis error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Analysis error: {result.get('error', 'Unknown')}"
     
     if action == "analyze_json":
         if not data:
-            return "❌ Data required."
+            return "[FAIL] Data required."
         analyzer = DataAnalyzer()
         try:
             json_data = json.loads(data) if isinstance(data, str) else data
         except:
-            return "❌ Invalid JSON data."
+            return "[FAIL] Invalid JSON data."
         
         result = analyzer.analyze_json(json_data)
         if result["success"]:
             return f"### JSON ANALYSIS\n\n{json.dumps(result, indent=2)}"
         else:
-            return f"❌ Analysis error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Analysis error: {result.get('error', 'Unknown')}"
     
     if action == "statistics":
         if not data:
-            return "❌ Numbers required (as JSON list)."
+            return "[FAIL] Numbers required (as JSON list)."
         try:
             numbers = json.loads(data) if isinstance(data, str) else data
         except:
-            return "❌ Invalid data format. Provide a JSON list of numbers."
+            return "[FAIL] Invalid data format. Provide a JSON list of numbers."
         
         analyzer = DataAnalyzer()
         result = analyzer.calculate_statistics(numbers)
@@ -408,14 +408,14 @@ def analytics_tool(
                     lines.append(f"**{key.capitalize()}**: {value}")
             return "\n".join(lines)
         else:
-            return f"❌ Statistics error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Statistics error: {result.get('error', 'Unknown')}"
     
     if action == "metrics_add":
         if not data or "value" not in params:
-            return "❌ Metric name and value required."
+            return "[FAIL] Metric name and value required."
         collector = MetricsCollector()
         collector.add_metric(data, float(params["value"]))
-        return f"✅ Added metric: {data} = {params['value']}"
+        return f"[OK] Added metric: {data} = {params['value']}"
     
     if action == "metrics_summary":
         collector = MetricsCollector()
@@ -427,15 +427,15 @@ def analytics_tool(
         if result.get("success"):
             return f"### METRICS SUMMARY\n\n{json.dumps(result, indent=2)}"
         else:
-            return f"❌ Metrics error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Metrics error: {result.get('error', 'Unknown')}"
     
     if action == "report_text":
         if not data:
-            return "❌ Data required."
+            return "[FAIL] Data required."
         try:
             report_data = json.loads(data) if isinstance(data, str) else data
         except:
-            return "❌ Invalid JSON data."
+            return "[FAIL] Invalid JSON data."
         
         generator = ReportGenerator()
         title = params.get("title", "Friday Report")
@@ -444,57 +444,57 @@ def analytics_tool(
     
     if action == "report_csv":
         if not data:
-            return "❌ Data required (JSON list of dicts)."
+            return "[FAIL] Data required (JSON list of dicts)."
         try:
             report_data = json.loads(data) if isinstance(data, str) else data
         except:
-            return "❌ Invalid JSON data."
+            return "[FAIL] Invalid JSON data."
         
         generator = ReportGenerator()
         output_path = params.get("output")
         result = generator.generate_csv_report(report_data, output_path)
         if result["success"]:
-            return f"### CSV REPORT\n\n✅ Generated: {result.get('path', 'output')}"
+            return f"### CSV REPORT\n\n[OK] Generated: {result.get('path', 'output')}"
         else:
-            return f"❌ Report error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Report error: {result.get('error', 'Unknown')}"
     
     if action == "viz_line":
         if not data or "x" not in params or "y" not in params:
-            return "❌ Data and x/y values required."
+            return "[FAIL] Data and x/y values required."
         visualizer = Visualizer()
         title = params.get("title", "Line Chart")
         output = params.get("output", "line_chart.png")
         result = visualizer.create_line_chart(params["x"], params["y"], title, output)
         if result["success"]:
-            return f"### LINE CHART\n\n✅ Saved to {result['output']}"
+            return f"### LINE CHART\n\n[OK] Saved to {result['output']}"
         else:
-            return f"❌ Visualization error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Visualization error: {result.get('error', 'Unknown')}"
     
     if action == "viz_bar":
         if not data or "values" not in params:
-            return "❌ Data and values required."
+            return "[FAIL] Data and values required."
         visualizer = Visualizer()
         categories = params.get("categories", [str(i) for i in range(len(params["values"]))])
         title = params.get("title", "Bar Chart")
         output = params.get("output", "bar_chart.png")
         result = visualizer.create_bar_chart(categories, params["values"], title, output)
         if result["success"]:
-            return f"### BAR CHART\n\n✅ Saved to {result['output']}"
+            return f"### BAR CHART\n\n[OK] Saved to {result['output']}"
         else:
-            return f"❌ Visualization error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Visualization error: {result.get('error', 'Unknown')}"
     
     if action == "viz_pie":
         if not data or "values" not in params:
-            return "❌ Data and values required."
+            return "[FAIL] Data and values required."
         visualizer = Visualizer()
         labels = params.get("labels", [str(i) for i in range(len(params["values"]))])
         title = params.get("title", "Pie Chart")
         output = params.get("output", "pie_chart.png")
         result = visualizer.create_pie_chart(labels, params["values"], title, output)
         if result["success"]:
-            return f"### PIE CHART\n\n✅ Saved to {result['output']}"
+            return f"### PIE CHART\n\n[OK] Saved to {result['output']}"
         else:
-            return f"❌ Visualization error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Visualization error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

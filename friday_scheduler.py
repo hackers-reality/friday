@@ -304,7 +304,7 @@ def scheduler_tool(
         scheduler = TaskScheduler()
         lines = ["### SCHEDULER STATUS", ""]
         status = scheduler.get_status()
-        lines.append(f"**Running**: {'✅' if status['running'] else '❌'}")
+        lines.append(f"**Running**: {'[OK]' if status['running'] else '[FAIL]'}")
         lines.append(f"**Tasks**: {status['task_count']}")
         lines.append(f"**Enabled**: {status['enabled_count']}")
         lines.append(f"**Pending Jobs**: {status['pending_jobs']}")
@@ -312,48 +312,48 @@ def scheduler_tool(
     
     if action == "task_add":
         if not name:
-            return "❌ Task name required."
+            return "[FAIL] Task name required."
         scheduler = TaskScheduler()
         func_name = params.get("function", "lambda: print('Task executed')")
         trigger = params.get("trigger", "interval")
         result = scheduler.add_task(name, eval(func_name), trigger, **params.get("kwargs", {}))
         if result["success"]:
-            return f"### TASK ADD\n\n✅ Added"
+            return f"### TASK ADD\n\n[OK] Added"
         else:
-            return f"### TASK ADD\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### TASK ADD\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "task_remove":
         if not name:
-            return "❌ Task name required."
+            return "[FAIL] Task name required."
         scheduler = TaskScheduler()
         result = scheduler.remove_task(name)
         if result["success"]:
-            return "### TASK REMOVE\n\n✅ Removed"
+            return "### TASK REMOVE\n\n[OK] Removed"
         else:
-            return f"### TASK REMOVE\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### TASK REMOVE\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "task_run":
         if not name:
-            return "❌ Task name required."
+            return "[FAIL] Task name required."
         scheduler = TaskScheduler()
         result = scheduler.run_task(name)
         if result["success"]:
-            return "### TASK RUN\n\n✅ Executed"
+            return "### TASK RUN\n\n[OK] Executed"
         else:
-            return f"### TASK RUN\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### TASK RUN\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "task_list":
         scheduler = TaskScheduler()
         tasks = scheduler.list_tasks()
         lines = ["### TASKS", ""]
         for task in tasks:
-            status = "✅" if task["enabled"] else "❌"
+            status = "[OK]" if task["enabled"] else "[FAIL]"
             lines.append(f"{status} **{task['name']}** ({task['trigger']}) - Runs: {task['run_count']}")
         return "\n".join(lines)
     
     if action == "reminder_add":
         if not name:
-            return "❌ Message required."
+            return "[FAIL] Message required."
         reminder_sys = ReminderSystem()
         if "remind_in_seconds" in params:
             remind_in = timedelta(seconds=params["remind_in_seconds"])
@@ -362,40 +362,40 @@ def scheduler_tool(
             remind_at = datetime.fromisoformat(params["remind_at"])
             result = reminder_sys.add_reminder(name, remind_at=remind_at)
         else:
-            return "❌ remind_at or remind_in_seconds required."
+            return "[FAIL] remind_at or remind_in_seconds required."
         
         if result["success"]:
-            return f"### REMINDER ADD\n\n✅ Added\nID: {result.get('id', 'N/A')}"
+            return f"### REMINDER ADD\n\n[OK] Added\nID: {result.get('id', 'N/A')}"
         else:
-            return f"### REMINDER ADD\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### REMINDER ADD\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "reminder_list":
         reminder_sys = ReminderSystem()
         reminders = reminder_sys.list_reminders(params.get("include_triggered", False))
         lines = ["### REMINDERS", ""]
         for r in reminders:
-            status = "✅ Triggered" if r["triggered"] else "⏰ Pending"
+            status = "[OK] Triggered" if r["triggered"] else "⏰ Pending"
             lines.append(f"{status}: {r['message'][:50]}... (ID: {r['id']})")
         return "\n".join(lines)
     
     if action == "reminder_remove":
         if not name:
-            return "❌ Reminder ID required."
+            return "[FAIL] Reminder ID required."
         reminder_sys = ReminderSystem()
         result = reminder_sys.remove_reminder(name)
         if result["success"]:
-            return "### REMINDER REMOVE\n\n✅ Removed"
+            return "### REMINDER REMOVE\n\n[OK] Removed"
         else:
-            return f"### REMINDER REMOVE\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### REMINDER REMOVE\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "cron_parse":
         if not name:
-            return "❌ Cron string required."
+            return "[FAIL] Cron string required."
         result = CronParser.parse(name)
         if result["success"]:
             return f"### CRON PARSE\n\n**Minute**: {result['minute']}\n**Hour**: {result['hour']}\n**Day**: {result['day_of_month']}\n**Month**: {result['month']}\n**DOW**: {result['day_of_week']}"
         else:
-            return f"❌ {result.get('error', 'Unknown')}"
+            return f"[FAIL] {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

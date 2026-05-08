@@ -511,7 +511,7 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
     if action == "import_file":
         filepath = kwargs.get("path") or kwargs.get("filepath") or kwargs.get("file")
         if not filepath or not os.path.exists(filepath):
-            return f"❌ File not found: {filepath}"
+            return f"[FAIL] File not found: {filepath}"
         try:
             if filepath.endswith(".json"):
                 data = import_from_json_file(filepath)
@@ -523,19 +523,19 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
             copy_path = os.path.join(_RAW_IMPORTS_DIR, copy_name)
             with open(copy_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
-            return f"✅ Imported {conv_count} conversation(s) from {os.path.basename(filepath)}\nSource Type: {data.get('source_type', 'text')}"
+            return f"[OK] Imported {conv_count} conversation(s) from {os.path.basename(filepath)}\nSource Type: {data.get('source_type', 'text')}"
         except Exception as e:
-            return f"❌ Import failed: {e}"
+            return f"[FAIL] Import failed: {e}"
 
     if action == "import_dir":
         directory = kwargs.get("dir") or kwargs.get("directory") or kwargs.get("path", ".")
         if not os.path.exists(directory):
-            return f"❌ Directory not found: {directory}"
+            return f"[FAIL] Directory not found: {directory}"
         results = import_from_directory(directory)
         if not results:
-            return f"❌ No supported files found in {directory}"
+            return f"[FAIL] No supported files found in {directory}"
         total_convs = sum(len(r.get("conversations", [])) for r in results)
-        return f"✅ Imported {len(results)} files ({total_convs} conversations) from {directory}"
+        return f"[OK] Imported {len(results)} files ({total_convs} conversations) from {directory}"
 
     if action == "audit":
         # Re-audit all stored imports
@@ -547,7 +547,7 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
             except Exception:
                 pass
         if not stored:
-            return "❌ No imported data to audit. Import files first using 'import_file' or 'import_dir'."
+            return "[FAIL] No imported data to audit. Import files first using 'import_file' or 'import_dir'."
 
         audit_result = audit_imported_data(stored)
         changes = update_profile_with_audit(audit_result)
@@ -565,10 +565,10 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
                         lines.append(f"  📝 {key}: Updated")
                 else:
                     lines.append(f"  📝 {key}: {val}")
-            lines.append(f"\n✅ Profile version {audit_result.get('findings', {}).get('audited_at', '?')[:10]}")
+            lines.append(f"\n[OK] Profile version {audit_result.get('findings', {}).get('audited_at', '?')[:10]}")
             return "\n".join(lines)
         else:
-            return f"✅ Audit complete. No new information found. ({audit_result.get('conversations_audited', 0)} conversations analyzed)"
+            return f"[OK] Audit complete. No new information found. ({audit_result.get('conversations_audited', 0)} conversations analyzed)"
 
     if action == "profile":
         md = generate_profile_markdown()

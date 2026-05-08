@@ -85,23 +85,23 @@ class WebSocketClient:
             
             self.ws = websocket.create_connection(self.url)
             self.connected = True
-            return f"✅ Connected to {self.url}"
+            return f"[OK] Connected to {self.url}"
             
         except ImportError:
-            return "❌ websocket-client not installed. Run: pip install websocket-client"
+            return "[FAIL] websocket-client not installed. Run: pip install websocket-client"
         except Exception as e:
-            return f"❌ Connection error: {e}"
+            return f"[FAIL] Connection error: {e}"
     
     def send(self, message: str) -> str:
         """Send message."""
         if not self.connected or not self.ws:
-            return "❌ Not connected."
+            return "[FAIL] Not connected."
         
         try:
             self.ws.send(message)
-            return "✅ Message sent."
+            return "[OK] Message sent."
         except Exception as e:
-            return f"❌ Send error: {e}"
+            return f"[FAIL] Send error: {e}"
     
     def receive(self) -> Optional[str]:
         """Receive message."""
@@ -147,7 +147,7 @@ class MQTTClient:
     def connect(self) -> str:
         """Connect to MQTT broker."""
         if not self.available:
-            return "❌ paho-mqtt not installed. Run: pip install paho-mqtt"
+            return "[FAIL] paho-mqtt not installed. Run: pip install paho-mqtt"
         
         try:
             import paho.mqtt.client as mqtt
@@ -157,10 +157,10 @@ class MQTTClient:
             self.client.connect(self.broker, self.port, 60)
             self.client.loop_start()
             self.connected = True
-            return f"✅ Connected to MQTT broker: {self.broker}"
+            return f"[OK] Connected to MQTT broker: {self.broker}"
             
         except Exception as e:
-            return f"❌ MQTT connection error: {e}"
+            return f"[FAIL] MQTT connection error: {e}"
     
     def _on_message(self, client, userdata, message):
         """Handle incoming message."""
@@ -173,20 +173,20 @@ class MQTTClient:
     def subscribe(self, topic: str, callback: callable = None):
         """Subscribe to topic."""
         if not self.connected:
-            return "❌ Not connected to broker."
+            return "[FAIL] Not connected to broker."
         
         self.client.subscribe(topic)
         if callback:
             self.subscriptions[topic] = callback
-        return f"✅ Subscribed to: {topic}"
+        return f"[OK] Subscribed to: {topic}"
     
     def publish(self, topic: str, message: str) -> str:
         """Publish to topic."""
         if not self.connected:
-            return "❌ Not connected to broker."
+            return "[FAIL] Not connected to broker."
         
         self.client.publish(topic, message)
-        return f"✅ Published to {topic}: {message[:50]}..."
+        return f"[OK] Published to {topic}: {message[:50]}..."
     
     def disconnect(self):
         """Disconnect from broker."""
@@ -216,16 +216,16 @@ class GRPCClient:
     def connect(self) -> str:
         """Connect to gRPC server."""
         if not self.available:
-            return "❌ grpcio not installed. Run: pip install grpcio"
+            return "[FAIL] grpcio not installed. Run: pip install grpcio"
         
         try:
             import grpc
             
             self.channel = grpc.insecure_channel(self.server)
-            return f"✅ Connected to gRPC server: {self.server}"
+            return f"[OK] Connected to gRPC server: {self.server}"
             
         except Exception as e:
-            return f"❌ gRPC connection error: {e}"
+            return f"[FAIL] gRPC connection error: {e}"
     
     def call(self, method: str, request: Any) -> Any:
         """Make gRPC call (simplified)."""
@@ -376,20 +376,20 @@ def networking_tool(
     if action == "status":
         lines = ["### NETWORKING STATUS", ""]
         lines.append("**HTTP/2**: Available (via requests)")
-        lines.append(f"**WebSockets**: {'✅' if True else '❌'} (pip install websocket-client)")
-        lines.append(f"**MQTT**: {'✅' if MQTTClient(broker='test').available else '❌'} (pip install paho-mqtt)")
-        lines.append(f"**gRPC**: {'✅' if GRPCClient().available else '❌'} (pip install grpcio)")
+        lines.append(f"**WebSockets**: {'[OK]' if True else '[FAIL]'} (pip install websocket-client)")
+        lines.append(f"**MQTT**: {'[OK]' if MQTTClient(broker='test').available else '[FAIL]'} (pip install paho-mqtt)")
+        lines.append(f"**gRPC**: {'[OK]' if GRPCClient().available else '[FAIL]'} (pip install grpcio)")
         return "\n".join(lines)
     
     if action == "http_request":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         
         client = HTTP2Client()
         result = client.request(url, method)
         
         if "error" in result:
-            return f"❌ Request error: {result['error']}"
+            return f"[FAIL] Request error: {result['error']}"
         
         lines = [f"### HTTP REQUEST: {method} {url}", ""]
         lines.append(f"**Status**: {result['status_code']}")
@@ -399,22 +399,22 @@ def networking_tool(
     
     if action == "websocket":
         if not url:
-            return "❌ WebSocket URL required."
+            return "[FAIL] WebSocket URL required."
         
         ws = WebSocketClient(url)
         result = ws.connect()
-        if "✅" in result:
+        if "[OK]" in result:
             ws.close()
         return result
     
     if action == "mqtt":
         if not topic:
-            return "❌ Topic required for MQTT."
+            return "[FAIL] Topic required for MQTT."
         
         client = get_mqtt_client()
         if not client.connected:
             result = client.connect()
-            if "❌" in result:
+            if "[FAIL]" in result:
                 return result
         
         if message:
@@ -424,21 +424,21 @@ def networking_tool(
     
     if action == "grpc":
         if not url:  # Reuse url param for server
-            return "❌ Server address required."
+            return "[FAIL] Server address required."
         
         client = get_grpc_client(url)
         result = client.connect()
-        if "✅" in result:
+        if "[OK]" in result:
             client.close()
         return result
     
     if action == "ping":
         if not host:
-            return "❌ Host required."
+            return "[FAIL] Host required."
         
         result = NetworkDiagnostics.ping(host)
         if "error" in result:
-            return f"❌ Ping error: {result['error']}"
+            return f"[FAIL] Ping error: {result['error']}"
         
         lines = [f"### PING: {host}", ""]
         lines.append(f"**Sent**: {result['sent']} | **Received**: {result['received']}")
@@ -448,17 +448,17 @@ def networking_tool(
     
     if action == "dns":
         if not host:
-            return "❌ Hostname required."
+            return "[FAIL] Hostname required."
         
         result = NetworkDiagnostics.dns_lookup(host)
         if "error" in result:
-            return f"❌ DNS error: {result['error']}"
+            return f"[FAIL] DNS error: {result['error']}"
         
         return f"### DNS LOOKUP: {host}\n\n**Hostname**: {result['hostname']}\n**IP**: {result['ip']}"
     
     if action == "traceroute":
         if not host:
-            return "❌ Host required."
+            return "[FAIL] Host required."
         
         results = NetworkDiagnostics.traceroute(host)
         lines = [f"### TRACEROUTE: {host}", ""]
@@ -468,12 +468,12 @@ def networking_tool(
     
     if action == "port_scan":
         if not host:
-            return "❌ Host required."
+            return "[FAIL] Host required."
         
         results = NetworkDiagnostics.port_scan(host)
         lines = [f"### PORT SCAN: {host}", ""]
         for port, status in sorted(results.items()):
-            icon = "✅" if status == "open" else "❌"
+            icon = "[OK]" if status == "open" else "[FAIL]"
             lines.append(f"{icon} Port {port}: {status}")
         return "\n".join(lines)
     

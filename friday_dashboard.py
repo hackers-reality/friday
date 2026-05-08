@@ -300,13 +300,13 @@ def dashboard_tool(
         server = DashboardServer(port)
         result = server.start()
         if result.get("success"):
-            return f"### DASHBOARD START\n\n✅ Dashboard started at {result['url']}"
+            return f"### DASHBOARD START\n\n[OK] Dashboard started at {result['url']}"
         else:
-            return f"❌ Start error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Start error: {result.get('error', 'Unknown')}"
     
     if action == "stop":
         # In reality, would need to keep reference to server
-        return "### DASHBOARD STOP\n\n✅ Stop signal sent (not fully implemented)."
+        return "### DASHBOARD STOP\n\n[OK] Stop signal sent (not fully implemented)."
     
     if action == "get_html":
         return DASHBOARD_HTML

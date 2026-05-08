@@ -138,7 +138,7 @@ def extract_text_from_image(image_path: str) -> str:
             return text
             
         except ImportError:
-            return "❌ OCR not available. Install: pip install easyocr OR pytesseract"
+            return "[FAIL] OCR not available. Install: pip install easyocr OR pytesseract"
         except Exception as e:
             return f"OCR error: {e}"
             
@@ -285,7 +285,7 @@ def scan_screen_for_objects() -> str:
         return "\n".join(lines)
         
     except ImportError:
-        return "❌ mss not installed. Run: pip install mss"
+        return "[FAIL] mss not installed. Run: pip install mss"
     except Exception as e:
         return f"Screen scan error: {e}"
 
@@ -304,17 +304,17 @@ def vision_tool(
     if action == "analyze":
         result = analyze_image(image_path, image_b64)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         return f"### IMAGE ANALYSIS\n\n{result.get('description', 'No description')}"
     
     if action == "objects":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         objects = detect_objects(image_path)
         if not objects:
             return "No objects detected."
         if "error" in objects[0]:
-            return f"❌ {objects[0]['error']}"
+            return f"[FAIL] {objects[0]['error']}"
         
         lines = [f"### OBJECTS DETECTED ({len(objects)})", ""]
         for obj in objects[:30]:
@@ -323,16 +323,16 @@ def vision_tool(
     
     if action == "ocr":
         if not image_path:
-            return "❌ Image path required."
+            return "[FAIL] Image path required."
         text = extract_text_from_image(image_path)
         return f"### TEXT EXTRACTED\n\n{text[:1000]}"
     
     if action == "video":
         if not image_path:
-            return "❌ Video path required."
+            return "[FAIL] Video path required."
         result = analyze_video(image_path)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         
         lines = ["### VIDEO ANALYSIS", ""]
         lines.append(f"**Duration**: {result['duration_seconds']:.1f}s")
@@ -346,11 +346,11 @@ def vision_tool(
     
     if action == "compare":
         if not image_path or "," not in image_path:
-            return "❌ Provide two image paths separated by comma."
+            return "[FAIL] Provide two image paths separated by comma."
         img1, img2 = [p.strip() for p in image_path.split(",", 1)]
         result = compare_images(img1, img2)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         
         return f"""### IMAGE COMPARISON
 **Similarity**: {result['similarity']:.1%}

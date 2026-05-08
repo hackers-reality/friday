@@ -391,8 +391,8 @@ def voice_tool(
         tts = TextToSpeech()
         
         lines = ["### VOICE STATUS", ""]
-        lines.append(f"**Speech-to-Text**: {'✅ Available' if stt.available else '❌ Not available'}")
-        lines.append(f"**Text-to-Speech**: {'✅ Available' if tts.available else '❌ Not available'}")
+        lines.append(f"**Speech-to-Text**: {'[OK] Available' if stt.available else '[FAIL] Not available'}")
+        lines.append(f"**Text-to-Speech**: {'[OK] Available' if tts.available else '[FAIL] Not available'}")
         
         if tts.available and hasattr(tts, "engine") and tts.engine:
             voices = tts.engine.getProperty("voices")
@@ -406,7 +406,7 @@ def voice_tool(
     
     if action == "speak":
         if not text:
-            return "❌ Text required for speech."
+            return "[FAIL] Text required for speech."
         tts = TextToSpeech()
         result = tts.speak(text)
         return f"### SPEAK\n\nSuccess: Spoke text" if result['success'] else f"### SPEAK\n\nError: {result.get('error', 'Unknown')}"
@@ -417,18 +417,18 @@ def voice_tool(
         if result["success"]:
             return f"### LISTEN\n\n**Heard**: {result['text']}"
         else:
-            return f"❌ Listen error: {result['error']}"
+            return f"[FAIL] Listen error: {result['error']}"
     
     if action == "save":
         if not text:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         tts = TextToSpeech()
         output_file = f"friday_speech_{int(time.time())}.mp3"
         result = tts.save_to_file(text, output_file)
         if result["success"]:
-            return f"### SAVE\n\n✅ Saved to {result['file']}"
+            return f"### SAVE\n\n[OK] Saved to {result['file']}"
         else:
-            return f"❌ Save error: {result['error']}"
+            return f"[FAIL] Save error: {result['error']}"
     
     if action == "wake_start":
         detector = WakeWordDetector(wake_word)
@@ -442,20 +442,20 @@ def voice_tool(
     
     if action == "set_voice":
         if not text:
-            return "❌ Voice name required."
+            return "[FAIL] Voice name required."
         tts = TextToSpeech()
         success = tts.set_voice(text)
-        return f"### SET VOICE\n\n{'✅ Voice set' if success else '❌ Voice not found'}"
+        return f"### SET VOICE\n\n{'[OK] Voice set' if success else '[FAIL] Voice not found'}"
     
     if action == "set_rate" and rate is not None:
         tts = TextToSpeech()
         tts.set_rate(rate)
-        return f"### SET RATE\n\n✅ Rate set to {rate} wpm"
+        return f"### SET RATE\n\n[OK] Rate set to {rate} wpm"
     
     if action == "set_volume" and volume is not None:
         tts = TextToSpeech()
         tts.set_volume(volume)
-        return f"### SET VOLUME\n\n✅ Volume set to {volume}"
+        return f"### SET VOLUME\n\n[OK] Volume set to {volume}"
     
     return f"Unknown action: {action}"
 

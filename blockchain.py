@@ -301,29 +301,29 @@ def blockchain_tool(
         lines = ["### BLOCKCHAIN STATUS", ""]
         lines.append(f"**Blocks**: {len(chain.chain)}")
         lines.append(f"**Difficulty**: {chain.difficulty}")
-        lines.append(f"**Valid**: {'✅' if chain.is_valid() else '❌'}")
+        lines.append(f"**Valid**: {'[OK]' if chain.is_valid() else '[FAIL]'}")
         lines.append(f"**Pending Transactions**: {len(chain.pending_transactions)}")
         return "\n".join(lines)
     
     if action == "transaction":
         if not from_addr or not to_addr or amount <= 0:
-            return "❌ Provide from_addr, to_addr, and amount > 0."
+            return "[FAIL] Provide from_addr, to_addr, and amount > 0."
         
         chain = get_blockchain()
         index = chain.add_transaction(from_addr, to_addr, amount)
-        return f"✅ Transaction added to block {index} (pending mining)"
+        return f"[OK] Transaction added to block {index} (pending mining)"
     
     if action == "mine":
         if not miner:
-            return "❌ Miner address required."
+            return "[FAIL] Miner address required."
         
         chain = get_blockchain()
         block = chain.mine_pending_transactions(miner)
-        return f"✅ Block {block.index} mined! Hash: {block.hash[:16]}..."
+        return f"[OK] Block {block.index} mined! Hash: {block.hash[:16]}..."
     
     if action == "balance":
         if not address:
-            return "❌ Address required."
+            return "[FAIL] Address required."
         
         chain = get_blockchain()
         balance = chain.get_balance(address)
@@ -337,7 +337,7 @@ def blockchain_tool(
     
     if action == "create_wallet":
         wallet = get_wallet()
-        return f"✅ Wallet created: {wallet.get_address()[:20]}..."
+        return f"[OK] Wallet created: {wallet.get_address()[:20]}..."
     
     return f"Unknown action: {action}"
 

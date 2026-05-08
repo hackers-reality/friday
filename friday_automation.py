@@ -569,7 +569,7 @@ def automation_tool(
     if action == "status":
         browser = BrowserAutomation()
         lines = ["### AUTOMATION STATUS", ""]
-        lines.append(f"**Browser Automation**: {'✅ Available' if browser.available else '❌ Not available'}")
+        lines.append(f"**Browser Automation**: {'[OK] Available' if browser.available else '[FAIL] Not available'}")
         lines.append(f"**Backend**: {browser.backend or 'None'}")
         return "\n".join(lines)
     
@@ -577,43 +577,43 @@ def automation_tool(
         browser = BrowserAutomation()
         result = browser.start_browser(headless=params.get("headless", False))
         if result["success"]:
-            return "### BROWSER\n\n✅ Started"
+            return "### BROWSER\n\n[OK] Started"
         else:
-            return f"### BROWSER\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### BROWSER\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "browser_navigate":
         if not target:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         browser = BrowserAutomation()
         if not browser.driver and not hasattr(browser, "page"):
             browser.start_browser()
         result = browser.navigate(target)
         if result["success"]:
-            return "### NAVIGATE\n\n✅ Navigated"
+            return "### NAVIGATE\n\n[OK] Navigated"
         else:
-            return f"### NAVIGATE\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### NAVIGATE\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "browser_click":
         if not target:
-            return "❌ Selector required."
+            return "[FAIL] Selector required."
         browser = BrowserAutomation()
         result = browser.click(target)
         if result["success"]:
-            return "### CLICK\n\n✅ Clicked"
+            return "### CLICK\n\n[OK] Clicked"
         else:
-            return f"### CLICK\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### CLICK\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "browser_screenshot":
         browser = BrowserAutomation()
         result = browser.screenshot(target)
         if result["success"]:
-            return f"### SCREENSHOT\n\n✅ Saved to {result.get('file', 'unknown')}"
+            return f"### SCREENSHOT\n\n[OK] Saved to {result.get('file', 'unknown')}"
         else:
-            return f"### SCREENSHOT\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### SCREENSHOT\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "file_rename":
         if not target:
-            return "❌ Directory required."
+            return "[FAIL] Directory required."
         file_auto = FileAutomation()
         result = file_auto.batch_rename(
             target,
@@ -627,27 +627,27 @@ def automation_tool(
     
     if action == "file_organize":
         if not target:
-            return "❌ Directory required."
+            return "[FAIL] Directory required."
         file_auto = FileAutomation()
         result = file_auto.organize_files(target, by=params.get("by", "extension"))
         return f"### ORGANIZE\n\nOrganized {len(result['organized'])} files"
     
     if action == "file_duplicates":
         if not target:
-            return "❌ Directory required."
+            return "[FAIL] Directory required."
         file_auto = FileAutomation()
         result = file_auto.find_duplicates(target)
         return f"### DUPLICATES\n\nFound {len(result['duplicates'])} duplicate groups"
     
     if action == "system_command":
         if not target:
-            return "❌ Command required."
+            return "[FAIL] Command required."
         system = SystemAutomation()
         result = system.run_command(target)
         if result["success"]:
-            return f"### COMMAND\n\n✅ Success\n{result.get('stdout', '')}"
+            return f"### COMMAND\n\n[OK] Success\n{result.get('stdout', '')}"
         else:
-            return f"### COMMAND\n\n❌ Failed\n{result.get('error', '')}"
+            return f"### COMMAND\n\n[FAIL] Failed\n{result.get('error', '')}"
     
     if action == "system_monitor":
         system = SystemAutomation()
@@ -659,17 +659,17 @@ def automation_tool(
     
     if action == "rpa_create":
         if not target:
-            return "❌ Workflow name required."
+            return "[FAIL] Workflow name required."
         rpa = RPA()
         result = rpa.create_workflow(target, params.get("steps", []))
         if result["success"]:
-            return "### RPA CREATE\n\n✅ Created"
+            return "### RPA CREATE\n\n[OK] Created"
         else:
-            return f"### RPA CREATE\n\n❌ {result.get('error', 'Unknown')}"
+            return f"### RPA CREATE\n\n[FAIL] {result.get('error', 'Unknown')}"
     
     if action == "rpa_run":
         if not target:
-            return "❌ Workflow name required."
+            return "[FAIL] Workflow name required."
         rpa = RPA()
         result = rpa.run_workflow(target)
         return f"### RPA RUN\n\nCompleted {len(result.get('results', []))} steps"

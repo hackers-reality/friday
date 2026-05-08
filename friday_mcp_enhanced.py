@@ -3,12 +3,12 @@ Friday MCP Server - Phase 6.2 Enhanced
 Expose Friday's tools via Model Context Protocol.
 Extended with browser history, file generation, goal management.
 """
-from __future__ import annotations__
+from __future__ import annotations
 
 import os
-import sys'
-import json'
-from typing import Dict, Any, List, Optional'
+import sys
+import json
+from typing import Dict, Any, List, Optional
 
 try:
     from mcp import Server, Tool, types
@@ -35,9 +35,9 @@ if MCP_AVAILABLE:
             list_recent_history, generate_file, generate_file_llm,
             situational_awareness, goals_tool_handler, startup_tool_handler,
         )
-        print("✅ Friday tools imported for MCP")
+        print("[OK] Friday tools imported for MCP")
     except Exception as e:
-        print(f"❌ Friday tools import error: {e}")
+        print(f"[FAIL] Friday tools import error: {e}")
 
 # ─── MCP Server Setup ────────────────────────────────#
 
@@ -248,13 +248,13 @@ def create_mcp_server() -> Optional[Server]:
 async def main():
     """Run the MCP server."""
     if not MCP_AVAILABLE:
-        print("❌ MCP (Model Context Protocol) is not available.")
+        print("[FAIL] MCP (Model Context Protocol) is not available.")
         print("Install with: pip install mcp")
         sys.exit(1)
 
     server = create_mcp_server()
     if not server:
-        print("❌ Failed to create MCP server.")
+        print("[FAIL] Failed to create MCP server.")
         sys.exit(1)
 
     print("Starting Friday MCP Server...")

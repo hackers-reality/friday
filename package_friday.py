@@ -102,7 +102,7 @@ def create_spec_file() -> str:
     with open(spec_path, "w", encoding="utf-8") as f:
         f.write(SPEC_CONTENT)
     
-    return f"✅ Spec file created: {spec_path}"
+    return f"[OK] Spec file created: {spec_path}"
 
 
 def build_exe() -> str:
@@ -119,12 +119,12 @@ def build_exe() -> str:
         sys.argv = ['pyinstaller', '--clean', 'Friday.spec']
         pyinstaller_main.run()
         
-        return "✅ Build complete! Check dist/Friday/ directory."
+        return "[OK] Build complete! Check dist/Friday/ directory."
     
     except ImportError:
-        return "❌ PyInstaller not installed. Install: pip install pyinstaller"
+        return "[FAIL] PyInstaller not installed. Install: pip install pyinstaller"
     except Exception as e:
-        return f"❌ Build error: {str(e)}"
+        return f"[FAIL] Build error: {str(e)}"
 
 
 def create_simple_batch() -> str:
@@ -140,7 +140,7 @@ pause
     with open(batch_path, "w") as f:
         f.write(bat_content)
     
-    return f"✅ Batch file created: {batch_path}"
+    return f"[OK] Batch file created: {batch_path}"
 
 
 def create_requirements() -> str:
@@ -178,7 +178,7 @@ def create_requirements() -> str:
     with open(req_path, "w") as f:
         f.write("\n".join(requirements))
     
-    return f"✅ Requirements file created: {req_path}"
+    return f"[OK] Requirements file created: {req_path}"
 
 
 if __name__ == "__main__":

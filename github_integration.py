@@ -158,18 +158,18 @@ def github_tool(
     client = get_github_client()
     
     if not client.token:
-        return "❌ GITHUB_TOKEN not set. Get token from: https://github.com/settings/tokens"
+        return "[FAIL] GITHUB_TOKEN not set. Get token from: https://github.com/settings/tokens"
     
     if action == "status":
         if client.is_authenticated():
             user = client.get_user()
-            return f"✅ Authenticated as: {user.get('login', 'Unknown')}"
-        return "❌ Not authenticated. Check GITHUB_TOKEN."
+            return f"[OK] Authenticated as: {user.get('login', 'Unknown')}"
+        return "[FAIL] Not authenticated. Check GITHUB_TOKEN."
     
     if action == "repos":
         repos = client.list_repos()
         if isinstance(repos, dict) and "error" in repos:
-            return f"❌ {repos['error']}"
+            return f"[FAIL] {repos['error']}"
         lines = ["### YOUR REPOSITORIES", ""]
         for r in repos[:20]:
             lines.append(f"**{r['full_name']}** - {r.get('description', 'No description')}")
@@ -177,15 +177,15 @@ def github_tool(
     
     if action == "create_repo":
         if not title:
-            return "❌ Repository name required."
+            return "[FAIL] Repository name required."
         result = client.create_repo(title, body or "")
         if "error" in result:
-            return f"❌ {result['error']}"
-        return f"✅ Created repo: {result.get('html_url')}"
+            return f"[FAIL] {result['error']}"
+        return f"[OK] Created repo: {result.get('html_url')}"
     
     if action == "issues":
         if not owner or not repo:
-            return "❌ Owner and repo required."
+            return "[FAIL] Owner and repo required."
         issues = client.list_issues(owner, repo)
         lines = [f"### ISSUES: {owner}/{repo}", ""]
         for issue in issues[:20]:
@@ -194,15 +194,15 @@ def github_tool(
     
     if action == "create_issue":
         if not owner or not repo or not title:
-            return "❌ Owner, repo, and title required."
+            return "[FAIL] Owner, repo, and title required."
         result = client.create_issue(owner, repo, title, body or "")
         if "error" in result:
-            return f"❌ {result['error']}"
-        return f"✅ Created issue: {result.get('html_url')}"
+            return f"[FAIL] {result['error']}"
+        return f"[OK] Created issue: {result.get('html_url')}"
     
     if action == "prs":
         if not owner or not repo:
-            return "❌ Owner and repo required."
+            return "[FAIL] Owner and repo required."
         prs = client.list_prs(owner, repo)
         lines = [f"### PULL REQUESTS: {owner}/{repo}", ""]
         for pr in prs[:20]:
@@ -211,21 +211,21 @@ def github_tool(
     
     if action == "get_file":
         if not owner or not repo or not path:
-            return "❌ Owner, repo, and path required."
+            return "[FAIL] Owner, repo, and path required."
         content = client.get_file_content(owner, repo, path)
         return content[:5000]
     
     if action == "create_file":
         if not owner or not repo or not path or content is None:
-            return "❌ Owner, repo, path, and content required."
+            return "[FAIL] Owner, repo, path, and content required."
         result = client.create_file(owner, repo, path, content, title or "Update file")
         if "error" in result:
-            return f"❌ {result['error']}"
-        return f"✅ File created/updated: {result.get('content', {}).get('html_url', '')}"
+            return f"[FAIL] {result['error']}"
+        return f"[OK] File created/updated: {result.get('content', {}).get('html_url', '')}"
     
     if action == "commits":
         if not owner or not repo:
-            return "❌ Owner and repo required."
+            return "[FAIL] Owner and repo required."
         commits = client.list_commits(owner, repo)
         lines = [f"### RECENT COMMITS: {owner}/{repo}", ""]
         for c in commits[:10]:
@@ -234,7 +234,7 @@ def github_tool(
     
     if action == "search_repos":
         if not query:
-            return "❌ Search query required."
+            return "[FAIL] Search query required."
         repos = client.search_repos(query)
         lines = [f"### SEARCH RESULTS: {query}", ""]
         for r in repos[:10]:
@@ -243,7 +243,7 @@ def github_tool(
     
     if action == "search_code":
         if not query:
-            return "❌ Search query required."
+            return "[FAIL] Search query required."
         results = client.search_code(query)
         lines = [f"### CODE SEARCH: {query}", ""]
         for r in results[:10]:
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     client = get_github_client()
     
     if not client.token:
-        print("❌ Set GITHUB_TOKEN environment variable")
+        print("[FAIL] Set GITHUB_TOKEN environment variable")
     else:
         print("\n--- Status ---")
         print(github_tool("status"))

@@ -293,7 +293,7 @@ class TimeSeriesPredictor:
         # Create sequences
         sequences = self._create_sequences(normalized)
         if not sequences:
-            return "❌ Not enough data. Need more than window_size points."
+            return "[FAIL] Not enough data. Need more than window_size points."
         
         # Split into train/validation
         split = int(0.8 * len(sequences))
@@ -313,7 +313,7 @@ class TimeSeriesPredictor:
             val_loss += (pred[0] - target[0]) ** 2
         val_loss /= len(val_data)
         
-        return f"✅ Training complete. Final loss: {loss_history[-1]:.6f}, Val loss: {val_loss:.6f}"
+        return f"[OK] Training complete. Final loss: {loss_history[-1]:.6f}, Val loss: {val_loss:.6f}"
     
     def predict_next(self, recent_values: List[float]) -> float:
         """Predict the next value."""
@@ -382,22 +382,22 @@ def neural_tool(
     """
     if action == "create":
         if not name or not layer_sizes:
-            return "❌ name and layer_sizes (JSON list) required."
+            return "[FAIL] name and layer_sizes (JSON list) required."
         
         try:
             sizes = json.loads(layer_sizes)
             net = create_network(name, sizes)
-            return f"✅ Created network '{name}' with layers: {sizes}"
+            return f"[OK] Created network '{name}' with layers: {sizes}"
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
     
     if action == "train":
         if not name or not data:
-            return "❌ name and data (JSON list of training data) required."
+            return "[FAIL] name and data (JSON list of training data) required."
         
         net = get_network(name)
         if not net:
-            return f"❌ Network '{name}' not found."
+            return f"[FAIL] Network '{name}' not found."
         
         try:
             train_data = json.loads(data)
@@ -405,28 +405,28 @@ def neural_tool(
             formatted_data = [(train_data[i], train_data[i + 1]) for i in range(len(train_data) - 1)]
             
             loss_history = net.train(formatted_data, epochs=epochs)
-            return f"✅ Training complete. Final loss: {loss_history[-1]:.6f}"
+            return f"[OK] Training complete. Final loss: {loss_history[-1]:.6f}"
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
     
     if action == "predict":
         if not name or not data:
-            return "❌ name and data (JSON list of inputs) required."
+            return "[FAIL] name and data (JSON list of inputs) required."
         
         net = get_network(name)
         if not net:
-            return f"❌ Network '{name}' not found."
+            return f"[FAIL] Network '{name}' not found."
         
         try:
             inputs = json.loads(data)
             prediction = net.predict(inputs)
-            return f"✅ Prediction: {prediction}"
+            return f"[OK] Prediction: {prediction}"
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
     
     if action == "nas":
         if not data:
-            return "❌ data required for NAS."
+            return "[FAIL] data required for NAS."
         
         try:
             dataset = json.loads(data)
@@ -453,11 +453,11 @@ def neural_tool(
             
             return "\n".join(lines)
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
     
     if action == "timeseries":
         if not data:
-            return "❌ data (time series values) required."
+            return "[FAIL] data (time series values) required."
         
         try:
             time_series = json.loads(data)
@@ -468,9 +468,9 @@ def neural_tool(
             # Predict next value
             next_val = predictor.predict_next(time_series)
             
-            return f"{result}\n✅ Next predicted value: {next_val:.2f}"
+            return f"{result}\n[OK] Next predicted value: {next_val:.2f}"
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
     
     return f"Unknown action: {action}"
 

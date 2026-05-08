@@ -212,8 +212,8 @@ class ProactiveScreenMonitor:
     def get_status(self) -> str:
         """Get monitor status."""
         lines = ["### PROACTIVE SCREEN MONITOR STATUS", ""]
-        lines.append(f"✅ Running: {self._thread is not None and self._thread.is_alive()}")
-        lines.append(f"✅ AI Enabled: {self.ai_enabled}")
+        lines.append(f"[OK] Running: {self._thread is not None and self._thread.is_alive()}")
+        lines.append(f"[OK] AI Enabled: {self.ai_enabled}")
         lines.append(f"📸 Screenshots captured: {self.screenshot_count}")
         lines.append(f"📺 Current activity: {self.current_activity[:50]}")
         lines.append(f"⏱ Active for: {time.time() - self.activity_start_time:.0f}s")
@@ -251,7 +251,7 @@ def proactive_monitor_tool(action: str = "status") -> str:
     
     if action == "start":
         monitor.start()
-        return "✅ Proactive screen monitor started. Friday is now watching."
+        return "[OK] Proactive screen monitor started. Friday is now watching."
     
     elif action == "stop":
         monitor.stop()

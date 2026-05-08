@@ -12,18 +12,18 @@ from typing import Optional
 
 def _opencli_binary() -> Optional[str]:
     """Locate the opencli binary. Returns None if not installed."""
+    # On Windows, npm installs opencli.cmd, opencli.ps1, and opencli (shell script)
+    # Prefer .cmd which runs via cmd.exe -> node
     try:
         result = subprocess.run(["where", "opencli"], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
-            path = result.stdout.strip().split("\n")[0].strip()
-            if os.path.isfile(path):
-                return path
-    except Exception:
-        pass
-    try:
-        result = subprocess.run(["opencli", "--version"], capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            return "opencli"
+            paths = [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
+            # Prefer .cmd over .ps1 over extensionless
+            for pref in [".cmd", ".ps1", ""]:
+                for p in paths:
+                    if p.endswith(pref):
+                        if os.path.isfile(p):
+                            return p
     except Exception:
         pass
     return None
@@ -34,10 +34,19 @@ def _run_opencli(args: list, timeout: int = 30) -> str:
     binary = _opencli_binary()
     if not binary:
         raise RuntimeError("OpenCLI not installed. Run: npm install -g @jackwener/opencli")
-    cmd = [binary] + args
+
+    # Build the right command based on file type
+    if binary.endswith(".ps1"):
+        cmd = ["powershell.exe", "-NoProfile", "-File", binary] + args
+    elif binary.endswith(".cmd"):
+        cmd = [binary] + args
+    else:
+        cmd = [binary] + args
+
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if result.returncode != 0:
-        return f"[FAIL] {result.stderr or result.stdout}"
+        msg = (result.stderr or result.stdout).strip()
+        return f"[FAIL] {msg}" if msg else "[FAIL] Command failed"
     return result.stdout.strip()
 
 
@@ -210,3 +219,144 @@ def instagram_message_opencli(username: str, message: str) -> str:
         return f"Message sent to {username} via OpenCLI"
     except Exception as e:
         return f"Instagram OpenCLI message failed: {e}"
+
+
+# ======== ADDITIONAL OPENCLI BROWSER COMMANDS ========
+
+def opencli_tab_list() -> str:
+    """List all browser tabs with their indices, URLs, and titles."""
+    try:
+        return _run_opencli(["browser", "tab", "list"])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Tab list error: {e}"
+
+
+def opencli_tab_new(url: str = "") -> str:
+    """Open a new browser tab, optionally navigating to a URL."""
+    try:
+        args = ["browser", "tab", "new"]
+        if url:
+            args.append(url)
+        return _run_opencli(args)
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Tab new error: {e}"
+
+
+def opencli_tab_select(target_id: str) -> str:
+    """Switch to a specific tab by its target ID."""
+    try:
+        return _run_opencli(["browser", "tab", "select", target_id])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Tab select error: {e}"
+
+
+def opencli_tab_close(target_id: str = "") -> str:
+    """Close a browser tab by target ID, or the current tab if empty."""
+    try:
+        args = ["browser", "tab", "close"]
+        if target_id:
+            args.append(target_id)
+        return _run_opencli(args)
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Tab close error: {e}"
+
+
+def opencli_close() -> str:
+    """Release the current automation tab lease."""
+    try:
+        return _run_opencli(["browser", "close"])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Close error: {e}"
+
+
+def opencli_wait_selector(selector: str, timeout_ms: int = 10000) -> str:
+    """Wait for a CSS selector to appear in the page."""
+    try:
+        return _run_opencli(["browser", "wait", "selector", selector, "--timeout", str(timeout_ms)])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Wait error: {e}"
+
+
+def opencli_wait_text(text: str, timeout_ms: int = 10000) -> str:
+    """Wait for text to appear on the page."""
+    try:
+        return _run_opencli(["browser", "wait", "text", text, "--timeout", str(timeout_ms)])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Wait text error: {e}"
+
+
+def opencli_find(selector: str, limit: int = 10) -> str:
+    """Find elements matching a CSS selector and return their details."""
+    try:
+        return _run_opencli(["browser", "find", "--css", selector, "--limit", str(limit)])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Find error: {e}"
+
+
+def opencli_get_url() -> str:
+    """Get the current page URL."""
+    try:
+        return _run_opencli(["browser", "get", "url"])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Get URL error: {e}"
+
+
+def opencli_get_title() -> str:
+    """Get the current page title."""
+    try:
+        return _run_opencli(["browser", "get", "title"])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Get title error: {e}"
+
+
+def opencli_network() -> str:
+    """Inspect network requests made by the current page."""
+    try:
+        return _run_opencli(["browser", "network"])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Network error: {e}"
+
+
+def opencli_bind(domain: str = "") -> str:
+    """Bind OpenCLI to the current Chrome tab for persistent interaction."""
+    try:
+        args = ["browser", "bind"]
+        if domain:
+            args.extend(["--domain", domain])
+        return _run_opencli(args)
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Bind error: {e}"
+
+
+def opencli_unbind() -> str:
+    """Unbind from the current Chrome tab."""
+    try:
+        return _run_opencli(["browser", "unbind"])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Unbind error: {e}"

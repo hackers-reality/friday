@@ -76,7 +76,7 @@ def get_profile_summary() -> str:
     if courses:
         lines.append("\n**Current Courses:**")
         for c in courses:
-            status = "✅ Done" if c.get("completed") else "⏳ In Progress"
+            status = "[OK] Done" if c.get("completed") else "⏳ In Progress"
             lines.append(f"  - {c.get('name', 'Unknown')}: {c.get('start_date', '?')} to {c.get('end_date', '?')} {status}")
             if c.get("url"):
                 lines.append(f"    URL: {c['url']}")
@@ -163,7 +163,7 @@ def add_goal(
     goals.append(goal)
     save_goals(goals)
     
-    return f"✅ Goal added: {title} (ID: {goal['id']})"
+    return f"[OK] Goal added: {title} (ID: {goal['id']})"
 
 def update_goal(goal_id: str, **kwargs) -> str:
     """Update a goal's fields."""
@@ -174,8 +174,8 @@ def update_goal(goal_id: str, **kwargs) -> str:
                 if k in g:
                     g[k] = v
             save_goals(goals)
-            return f"✅ Goal {goal_id} updated."
-    return f"❌ Goal {goal_id} not found."
+            return f"[OK] Goal {goal_id} updated."
+    return f"[FAIL] Goal {goal_id} not found."
 
 def complete_goal(goal_id: str) -> str:
     """Mark a goal as completed."""
@@ -188,7 +188,7 @@ def delete_goal(goal_id: str) -> str:
     if len(new_goals) < len(goals):
         save_goals(new_goals)
         return f"🗑️ Goal {goal_id} deleted."
-    return f"❌ Goal {goal_id} not found."
+    return f"[FAIL] Goal {goal_id} not found."
 
 def list_goals(status_filter: Optional[str] = None) -> str:
     """List all goals, optionally filtered by status."""
@@ -204,7 +204,7 @@ def list_goals(status_filter: Optional[str] = None) -> str:
     for g in goals:
         status_emoji = {
             "active": "⏳",
-            "completed": "✅",
+            "completed": "[OK]",
             "overdue": "🔴",
             "paused": "⏸",
         }.get(g.get("status", "active"), "⏳")
@@ -360,7 +360,7 @@ def sync_calendar_to_goals() -> str:
             synced += 1
         
         save_goals(goals)
-        return f"✅ Synced {synced} events from calendar to goals."
+        return f"[OK] Synced {synced} events from calendar to goals."
     
     except Exception as e:
         return f"Sync error: {str(e)}"
@@ -391,9 +391,9 @@ def check_goal_progress(goal: Dict[str, Any]) -> Dict[str, Any]:
             from browser_history_tools import check_visited_today
             if check_visited_today(verification_data):
                 result["verified"] = True
-                result["message"] = f"✅ Visited {verification_data} today."
+                result["message"] = f"[OK] Visited {verification_data} today."
             else:
-                result["message"] = f"❌ Haven't visited {verification_data} today."
+                result["message"] = f"[FAIL] Haven't visited {verification_data} today."
         except Exception as e:
             result["message"] = f"Verification error: {e}"
     
@@ -405,7 +405,7 @@ def daily_goal_check() -> str:
     active_goals = [g for g in goals if g.get("status") == "active"]
     
     if not active_goals:
-        return "✅ No active goals to check."
+        return "[OK] No active goals to check."
     
     lines = ["### DAILY GOAL CHECK", ""]
     all_passed = True
@@ -427,7 +427,7 @@ def daily_goal_check() -> str:
     if all_passed:
         lines.append("🎉 All goals verified for today!")
     else:
-        lines.append("⚠️ Some goals need attention. Friday will take action.")
+        lines.append("[WARN] Some goals need attention. Friday will take action.")
     
     return "\n".join(lines)
 
@@ -445,7 +445,7 @@ def enforce_goal(goal_id: str) -> str:
             break
     
     if not goal:
-        return f"❌ Goal {goal_id} not found."
+        return f"[FAIL] Goal {goal_id} not found."
     
     lines = [f"### ENFORCEMENT: {goal.get('title')}", ""]
     
@@ -473,15 +473,15 @@ def enforce_goal(goal_id: str) -> str:
         try:
             import webbrowser
             webbrowser.open(url)
-            lines.append(f"✅ Opened required URL: {url}")
+            lines.append(f"[OK] Opened required URL: {url}")
         except Exception as e:
-            lines.append(f"❌ Failed to open URL: {e}")
+            lines.append(f"[FAIL] Failed to open URL: {e}")
     
     # 3. Update scolding count
     goal["scolding_count"] = goal.get("scolding_count", 0) + 1
     save_goals(goals)
     
-    lines.append(f"\n⚠️ Scolding count: {goal['scolding_count']}")
+    lines.append(f"\n[WARN] Scolding count: {goal['scolding_count']}")
     lines.append("\n[FRIDAY] Boss, get back to work! I'm watching you. 😤")
     
     return "\n".join(lines)

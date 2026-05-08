@@ -660,7 +660,7 @@ def compile_tool(
     Actions: tokenize, parse, interpret, run
     """
     if not code:
-        return "❌ Code required."
+        return "[FAIL] Code required."
     
     if action == "tokenize":
         try:
@@ -671,7 +671,7 @@ def compile_tool(
                 lines.append(f"{t.type}: {t.value}")
             return "\n".join(lines)
         except SyntaxError as e:
-            return f"❌ Lexer error: {e}"
+            return f"[FAIL] Lexer error: {e}"
     
     if action == "parse":
         try:
@@ -684,7 +684,7 @@ def compile_tool(
                 lines.append(f"{node}")
             return "\n".join(lines)
         except SyntaxError as e:
-            return f"❌ Parser error: {e}"
+            return f"[FAIL] Parser error: {e}"
     
     if action == "interpret" or action == "run":
         try:
@@ -700,7 +700,7 @@ def compile_tool(
                 lines.append(f"Result: {result}")
             return "\n".join(lines)
         except Exception as e:
-            return f"❌ Runtime error: {e}"
+            return f"[FAIL] Runtime error: {e}"
     
     return f"Unknown action: {action}"
 

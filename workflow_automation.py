@@ -419,36 +419,36 @@ def workflow_tool(
     
     if action == "create":
         if not name:
-            return "❌ Workflow name required."
+            return "[FAIL] Workflow name required."
         workflow = manager.create_workflow(name, description or "")
         manager.save_workflow(workflow)
-        return f"✅ Created workflow: {name}"
+        return f"[OK] Created workflow: {name}"
     
     if action == "add_step":
         if not name or not steps:
-            return "❌ Workflow name and steps (JSON) required."
+            return "[FAIL] Workflow name and steps (JSON) required."
         
         workflow = manager.get_workflow(name)
         if not workflow:
-            return f"❌ Workflow not found: {name}"
+            return f"[FAIL] Workflow not found: {name}"
         
         try:
             step_data = json.loads(steps)
             step = WorkflowStep.from_dict(step_data)
             if workflow.add_step(step):
                 manager.save_workflow(workflow)
-                return f"✅ Added step: {step.id}"
-            return f"❌ Step already exists: {step.id}"
+                return f"[OK] Added step: {step.id}"
+            return f"[FAIL] Step already exists: {step.id}"
         except Exception as e:
-            return f"❌ Error adding step: {e}"
+            return f"[FAIL] Error adding step: {e}"
     
     if action == "execute":
         if not name:
-            return "❌ Workflow name required."
+            return "[FAIL] Workflow name required."
         
         result = manager.execute_workflow(name)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         
         lines = [f"### WORKFLOW EXECUTION: {name}", ""]
         lines.append(f"**Status**: {result['status']}")
@@ -460,11 +460,11 @@ def workflow_tool(
     
     if action == "status":
         if not name:
-            return "❌ Workflow name required."
+            return "[FAIL] Workflow name required."
         
         workflow = manager.get_workflow(name)
         if not workflow:
-            return f"❌ Workflow not found: {name}"
+            return f"[FAIL] Workflow not found: {name}"
         
         status = workflow.get_status()
         lines = [f"### WORKFLOW: {name}", ""]
@@ -475,16 +475,16 @@ def workflow_tool(
         lines.append("")
         lines.append("**Step Details**:")
         for step in workflow.steps.values():
-            icon = "✅" if step.status == "completed" else "❌" if step.status == "failed" else "⏸" if step.status == "pending" else "🔄"
+            icon = "[OK]" if step.status == "completed" else "[FAIL]" if step.status == "failed" else "⏸" if step.status == "pending" else "🔄"
             lines.append(f"  {icon} {step.id}: {step.action}")
         return "\n".join(lines)
     
     if action == "delete":
         if not name:
-            return "❌ Workflow name required."
+            return "[FAIL] Workflow name required."
         if manager.delete_workflow(name):
-            return f"✅ Deleted workflow: {name}"
-        return f"❌ Workflow not found: {name}"
+            return f"[OK] Deleted workflow: {name}"
+        return f"[FAIL] Workflow not found: {name}"
     
     return f"Unknown action: {action}"
 

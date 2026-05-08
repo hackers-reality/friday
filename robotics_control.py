@@ -82,7 +82,7 @@ class RobotArm:
     def move_joint(self, joint_index: int, angle: float) -> str:
         """Move a specific joint to an angle (radians)."""
         if joint_index < 0 or joint_index >= self.num_joints:
-            return f"❌ Invalid joint index: {joint_index}"
+            return f"[FAIL] Invalid joint index: {joint_index}"
         
         # Clamp to limits
         min_limit, max_limit = self.joint_limits[joint_index]
@@ -90,7 +90,7 @@ class RobotArm:
         
         self.state.joint_angles[joint_index] = angle
         self._calculate_forward_kinematics()
-        return f"✅ Joint {joint_index} moved to {angle:.2f} rad ({math.degrees(angle):.1f}°)"
+        return f"[OK] Joint {joint_index} moved to {angle:.2f} rad ({math.degrees(angle):.1f}°)"
     
     def move_to_position(self, x: float, y: float, z: float) -> str:
         """Move end-effector to a position (inverse kinematics - simplified)."""
@@ -105,17 +105,17 @@ class RobotArm:
             self.state.joint_angles[1] = distance - sum(self.link_lengths[:-1])
         
         self._calculate_forward_kinematics()
-        return f"✅ Moved to position ({x:.2f}, {y:.2f}, {z:.2f})"
+        return f"[OK] Moved to position ({x:.2f}, {y:.2f}, {z:.2f})"
     
     def grip(self, action: str = "close") -> str:
         """Control gripper."""
         if action == "close":
             self.state.gripper_state = "closed"
-            return "✅ Gripper closed."
+            return "[OK] Gripper closed."
         elif action == "open":
             self.state.gripper_state = "open"
-            return "✅ Gripper opened."
-        return f"❌ Unknown action: {action}"
+            return "[OK] Gripper opened."
+        return f"[FAIL] Unknown action: {action}"
     
     def get_state(self) -> str:
         """Get current robot state."""
@@ -130,7 +130,7 @@ class RobotArm:
         self.state.joint_angles = [0.0] * self.num_joints
         self.state.gripper_state = "open"
         self._calculate_forward_kinematics()
-        return "✅ Robot reset to home position."
+        return "[OK] Robot reset to home position."
 
 
 # ─── Robot Swarm ─────────────────────────────────#
@@ -150,16 +150,16 @@ class RobotSwarm:
     def add_robot(self, name: str, num_joints: int = 6) -> str:
         """Add a robot to the swarm."""
         if name in self.robots:
-            return f"❌ Robot '{name}' already exists."
+            return f"[FAIL] Robot '{name}' already exists."
         self.robots[name] = RobotArm(name, num_joints)
-        return f"✅ Added robot: {name}"
+        return f"[OK] Added robot: {name}"
     
     def remove_robot(self, name: str) -> str:
         """Remove a robot from the swarm."""
         if name not in self.robots:
-            return f"❌ Robot '{name}' not found."
+            return f"[FAIL] Robot '{name}' not found."
         del self.robots[name]
-        return f"✅ Removed robot: {name}"
+        return f"[OK] Removed robot: {name}"
     
     def broadcast_command(self, command: str, params: Dict[str, Any] = None) -> str:
         """Send command to all robots."""
@@ -310,7 +310,7 @@ def robotics_tool(
     
     if action == "swarm_command":
         if not robot_name:
-            return "❌ robot_name required for swarm_command."
+            return "[FAIL] robot_name required for swarm_command."
         swarm = get_swarm()
         params = {"action": grip_action} if grip_action else {}
         return swarm.broadcast_command(robot_name, params)

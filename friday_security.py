@@ -414,7 +414,7 @@ def security_tool(
     
     if action == "port_scan":
         if not target:
-            return "❌ Host required."
+            return "[FAIL] Host required."
         scanner = PortScanner()
         if "ports" in params:
             ports = params["ports"]
@@ -425,12 +425,12 @@ def security_tool(
         lines = [f"### PORT SCAN: {target}", ""]
         lines.append(f"**Open Ports**: {result['open_count']}/{result['scanned_ports']}")
         for port in result["open_ports"]:
-            lines.append(f"  - Port {port['port']}: {port['service']} ✅")
+            lines.append(f"  - Port {port['port']}: {port['service']} [OK]")
         return "\n".join(lines)
     
     if action == "ssl_check":
         if not target:
-            return "❌ Hostname required."
+            return "[FAIL] Hostname required."
         analyzer = SSLAnalyzer()
         result = analyzer.check_ssl(target)
         if result["success"]:
@@ -440,31 +440,31 @@ def security_tool(
 **Protocol**: {result['protocol']}
 **Valid Until**: {result['not_after']}"""
         else:
-            return f"❌ SSL check error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] SSL check error: {result.get('error', 'Unknown')}"
     
     if action == "hash_file":
         if not target:
-            return "❌ File path required."
+            return "[FAIL] File path required."
         algorithm = params.get("algorithm", "sha256")
         result = HashAnalyzer.calculate_file_hash(target, algorithm)
         if result["success"]:
             return f"### FILE HASH\n\n**Algorithm**: {algorithm}\n**Hash**: {result['hash']}"
         else:
-            return f"❌ Hash error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Hash error: {result.get('error', 'Unknown')}"
     
     if action == "hash_check":
         if not target or "expected" not in params:
-            return "❌ File path and expected hash required."
+            return "[FAIL] File path and expected hash required."
         algorithm = params.get("algorithm", "sha256")
         result = HashAnalyzer.check_integrity(target, params["expected"], algorithm)
         if result["success"]:
-            return f"### INTEGRITY CHECK\n\n{'✅ Valid' if result['valid'] else '❌ Invalid'}\nExpected: {result['expected_hash']}\nActual: {result['actual_hash']}"
+            return f"### INTEGRITY CHECK\n\n{'[OK] Valid' if result['valid'] else '[FAIL] Invalid'}\nExpected: {result['expected_hash']}\nActual: {result['actual_hash']}"
         else:
-            return f"❌ Check error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Check error: {result.get('error', 'Unknown')}"
     
     if action == "password_strength":
         if not target:
-            return "❌ Password required."
+            return "[FAIL] Password required."
         result = PasswordAnalyzer.check_strength(target)
         return f"""### PASSWORD STRENGTH
 **Strength**: {result['strength']}
@@ -474,7 +474,7 @@ def security_tool(
     
     if action == "security_headers":
         if not target:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         analyzer = SecurityHeaders()
         result = analyzer.analyze(target)
         if result["success"]:
@@ -485,37 +485,37 @@ def security_tool(
                 lines.append("**Missing**: " + ", ".join(result["missing_headers"]))
             return "\n".join(lines)
         else:
-            return f"❌ Headers error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Headers error: {result.get('error', 'Unknown')}"
     
     if action == "dnssec":
         if not target:
-            return "❌ Domain required."
+            return "[FAIL] Domain required."
         dnssec = DNSSecurity()
         result = dnssec.check_dnssec(target)
         if result["success"]:
-            return f"### DNSSEC CHECK\n\n**Domain**: {target}\n**DNSSEC Enabled**: {'✅' if result['dnssec_enabled'] else '❌'}"
+            return f"### DNSSEC CHECK\n\n**Domain**: {target}\n**DNSSEC Enabled**: {'[OK]' if result['dnssec_enabled'] else '[FAIL]'}"
         else:
-            return f"❌ DNSSEC error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] DNSSEC error: {result.get('error', 'Unknown')}"
     
     if action == "spf":
         if not target:
-            return "❌ Domain required."
+            return "[FAIL] Domain required."
         dnssec = DNSSecurity()
         result = dnssec.check_spf(target)
         if result["success"]:
-            return f"### SPF CHECK\n\n**Domain**: {target}\n**Has SPF**: {'✅' if result['has_spf'] else '❌'}\n**Records**: {result['records']}"
+            return f"### SPF CHECK\n\n**Domain**: {target}\n**Has SPF**: {'[OK]' if result['has_spf'] else '[FAIL]'}\n**Records**: {result['records']}"
         else:
-            return f"❌ SPF error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] SPF error: {result.get('error', 'Unknown')}"
     
     if action == "dmarc":
         if not target:
-            return "❌ Domain required."
+            return "[FAIL] Domain required."
         dnssec = DNSSecurity()
         result = dnssec.check_dmarc(target)
         if result["success"]:
-            return f"### DMARC CHECK\n\n**Domain**: {target}\n**Has DMARC**: {'✅' if result['has_dmarc'] else '❌'}\n**Records**: {result['records']}"
+            return f"### DMARC CHECK\n\n**Domain**: {target}\n**Has DMARC**: {'[OK]' if result['has_dmarc'] else '[FAIL]'}\n**Records**: {result['records']}"
         else:
-            return f"❌ DMARC error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] DMARC error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

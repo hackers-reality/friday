@@ -100,3 +100,13 @@ Thumbs.db
 *.sqlite
 backups/
 docs/
+
+# Temp / scratch files
+fix_*.py
+check_syntax.py
+test_feature*.py
+scratch/
+.spotify_cache
+friday_memory/imported_chats/
+friday_memory/user_profile.*
+friday_memory/memory.json

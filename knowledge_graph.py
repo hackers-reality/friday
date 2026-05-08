@@ -312,7 +312,7 @@ def knowledge_graph_tool(
     
     if action == "add_node":
         if not node_id:
-            return "❌ node_id required."
+            return "[FAIL] node_id required."
         
         props = {}
         if properties:
@@ -331,24 +331,24 @@ def knowledge_graph_tool(
             node_type = "organization"
         
         if graph.add_node(node_id, node_type, props):
-            return f"✅ Added node: {node_id}"
+            return f"[OK] Added node: {node_id}"
         return f"Node already exists: {node_id}"
     
     if action == "add_edge":
         if not node_id or not target_id or not relation:
-            return "❌ node_id, target_id, and relation required."
+            return "[FAIL] node_id, target_id, and relation required."
         
         if graph.add_edge(node_id, target_id, relation):
-            return f"✅ Added edge: {node_id} -[{relation}]-> {target_id}"
-        return f"❌ Failed to add edge. Check node IDs exist."
+            return f"[OK] Added edge: {node_id} -[{relation}]-> {target_id}"
+        return f"[FAIL] Failed to add edge. Check node IDs exist."
     
     if action == "get":
         if not node_id:
-            return "❌ node_id required."
+            return "[FAIL] node_id required."
         
         node = graph.get_node(node_id)
         if not node:
-            return f"❌ Node not found: {node_id}"
+            return f"[FAIL] Node not found: {node_id}"
         
         lines = [f"### NODE: {node.id}", ""]
         lines.append(f"**Type**: {node.type}")
@@ -360,7 +360,7 @@ def knowledge_graph_tool(
     
     if action == "neighbors":
         if not node_id:
-            return "❌ node_id required."
+            return "[FAIL] node_id required."
         
         neighbors = graph.get_neighbors(node_id, relation)
         if not neighbors:
@@ -373,7 +373,7 @@ def knowledge_graph_tool(
     
     if action == "search":
         if not node_id:  # Using node_id as query here
-            return "❌ query required (use node_id parameter)."
+            return "[FAIL] query required (use node_id parameter)."
         
         results = graph.search_nodes(node_id)
         if not results:
@@ -386,17 +386,17 @@ def knowledge_graph_tool(
     
     if action == "path":
         if not node_id or not target_id:
-            return "❌ source (node_id) and target (target_id) required."
+            return "[FAIL] source (node_id) and target (target_id) required."
         
         path = graph.find_path(node_id, target_id)
         if not path:
-            return f"❌ No path found from {node_id} to {target_id}"
+            return f"[FAIL] No path found from {node_id} to {target_id}"
         
         return f"### PATH: {node_id} -> {target_id}\n" + " -> ".join(path)
     
     if action == "subgraph":
         if not node_id:
-            return "❌ center node (node_id) required."
+            return "[FAIL] center node (node_id) required."
         
         subgraph = graph.get_subgraph(node_id)
         lines = [f"### SUBGRAPH: {subgraph['center']}", ""]
@@ -409,7 +409,7 @@ def knowledge_graph_tool(
     
     if action == "extract":
         if not text:
-            return "❌ text required for extraction."
+            return "[FAIL] text required for extraction."
         
         result = extract_knowledge_from_text(text)
         lines = ["### EXTRACTED KNOWLEDGE", ""]

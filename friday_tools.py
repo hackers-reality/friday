@@ -276,39 +276,102 @@ def open_app(name: str) -> str:
     import subprocess
     import os
 
-    app_map = {
-        "roblox": "RobloxPlayerBeta.exe",
-        "spotify": "spotify.exe",
-        "chrome": "chrome.exe",
-        "firefox": "firefox.exe",
-        "edge": "msedge.exe",
-        "notepad": "notepad.exe",
-        "calculator": "calc.exe",
-        "explorer": "explorer.exe",
-        "discord": "Discord.exe",
-        "steam": "steam.exe",
+    # Common Windows app install locations
+    paths = {
+        "spotify": [
+            os.path.expandvars(r"%APPDATA%\Spotify\Spotify.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WindowsApps\Spotify.exe"),
+            "spotify.exe",
+        ],
+        "chrome": [
+            os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+            "chrome.exe",
+        ],
+        "firefox": [
+            os.path.expandvars(r"%PROGRAMFILES%\Mozilla Firefox\firefox.exe"),
+            "firefox.exe",
+        ],
+        "edge": [
+            os.path.expandvars(r"%PROGRAMFILES(x86)%\Microsoft\Edge\Application\msedge.exe"),
+            "msedge.exe",
+        ],
+        "discord": [
+            os.path.expandvars(r"%LOCALAPPDATA%\Discord\Discord.exe"),
+            "Discord.exe",
+        ],
+        "steam": [
+            os.path.expandvars(r"%PROGRAMFILES(x86)%\Steam\steam.exe"),
+            "steam.exe",
+        ],
+        "roblox": ["RobloxPlayerBeta.exe"],
+        "notepad": ["notepad.exe"],
+        "calculator": ["calc.exe"],
+        "explorer": ["explorer.exe"],
+        "vscode": [
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"),
+            "code.exe",
+        ],
+        "terminal": [
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe"),
+            "cmd.exe",
+        ],
+        "settings": ["ms-settings:"],
     }
 
     name_lower = name.lower()
-    exe = app_map.get(name_lower, name)
+    candidates = paths.get(name_lower, [name])
 
+    # Try launching via shell: uri or start for special apps
+    if name_lower == "settings":
+        subprocess.run("start ms-settings:", shell=True)
+        return "[OK] Opening Settings"
+
+    for exe in candidates:
+        try:
+            if exe.startswith("ms-"):
+                subprocess.run(["start", exe], shell=True)
+                return f"[OK] Opening {name}"
+            if os.name == 'nt':
+                os.startfile(exe)
+            else:
+                subprocess.Popen(exe)
+            return f"[OK] Opening app: {name}"
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
+        except Exception:
+            continue
+
+    # Final fallback: try finding via where/whereis
     try:
-        if os.name == 'nt':
-            os.startfile(exe)
-        else:
-            subprocess.Popen(exe)
-        return f"[OK] Opening app: {name}"
-    except Exception as e:
-        return f"[FAIL] Error opening {name}: {e}"
+        result = subprocess.run(f"where {name}.exe", shell=True, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            path = result.stdout.strip().split("\n")[0]
+            os.startfile(path)
+            return f"[OK] Opening {name}"
+    except Exception:
+        pass
+
+    return f"[FAIL] Could not find {name}. Try installing it or providing the full path."
 
 
 def close_app(name: str) -> str:
-    """Kill process by name."""
+    """Kill process by name. Tries variations if first attempt fails."""
     try:
         import subprocess
         if os.name == 'nt':
-            result = subprocess.run(f"taskkill /F /IM {name}", shell=True, capture_output=True, text=True)
-            return f"[OK] Killed {name}" if result.returncode == 0 else f"[FAIL] {result.stderr}"
+            candidates = [name]
+            if not name.lower().endswith('.exe'):
+                candidates.append(name + '.exe')
+            else:
+                candidates.append(name[:-4])
+            for candidate in candidates:
+                result = subprocess.run(f"taskkill /F /IM {candidate}", shell=True, capture_output=True, text=True)
+                if result.returncode == 0:
+                    return f"[OK] Killed {candidate}"
+            return f"[FAIL] Could not kill '{name}'. Process not found. Running: {list_running_apps()[:5]}"
         else:
             subprocess.run(f"pkill -f {name}", shell=True)
             return f"[OK] Killed {name}"
@@ -394,6 +457,15 @@ def spotify_play(query: str = "") -> str:
             sp.start_playback()
             return "[OK] Resumed Spotify playback"
 
+        # Try playlist search first (if query contains playlist-like keywords)
+        playlist_keywords = ["playlist", "mix", "session", "daily", "discover", "release radar"]
+        if any(kw in query.lower() for kw in playlist_keywords):
+            p_results = sp.search(q=query, type="playlist", limit=5)
+            playlists = p_results.get("playlists", {}).get("items", [])
+            if playlists:
+                sp.start_playback(context_uri=playlists[0]["uri"])
+                return f"[OK] Playing playlist '{playlists[0]['name']}' on Spotify"
+
         # Search for the track
         results = sp.search(q=query, type="track", limit=5)
         tracks = results.get("tracks", {}).get("items", [])
@@ -404,6 +476,12 @@ def spotify_play(query: str = "") -> str:
             if albums:
                 sp.start_playback(context_uri=albums[0]["uri"])
                 return f"[OK] Playing album '{albums[0]['name']}' on Spotify"
+            # Try playlist as last resort
+            p_results = sp.search(q=query, type="playlist", limit=3)
+            playlists = p_results.get("playlists", {}).get("items", [])
+            if playlists:
+                sp.start_playback(context_uri=playlists[0]["uri"])
+                return f"[OK] Playing playlist '{playlists[0]['name']}' on Spotify"
             return f"[FAIL] No results found for '{query}'"
 
         # Play the first track
@@ -551,29 +629,64 @@ def spotify_current() -> str:
         return f"[FAIL] Spotify current error: {e}"
 
 def web_search(query: str, max_results: int = 5) -> str:
-    """Search the web using DuckDuckGo with BeautifulSoup fallback."""
+    """Search the web using multiple engines with fallback chain."""
     try:
         from friday_web import WebScraper
+        import requests
+        from bs4 import BeautifulSoup
+
         scraper = WebScraper()
-        result = scraper.search_engine(query, engine="duckduckgo")
-        if result.get("success"):
-            items = result.get("results", [])
-            if not items:
-                # Fallback to Bing
-                result = scraper.search_engine(query, engine="bing")
-                items = result.get("results", [])
-            if items:
-                lines = [f"Search results for '{query}':"]
-                for i, item in enumerate(items[:max_results], 1):
-                    title = item.get("title", "?")
-                    url = item.get("url", "")
-                    snippet = item.get("snippet", "")
-                    lines.append(f"{i}. {title}")
-                    if url:
-                        lines.append(f"   {url}")
-                    if snippet:
-                        lines.append(f"   {snippet[:200]}")
-                return "\n".join(lines)
+        engines = ["duckduckgo", "bing"]
+        results = None
+        items = []
+
+        for engine in engines:
+            try:
+                result = scraper.search_engine(query, engine=engine)
+                if result.get("success"):
+                    items = result.get("results", [])
+                    if items:
+                        results = result
+                        break
+            except Exception:
+                continue
+
+        # If both HTML scrapers failed, try direct API approach
+        if not items:
+            try:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
+                # Try Google
+                g_resp = requests.get(f"https://www.google.com/search?q={requests.utils.quote(query)}&num={max_results}",
+                                      headers=headers, timeout=10)
+                if g_resp.status_code == 200:
+                    g_soup = BeautifulSoup(g_resp.text, "html.parser")
+                    for g in g_soup.select("div.g"):
+                        title_el = g.select_one("h3")
+                        link_el = g.select_one("a")
+                        if title_el and link_el:
+                            items.append({
+                                "title": title_el.get_text(strip=True),
+                                "url": link_el.get("href", "").lstrip("/url?q=").split("&")[0] if link_el.get("href", "").startswith("/url?q=") else link_el.get("href", ""),
+                                "snippet": "",
+                            })
+            except Exception:
+                pass
+
+        if items:
+            lines = [f"Search results for '{query}':"]
+            for i, item in enumerate(items[:max_results], 1):
+                title = item.get("title", "?")
+                url = item.get("url", "")
+                snippet = item.get("snippet", "")
+                lines.append(f"{i}. {title}")
+                if url:
+                    lines.append(f"   {url}")
+                if snippet:
+                    lines.append(f"   {snippet[:200]}")
+            return "\n".join(lines)
+
         return f"[FAIL] No search results for '{query}'"
     except ImportError:
         return "[FAIL] friday_web.py not available."
@@ -604,12 +717,20 @@ def git_ops(operation: str, message: str = "") -> str:
 def see_screen(question: str = "What do you see on the screen?") -> str:
     """Capture screen and analyze it using Gemini Vision API."""
     try:
-        import pyautogui
         import base64, io, requests, json
-        from PIL import Image
+        from PIL import Image, ImageGrab
 
-        # Capture screen
-        img = pyautogui.screenshot()
+        # Capture screen: try pyautogui first, fallback to PIL ImageGrab
+        img = None
+        try:
+            import pyautogui
+            img = pyautogui.screenshot()
+        except Exception:
+            try:
+                img = ImageGrab.grab()
+            except Exception as e2:
+                return f"[FAIL] Screen capture failed: {e2}"
+
         # Resize for API efficiency
         img.thumbnail((1280, 720), Image.LANCZOS)
         buffer = io.BytesIO()
@@ -635,10 +756,13 @@ def see_screen(question: str = "What do you see on the screen?") -> str:
             timeout=30,
         )
         data = r.json()
+        if "candidates" not in data or not data["candidates"]:
+            error_info = data.get("error", {}).get("message", str(data))
+            return f"[FAIL] API returned no response: {error_info}"
         text = data["candidates"][0]["content"]["parts"][0]["text"]
         return text
     except ImportError as e:
-        return f"[FAIL] Missing dependency: {e}. Install: pip install pyautogui pillow requests"
+        return f"[FAIL] Missing dependency: {e}. Install: pip install pillow requests"
     except Exception as e:
         return f"[FAIL] Screen analysis error: {e}"
 
@@ -730,11 +854,32 @@ def situational_awareness() -> str:
     except Exception as e:
         return f"Sensors failing: {e}"
 
+def calendar_tool_handler(action: str = "list", days: int = 7) -> str:
+    """Google Calendar integration: list events, sync with goals."""
+    try:
+        from goal_memory import fetch_calendar_events, sync_calendar_to_goals
+        if action == "list":
+            return fetch_calendar_events(max_results=days * 5, days_ahead=days)
+        elif action == "sync":
+            return sync_calendar_to_goals()
+        else:
+            return f"[FAIL] Unknown calendar action: {action}"
+    except ImportError:
+        return "[FAIL] goal_memory.py not available."
+    except Exception as e:
+        return f"[FAIL] Calendar error: {e}"
+
+
 def goals_tool_handler(action: str, **kwargs) -> str:
-    """Handler for goals tool."""
+    """Handler for goals tool. Maps Gemini parameter names to goal_memory names."""
     try:
         from goal_memory import goals_tool_handler as gh
-        return gh(action, **kwargs)
+        mapped = dict(kwargs)
+        if "goal" in mapped and "title" not in mapped:
+            mapped["title"] = mapped.pop("goal")
+        if "category" in mapped and "goal_type" not in mapped:
+            mapped["goal_type"] = mapped.pop("category")
+        return gh(action, **mapped)
     except Exception as e:
         return f"Goals error: {e}"
 
@@ -785,26 +930,33 @@ def startup_tool_handler(action: str = "run", **kwargs) -> str:
 def search_and_open(query: str, category_hint: str = None) -> str:
     """
     General-purpose search browser history for ANYTHING and open the best match.
-    Works for: anime, repos, chats, blogs, courses, social media, videos, etc.
-    
-    Examples:
-        "onepiece episode 1100" → finds anime streaming link
-        "my chat with arnav" → finds Discord/Instagram/WhatsApp chat
-        "openclaw repo github" → finds GitHub repo
-        "that blog about python async" → finds blog post
-        "netflix continue watching" → finds Netflix show
-    
-    Args:
-        query: What to search for
-        category_hint: Optional filter (anime, repo, chat, blog, video, education, etc.)
+    Falls back to web search if not found in history.
     """
     try:
+        # First: try browser history
         from browser_history_tools import browser_history_tool
         if browser_history_tool:
-            return browser_history_tool("find_and_open", query=query, category=(category_hint or ""))
-        return f"[FAIL] Browser history tools not available."
+            result = browser_history_tool("find_and_open", query=query, category=(category_hint or ""))
+            if result and not result.startswith("[FAIL]"):
+                return result
+
+        # Second: try web search + open first result
+        web_results = web_search(query)
+        if not web_results.startswith("[FAIL]"):
+            import re, webbrowser
+            urls = re.findall(r'https?://[^\s\n]+', web_results)
+            if urls:
+                # Filter out non-relevant URLs
+                clean_urls = [u for u in urls if not any(skip in u for skip in
+                             ["google.com/search", "bing.com/search", "duckduckgo.com"])]
+                if clean_urls:
+                    target = clean_urls[0].rstrip(".,)")
+                    webbrowser.open(target)
+                    return f"[OK] Found and opened from web: {target}"
+
+        return f"[FAIL] Could not find '{query}' in history or web search."
     except Exception as e:
-        return f"[FAIL] History search error: {e}"
+        return f"[FAIL] Search error: {e}"
 
 
 def memory_store(key: str, value: str, category: str = "general") -> str:
@@ -863,81 +1015,64 @@ def memory_retrieve(query: str) -> str:
 
 
 def video_search(query: str) -> str:
-    """Search for videos with metadata (views, date, duration), return results."""
+    """Search for a video and play it directly. Opens the actual video URL, not a search page."""
+    import webbrowser, re, requests, html
+
     try:
-        import re, requests, json, time
-        from bs4 import BeautifulSoup
-
-        output = []
-        # Approach 1: DuckDuckGo HTML video search
-        ddg_url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}&ia=videos&iar=videos"
-        resp = requests.get(ddg_url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }, timeout=10)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            for i, result in enumerate(soup.select(".result"), 1):
-                if i > 8:
-                    break
-                title_el = result.select_one(".result__title a")
-                snippet_el = result.select_one(".result__snippet")
-                url_el = result.select_one(".result__url")
-                if not title_el:
-                    continue
-                title = title_el.get_text(strip=True)
-                url = url_el.get_text(strip=True) if url_el else ""
-                snippet = snippet_el.get_text(strip=True) if snippet_el else ""
-                # Check if it's a video URL
-                if not any(d in url for d in ['youtube.com', 'youtu.be', 'vimeo.com']):
-                    continue
-                # Extract YouTube video ID for oembed info
-                vid_id = ""
-                yt_match = re.search(r'(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]+)', url)
-                if yt_match:
-                    vid_id = yt_match.group(1)
-                    try:
-                        oembed = requests.get(
-                            f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid_id}&format=json",
-                            timeout=5
-                        )
-                        if oembed.status_code == 200:
-                            data = oembed.json()
-                            title = data.get("title", title)
-                    except Exception:
-                        pass
-                output.append(f"{i}. {title}")
-                output.append(f"   URL: {url}")
-                # Parse snippet for metadata (DDG often includes views/date)
-                if snippet:
-                    output.append(f"   {snippet[:200]}")
-                # Try to get engagement stats from oembed
-                if vid_id:
-                    try:
-                        insights_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid_id}&format=json"
-                        # Add a second call to innertube API for stats (no key needed)
-                        # YouTube's public API endpoint
-                        stats_url = f"https://www.youtube.com/watch?v={vid_id}"
-                        stats_resp = requests.get(stats_url, headers={
-                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                        }, timeout=5)
-                        if stats_resp.status_code == 200:
-                            # Extract view count and date from page
-                            view_match = re.search(r'([\d,]+)\s*views', stats_resp.text)
-                            date_match = re.search(r'(\d+\s+(?:year|month|week|day|hour|minute|second)s?\s+ago)', stats_resp.text)
-                            if view_match:
-                                output.append(f"   Views: {view_match.group(1)}")
-                            if date_match:
-                                output.append(f"   Uploaded: {date_match.group(1)}")
-                    except Exception:
-                        pass
-                output.append("")
-
-        if output:
-            return "\n".join(output)
-
-        # Fallback: open YouTube search page
-        import webbrowser
+        # Strategy 1: Scrape YouTube search for the first actual video
         search_url = f"https://www.youtube.com/results?search_query={requests.utils.quote(query)}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = requests.get(search_url, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            # Extract videoId from ytInitialData JSON embedded in page
+            import json
+            # Find the ytInitialData JSON blob
+            match = re.search(r'ytInitialData\s*=\s*({.*?});\s*</script>', resp.text, re.DOTALL)
+            if match:
+                data = json.loads(match.group(1))
+                # Navigate: contents -> twoColumnSearchResultsRenderer -> primaryContents -> sectionListRenderer -> contents[0] -> itemSectionRenderer -> contents
+                contents = data
+                for key in ["contents", "twoColumnSearchResultsRenderer", "primaryContents",
+                             "sectionListRenderer", "contents"]:
+                    if isinstance(contents, dict) and key in contents:
+                        contents = contents[key]
+                    else:
+                        contents = None
+                        break
+                if contents and isinstance(contents, list) and len(contents) > 0:
+                    item_section = contents[0]
+                    if isinstance(item_section, dict) and "itemSectionRenderer" in item_section:
+                        items = item_section["itemSectionRenderer"].get("contents", [])
+                        for item in items:
+                            if "videoRenderer" in item:
+                                vid = item["videoRenderer"]
+                                video_id = vid.get("videoId", "")
+                                title = ""
+                                title_runs = vid.get("title", {}).get("runs", [])
+                                if title_runs:
+                                    title = "".join(r.get("text", "") for r in title_runs)
+                                if video_id:
+                                    direct_url = f"https://www.youtube.com/watch?v={video_id}"
+                                    webbrowser.open(direct_url)
+                                    return f"[OK] Playing: {title}"
+
+        # Strategy 2: Fallback - use web_search to find video URL
+        search_result = web_search(f"{query} site:youtube.com watch")
+        if not search_result.startswith("[FAIL]"):
+            urls = re.findall(r'(https?://(?:www\.)?youtube\.com/watch\?v=[\w-]+)', search_result)
+            if urls:
+                webbrowser.open(urls[0])
+                return f"[OK] Opened: {urls[0]}"
+
+        # Strategy 3: Last resort - try youtu.be shortlinks from web_search
+        urls = re.findall(r'(https?://youtu\.be/[\w-]+)', search_result if not search_result.startswith("[FAIL]") else "")
+        if urls:
+            webbrowser.open(urls[0])
+            return f"[OK] Opened: {urls[0]}"
+
+        # Strategy 4: Ultimate fallback - open YouTube search in browser (Boss can click)
         webbrowser.open(search_url)
         return f"[OK] Opened YouTube search for '{query}'"
 
@@ -1560,6 +1695,138 @@ def opencli_doctor() -> str:
         return f"[FAIL] OpenCLI doctor error: {e}"
 
 
+def opencli_tab_list() -> str:
+    """List all browser tabs."""
+    try:
+        from opencli_integration import opencli_tab_list
+        return opencli_tab_list()
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Tab list error: {e}"
+
+
+def opencli_tab_new(url: str = "") -> str:
+    """Open a new browser tab."""
+    try:
+        from opencli_integration import opencli_tab_new
+        return opencli_tab_new(url)
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Tab new error: {e}"
+
+
+def opencli_tab_select(target_id: str) -> str:
+    """Switch to a specific browser tab."""
+    try:
+        from opencli_integration import opencli_tab_select
+        return opencli_tab_select(target_id)
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Tab select error: {e}"
+
+
+def opencli_tab_close(target_id: str = "") -> str:
+    """Close a browser tab."""
+    try:
+        from opencli_integration import opencli_tab_close
+        return opencli_tab_close(target_id)
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Tab close error: {e}"
+
+
+def opencli_close() -> str:
+    """Release the current browser automation tab lease."""
+    try:
+        from opencli_integration import opencli_close
+        return opencli_close()
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Close error: {e}"
+
+
+def opencli_wait_selector(selector: str, timeout_ms: int = 10000) -> str:
+    """Wait for a CSS selector to appear on the page."""
+    try:
+        from opencli_integration import opencli_wait_selector
+        return opencli_wait_selector(selector, timeout_ms)
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Wait error: {e}"
+
+
+def opencli_find(selector: str, limit: int = 10) -> str:
+    """Find elements matching a CSS selector."""
+    try:
+        from opencli_integration import opencli_find
+        return opencli_find(selector, limit)
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Find error: {e}"
+
+
+def opencli_get_url() -> str:
+    """Get the current page URL from the browser."""
+    try:
+        from opencli_integration import opencli_get_url
+        return opencli_get_url()
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Get URL error: {e}"
+
+
+def opencli_get_title() -> str:
+    """Get the current page title from the browser."""
+    try:
+        from opencli_integration import opencli_get_title
+        return opencli_get_title()
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Get title error: {e}"
+
+
+def opencli_network() -> str:
+    """Inspect network requests made by the current page."""
+    try:
+        from opencli_integration import opencli_network
+        return opencli_network()
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Network error: {e}"
+
+
+def opencli_bind(domain: str = "") -> str:
+    """Bind OpenCLI to the current Chrome tab."""
+    try:
+        from opencli_integration import opencli_bind
+        return opencli_bind(domain)
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Bind error: {e}"
+
+
+def opencli_unbind() -> str:
+    """Unbind from the current Chrome tab."""
+    try:
+        from opencli_integration import opencli_unbind
+        return opencli_unbind()
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] Unbind error: {e}"
+
+
 #  Export list for friday_live.py #
 
 __all__ = [
@@ -1580,8 +1847,10 @@ __all__ = [
     "see_screen", "search_browser_history", "open_history_item",
     "list_recent_history", "generate_file", "generate_file_llm",
     "search_and_open",
-    "situational_awareness", "goals_tool_handler", "startup_tool_handler",
+    "situational_awareness", "goals_tool_handler", "calendar_tool_handler", "startup_tool_handler",
     "memory_import_tool_handler",
+    "climb_codebase", "deep_research",
+    "memory_store", "memory_retrieve", "stark_log",
     "vision_click",
     "alexa_command", "alexa_poll", "home_assistant_command",
     "multi_task", "queue_task", "queue_status", "queue_result",
@@ -1590,6 +1859,10 @@ __all__ = [
     "opencli_init_bridge", "opencli_navigate", "opencli_click", "opencli_type",
     "opencli_extract", "opencli_screenshot", "opencli_scroll",
     "opencli_keys", "opencli_eval", "opencli_state", "opencli_doctor",
+    "opencli_tab_list", "opencli_tab_new", "opencli_tab_select", "opencli_tab_close",
+    "opencli_close", "opencli_wait_selector", "opencli_find",
+    "opencli_get_url", "opencli_get_title", "opencli_network",
+    "opencli_bind", "opencli_unbind",
 ]
 
 if __name__ == "__main__":

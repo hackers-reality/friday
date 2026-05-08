@@ -392,11 +392,11 @@ def home_assistant_command(entity_id: str, action: str = "toggle") -> str:
       HOME_ASSISTANT_TOKEN=Long-Lived Access Token
     """
     if not HOME_ASSISTANT_URL or not HOME_ASSISTANT_TOKEN:
-        return "❌ Home Assistant not configured."
+        return "[FAIL] Home Assistant not configured."
 
     entity_id = entity_id.strip()
     if "." not in entity_id:
-        return "❌ entity_id must look like 'light.bedroom'."
+        return "[FAIL] entity_id must look like 'light.bedroom'."
 
     service = {
         "turn_on": "turn_on",
@@ -414,10 +414,10 @@ def home_assistant_command(entity_id: str, action: str = "toggle") -> str:
     try:
         resp = requests.post(url, headers=headers, json={"entity_id": entity_id}, timeout=8)
         if resp.status_code in (200, 201):
-            return f"✅ Home Assistant executed {service} on {entity_id}."
-        return f"❌ Home Assistant error: HTTP {resp.status_code} — {resp.text[:200]}"
+            return f"[OK] Home Assistant executed {service} on {entity_id}."
+        return f"[FAIL] Home Assistant error: HTTP {resp.status_code} — {resp.text[:200]}"
     except Exception as e:
-        return f"❌ Home Assistant connection failed: {e}"
+        return f"[FAIL] Home Assistant connection failed: {e}"
 
 def alexa_command(command: str) -> str:
     """
@@ -428,11 +428,11 @@ def alexa_command(command: str) -> str:
     """
     command = command.strip()
     if not command:
-        return "❌ No command provided."
+        return "[FAIL] No command provided."
 
     if not _ALEXA_WEBHOOK_URL:
         return (
-            "❌ Alexa Bridge not configured.\n"
+            "[FAIL] Alexa Bridge not configured.\n"
             "Steps:\n"
             "1. Run: python alexa_webhook_server.py\n"
             "2. Run: ngrok http 5123\n"
@@ -460,16 +460,16 @@ def alexa_command(command: str) -> str:
         )
         if resp.status_code == 200:
             stark_log(f"[ALEXA] Sent: {mapped_command}")
-            return f"✅ Alexa command dispatched: '{mapped_command}'"
+            return f"[OK] Alexa command dispatched: '{mapped_command}'"
         if resp.status_code == 401:
-            return "❌ Alexa Bridge: Auth failed — check FRIDAY_WEBHOOK_SECRET in .env."
-        return f"❌ Alexa Bridge: HTTP {resp.status_code} — {resp.text[:180]}"
+            return "[FAIL] Alexa Bridge: Auth failed — check FRIDAY_WEBHOOK_SECRET in .env."
+        return f"[FAIL] Alexa Bridge: HTTP {resp.status_code} — {resp.text[:180]}"
     except requests.exceptions.ConnectionError:
-        return "❌ Alexa Bridge: Cannot connect — is alexa_webhook_server.py running?"
+        return "[FAIL] Alexa Bridge: Cannot connect — is alexa_webhook_server.py running?"
     except requests.exceptions.Timeout:
-        return "❌ Alexa Bridge: Timeout."
+        return "[FAIL] Alexa Bridge: Timeout."
     except Exception as e:
-        return f"❌ Alexa Error: {e}"
+        return f"[FAIL] Alexa Error: {e}"
 
 def alexa_poll() -> str:
     """Poll the Alexa bridge for commands Alexa sent to Friday."""
@@ -497,7 +497,7 @@ def smart_home_command(target: str, action: str = "toggle") -> str:
     2) Alexa bridge fallback for your existing Alexa routines
     """
     ha_result = home_assistant_command(target, action)
-    if not ha_result.startswith("❌ Home Assistant not configured"):
+    if not ha_result.startswith("[FAIL] Home Assistant not configured"):
         return ha_result
     phrase = f"{action} {target.replace('.', ' ')}"
     return alexa_command(phrase)
@@ -524,44 +524,44 @@ def stark_doctor() -> str:
         start = time.time()
         requests.get("https://www.google.com", timeout=3)
         latency = (time.time() - start) * 1000
-        report.append(f"✅ Network: Neural Link Active ({latency:.0f}ms)")
+        report.append(f"[OK] Network: Neural Link Active ({latency:.0f}ms)")
     except Exception:
-        report.append("❌ Network: Neural Link IMPAIRED")
+        report.append("[FAIL] Network: Neural Link IMPAIRED")
 
     try:
         sp = _get_spotify()
         user = sp.current_user()
-        report.append(f"✅ Spotify: Authenticated as {user.get('display_name', 'Unknown')}")
+        report.append(f"[OK] Spotify: Authenticated as {user.get('display_name', 'Unknown')}")
     except Exception as e:
-        report.append(f"⚠️ Spotify: Link unavailable ({e})")
+        report.append(f"[WARN] Spotify: Link unavailable ({e})")
 
     state_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sovereign_state.json")
     if not os.path.exists(state_path):
         with open(state_path, "w", encoding="utf-8") as f:
             json.dump({"queue": [], "active_window": "Unknown"}, f)
-    report.append("✅ State: Sovereign Memory LOADED")
+    report.append("[OK] State: Sovereign Memory LOADED")
 
     try:
         _init_db()
-        report.append("✅ Memory Vault: ONLINE")
+        report.append("[OK] Memory Vault: ONLINE")
     except Exception as e:
-        report.append(f"❌ Memory Vault: OFFLINE ({e})")
+        report.append(f"[FAIL] Memory Vault: OFFLINE ({e})")
 
-    report.append(f"✅ Task Queue: {_task_queue.qsize()} pending tasks")
+    report.append(f"[OK] Task Queue: {_task_queue.qsize()} pending tasks")
 
     if _ALEXA_WEBHOOK_URL:
         try:
             r = requests.get(f"{_ALEXA_WEBHOOK_URL}/health", timeout=3)
-            report.append("✅ Alexa Bridge: ONLINE" if r.status_code == 200 else "⚠️ Alexa Bridge: Unhealthy")
+            report.append("[OK] Alexa Bridge: ONLINE" if r.status_code == 200 else "[WARN] Alexa Bridge: Unhealthy")
         except Exception:
-            report.append("❌ Alexa Bridge: OFFLINE")
+            report.append("[FAIL] Alexa Bridge: OFFLINE")
     else:
-        report.append("⚠️ Alexa Bridge: Not configured")
+        report.append("[WARN] Alexa Bridge: Not configured")
 
     if HOME_ASSISTANT_URL and HOME_ASSISTANT_TOKEN:
-        report.append("✅ Home Assistant: CONFIGURED")
+        report.append("[OK] Home Assistant: CONFIGURED")
     else:
-        report.append("⚠️ Home Assistant: Not configured")
+        report.append("[WARN] Home Assistant: Not configured")
 
     return "\n".join(report)
 

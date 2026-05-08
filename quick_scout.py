@@ -17,7 +17,7 @@ def scout_requests():
                     name = m["name"]
                     methods = m.get("supportedGenerationMethods", [])
                     if "bidiGenerateContent" in methods:
-                        print(f"✅ LIVE: {name}")
+                        print(f"[OK] LIVE: {name}")
                     elif "2.5" in name or "flash" in name.lower():
                         print(f"   Model: {name} ({methods})")
             else:

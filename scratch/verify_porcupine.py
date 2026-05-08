@@ -16,7 +16,7 @@ try:
         access_key=access_key,
         keyword_paths=[model_path]
     )
-    print("✅ Porcupine engine initialized successfully!")
+    print("[OK] Porcupine engine initialized successfully!")
     
     recorder = PvRecorder(device_index=-1, frame_length=porcupine.frame_length)
     print(f"🎤 Audio device found: {recorder.selected_device}")
@@ -36,7 +36,7 @@ try:
         recorder.stop()
         recorder.delete()
         porcupine.delete()
-        print("\n✅ Test complete.")
+        print("\n[OK] Test complete.")
 
 except Exception as e:
-    print(f"\n❌ Error during initialization: {e}")
+    print(f"\n[FAIL] Error during initialization: {e}")

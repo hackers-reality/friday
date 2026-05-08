@@ -103,8 +103,8 @@ if __name__ == "__main__":
     print(f"Missing Modules: {len(info['missing_modules'])}")
     print("\nAvailable:")
     for module in info["available_modules"]:
-        print(f"  ✅ {module}")
+        print(f"  [OK] {module}")
     if info["missing_modules"]:
         print("\nMissing:")
         for module in info["missing_modules"]:
-            print(f"  ❌ {module}")
+            print(f"  [FAIL] {module}")

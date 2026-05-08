@@ -59,9 +59,9 @@ class MQTTClient:
     def _on_connect(self, client, userdata, flags, rc):
         """Callback for connection."""
         if rc == 0:
-            print("✅ Connected to MQTT broker.")
+            print("[OK] Connected to MQTT broker.")
         else:
-            print(f"❌ Failed to connect: {rc}")
+            print(f"[FAIL] Failed to connect: {rc}")
     
     def _on_message(self, client, userdata, msg):
         """Callback for messages."""
@@ -313,77 +313,77 @@ def iot_tool(
         mqtt = MQTTClient(broker, port)
         result = mqtt.connect()
         if result["success"]:
-            return f"### MQTT CONNECT\n\n✅ Connected to {broker}:{port}\nClient ID: {result['client_id']}"
+            return f"### MQTT CONNECT\n\n[OK] Connected to {broker}:{port}\nClient ID: {result['client_id']}"
         else:
-            return f"❌ MQTT error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] MQTT error: {result.get('error', 'Unknown')}"
     
     if action == "mqtt_publish":
         if not target:
-            return "❌ Topic required."
+            return "[FAIL] Topic required."
         message = params.get("message", "Hello from Friday!")
         mqtt = MQTTClient()
         mqtt.connect()
         result = mqtt.publish(target, message)
         if result["success"]:
-            return f"### MQTT PUBLISH\n\n✅ Published to {target}: {message[:50]}..."
+            return f"### MQTT PUBLISH\n\n[OK] Published to {target}: {message[:50]}..."
         else:
-            return f"❌ MQTT error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] MQTT error: {result.get('error', 'Unknown')}"
     
     if action == "mqtt_subscribe":
         if not target:
-            return "❌ Topic required."
+            return "[FAIL] Topic required."
         mqtt = MQTTClient()
         mqtt.connect()
         result = mqtt.subscribe(target)
         if result["success"]:
-            return f"### MQTT SUBSCRIBE\n\n✅ Subscribed to {target}"
+            return f"### MQTT SUBSCRIBE\n\n[OK] Subscribed to {target}"
         else:
-            return f"❌ MQTT error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] MQTT error: {result.get('error', 'Unknown')}"
     
     if action == "sensor_add":
         if not target:
-            return "❌ Sensor name required."
+            return "[FAIL] Sensor name required."
         sensor_type = params.get("type", "temperature")
         unit = params.get("unit", "°C")
         simulator = SensorSimulator()
         result = simulator.add_sensor(target, sensor_type, unit)
         if result["success"]:
-            return f"### SENSOR ADD\n\n✅ Added {sensor_type} sensor: {target}"
+            return f"### SENSOR ADD\n\n[OK] Added {sensor_type} sensor: {target}"
         else:
-            return f"❌ Sensor error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Sensor error: {result.get('error', 'Unknown')}"
     
     if action == "sensor_read":
         if not target:
-            return "❌ Sensor name required."
+            return "[FAIL] Sensor name required."
         simulator = SensorSimulator()
         result = simulator.read_sensor(target)
         if result["success"]:
             return f"### SENSOR READ\n\n**{target}**: {result['value']:.2f} {result['unit']}"
         else:
-            return f"❌ Sensor error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Sensor error: {result.get('error', 'Unknown')}"
     
     if action == "smart_add":
         if not target:
-            return "❌ Device name required."
+            return "[FAIL] Device name required."
         device_type = params.get("type", "light")
         location = params.get("location", "living_room")
         smart = SmartHome()
         result = smart.add_device(target, device_type, location)
         if result["success"]:
-            return f"### SMART HOME ADD\n\n✅ Added {device_type}: {target} in {location}"
+            return f"### SMART HOME ADD\n\n[OK] Added {device_type}: {target} in {location}"
         else:
-            return f"❌ Smart home error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Smart home error: {result.get('error', 'Unknown')}"
     
     if action == "smart_control":
         if not target:
-            return "❌ Device name required."
+            return "[FAIL] Device name required."
         action_type = params.get("action", "toggle")
         smart = SmartHome()
         result = smart.control_device(target, action_type, **{k: v for k, v in params.items() if k not in ("action",)})
         if result["success"]:
-            return f"### SMART HOME CONTROL\n\n✅ {target} -> {result['state']}"
+            return f"### SMART HOME CONTROL\n\n[OK] {target} -> {result['state']}"
         else:
-            return f"❌ Smart home error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Smart home error: {result.get('error', 'Unknown')}"
     
     if action == "smart_list":
         smart = SmartHome()

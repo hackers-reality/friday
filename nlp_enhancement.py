@@ -315,7 +315,7 @@ def nlp_tool(
     Actions: entities, summarize, sentiment, keywords, language, classify
     """
     if not text and not target:
-        return "❌ Text or target (URL/file) required."
+        return "[FAIL] Text or target (URL/file) required."
     
     # Get text from target if provided
     if not text and target:
@@ -324,13 +324,13 @@ def nlp_tool(
                 from web_scraper import simple_scrape
                 text = simple_scrape(target)
             except:
-                return f"❌ Could not fetch from {target}"
+                return f"[FAIL] Could not fetch from {target}"
         elif os.path.exists(target):
             with open(target, 'r', encoding='utf-8') as f:
                 text = f.read()
     
     if not text:
-        return "❌ No text to process."
+        return "[FAIL] No text to process."
     
     if action == "entities":
         entities = extract_entities(text)
@@ -350,7 +350,7 @@ def nlp_tool(
     if action == "sentiment":
         result = analyze_sentiment(text)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         return f"""### SENTIMENT ANALYSIS
 **Label**: {result['label'].upper()}
 **Compound**: {result['compound']:.3f}

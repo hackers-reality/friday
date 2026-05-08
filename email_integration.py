@@ -58,14 +58,14 @@ class EmailClient:
     def list_folders(self) -> List[str]:
         """List IMAP folders."""
         if not self.imap and not self.connect_imap():
-            return ["❌ Not connected"]
+            return ["[FAIL] Not connected"]
         try:
             status, folders = self.imap.list()
             if status != "OK":
-                return ["❌ Error listing folders"]
+                return ["[FAIL] Error listing folders"]
             return [f.decode().split('"/"')[-1].strip() for f in folders]
         except Exception as e:
-            return [f"❌ Error: {e}"]
+            return [f"[FAIL] Error: {e}"]
     
     def get_emails(self, folder: str = "INBOX", limit: int = 10, unread_only: bool = False) -> List[Dict]:
         """Get emails from folder."""
@@ -125,7 +125,7 @@ class EmailClient:
     def send_email(self, to: str, subject: str, body: str, html: bool = False) -> str:
         """Send an email via SMTP."""
         if not self.is_configured():
-            return "❌ Email not configured. Set EMAIL_ADDRESS and EMAIL_PASSWORD."
+            return "[FAIL] Email not configured. Set EMAIL_ADDRESS and EMAIL_PASSWORD."
         
         try:
             msg = MIMEMultipart("alternative")
@@ -143,35 +143,35 @@ class EmailClient:
                 server.login(self.email, self.password)
                 server.send_message(msg)
             
-            return f"✅ Email sent to {to}"
+            return f"[OK] Email sent to {to}"
             
         except Exception as e:
-            return f"❌ Send error: {e}"
+            return f"[FAIL] Send error: {e}"
     
     def delete_email(self, email_id: str, folder: str = "INBOX") -> str:
         """Delete an email by ID."""
         if not self.imap and not self.connect_imap():
-            return "❌ Not connected"
+            return "[FAIL] Not connected"
         
         try:
             self.imap.select(folder)
             self.imap.store(email_id, "+FLAGS", "\\Deleted")
             self.imap.expunge()
-            return f"✅ Email {email_id} deleted"
+            return f"[OK] Email {email_id} deleted"
         except Exception as e:
-            return f"❌ Delete error: {e}"
+            return f"[FAIL] Delete error: {e}"
     
     def mark_read(self, email_id: str, folder: str = "INBOX") -> str:
         """Mark email as read."""
         if not self.imap and not self.connect_imap():
-            return "❌ Not connected"
+            return "[FAIL] Not connected"
         
         try:
             self.imap.select(folder)
             self.imap.store(email_id, "-FLAGS", "\\Seen")
-            return f"✅ Email {email_id} marked as read"
+            return f"[OK] Email {email_id} marked as read"
         except Exception as e:
-            return f"❌ Error: {e}"
+            return f"[FAIL] Error: {e}"
 
 
 # ─── Singleton Client ────────────────────────────────────#
@@ -206,26 +206,26 @@ def email_tool(
     
     if action == "status":
         if client.is_configured():
-            return f"✅ Email configured: {client.email}"
-        return "❌ Email not configured.\nSet EMAIL_ADDRESS and EMAIL_PASSWORD in .env"
+            return f"[OK] Email configured: {client.email}"
+        return "[FAIL] Email not configured.\nSet EMAIL_ADDRESS and EMAIL_PASSWORD in .env"
     
     if action == "folders":
         if not client.connect_imap():
-            return "❌ Could not connect to IMAP server."
+            return "[FAIL] Could not connect to IMAP server."
         folders = client.list_folders()
         client.disconnect()
         return "### EMAIL FOLDERS\n" + "\n".join(f"- {f}" for f in folders)
     
     if action == "list":
         if not client.connect_imap():
-            return "❌ Could not connect to IMAP server."
+            return "[FAIL] Could not connect to IMAP server."
         emails = client.get_emails(folder, limit, unread_only)
         client.disconnect()
         
         if not emails:
             return "No emails found."
         if "error" in emails[0]:
-            return f"❌ {emails[0]['error']}"
+            return f"[FAIL] {emails[0]['error']}"
         
         lines = [f"### EMAILS ({folder}, {len(emails)} shown)", ""]
         for e in emails:
@@ -239,23 +239,23 @@ def email_tool(
     
     if action == "send":
         if not to or not subject or body is None:
-            return "❌ 'to', 'subject', and 'body' required for send."
+            return "[FAIL] 'to', 'subject', and 'body' required for send."
         return client.send_email(to, subject, body)
     
     if action == "delete":
         if not email_id:
-            return "❌ email_id required for delete."
+            return "[FAIL] email_id required for delete."
         if not client.connect_imap():
-            return "❌ Could not connect."
+            return "[FAIL] Could not connect."
         result = client.delete_email(email_id, folder)
         client.disconnect()
         return result
     
     if action == "mark_read":
         if not email_id:
-            return "❌ email_id required for mark_read."
+            return "[FAIL] email_id required for mark_read."
         if not client.connect_imap():
-            return "❌ Could not connect."
+            return "[FAIL] Could not connect."
         result = client.mark_read(email_id, folder)
         client.disconnect()
         return result

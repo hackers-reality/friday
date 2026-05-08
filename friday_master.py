@@ -2,8 +2,8 @@
 Friday Master Bootstrap - Loads and tests ALL features you asked for.
 Run: python friday_master.py
 """
-import sys'
-import os'
+import sys
+import os
 sys.path.insert(0, '.')
 
 print("=" * 70)
@@ -23,15 +23,15 @@ def test_module(name, import_path, test_fn=None):
         
         if test_fn:
             result = test_fn(m)
-            modules_status.append(("✅", name, result))
+            modules_status.append(("[OK]", name, result))
         else:
-            modules_status.append(("✅", name, "imported"))
+            modules_status.append(("[OK]", name, "imported"))
         results["pass"] += 1
         return m
     except Exception as e:
         # Clean error for Windows console
         err = str(e)[:100].encode('ascii', 'ignore').decode('ascii')
-        modules_status.append(("❌", name, err))
+        modules_status.append(("[FAIL]", name, err))
         results["fail"] += 1
         return None
 
@@ -170,10 +170,10 @@ def test_integration():
 
 try:
     integration_result = test_integration()
-    modules_status.append(("✅", "integration_test", integration_result))
+    modules_status.append(("[OK]", "integration_test", integration_result))
     results["pass"] += 1
 except Exception as e:
-    modules_status.append(("❌", "integration_test", safe_str(e)))
+    modules_status.append(("[FAIL]", "integration_test", safe_str(e)))
     results["fail"] += 1
 
 # ─── Print Results ────────────────────────────────────────#
@@ -194,10 +194,10 @@ print(f"RESULTS: {results['pass']} passed, {results['fail']} failed")
 print("=" * 70)
 
 if results["fail"] > 0:
-    print("\n⚠️  Some features failed. Check errors above.")
+    print("\n[WARN]  Some features failed. Check errors above.")
     print("   Core features may still work even if some modules fail.")
 else:
-    print("\n✅ All features loaded successfully!")
+    print("\n[OK] All features loaded successfully!")
 
 # ─── Quick Feature Demo ──────────────────────────────────────#
 
@@ -250,6 +250,6 @@ print("Friday Master Bootstrap Complete!")
 print("=" * 70)
 
 # Cleanup
-import shutil'
+import shutil
 if os.path.exists("test_output"):
     shutil.rmtree("test_output")

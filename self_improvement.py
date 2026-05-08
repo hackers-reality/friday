@@ -178,7 +178,7 @@ class ImprovementEngine:
         suggestions = self.analyze()
 
         if not suggestions:
-            return "✅ No improvements needed at this time."
+            return "[OK] No improvements needed at this time."
 
         lines = ["### IMPROVEMENT PLAN", ""]
 
@@ -204,7 +204,7 @@ class ImprovementEngine:
         if low:
             lines.append("**LOW PRIORITY**:")
             for s in low:
-                lines.append(f"  🟢 {s['issue']}")
+                lines.append(f"  [OK] {s['issue']}")
                 lines.append(f"     → {s['suggestion']}")
 
         return "\n".join(lines)
@@ -307,11 +307,11 @@ def self_improvement_tool(
         if duration is not None:
             if success:
                 improver.record_success(duration)
-                return "✅ Recorded successful task."
+                return "[OK] Recorded successful task."
             else:
                 improver.record_failure(duration, error or "Unknown error")
-                return "❌ Recorded failed task."
-        return "❌ Duration required for recording."
+                return "[FAIL] Recorded failed task."
+        return "[FAIL] Duration required for recording."
 
     if action == "plan":
         return improver.engine.get_improvement_plan()
@@ -319,7 +319,7 @@ def self_improvement_tool(
     if action == "apply":
         if improvement_action:
             return improver.apply_improvement(improvement_action)
-        return "❌ Improvement action required."
+        return "[FAIL] Improvement action required."
 
     return f"Unknown action: {action}"
 

@@ -335,11 +335,11 @@ def docs_tool(
     
     if action == "generate_markdown":
         if not target:
-            return "❌ File path required."
+            return "[FAIL] File path required."
         analyzer = CodeAnalyzer()
         result = analyzer.analyze_file(target)
         if not result["success"]:
-            return f"❌ Analysis error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Analysis error: {result.get('error', 'Unknown')}"
         
         generator = DocGenerator()
         title = params.get("title")
@@ -349,15 +349,15 @@ def docs_tool(
         with open(output, "w") as f:
             f.write(md)
         
-        return f"### MARKDOWN DOCS\n\n✅ Generated: {output}"
+        return f"### MARKDOWN DOCS\n\n[OK] Generated: {output}"
     
     if action == "generate_rst":
         if not target:
-            return "❌ File path required."
+            return "[FAIL] File path required."
         analyzer = CodeAnalyzer()
         result = analyzer.analyze_file(target)
         if not result["success"]:
-            return f"❌ Analysis error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Analysis error: {result.get('error', 'Unknown')}"
         
         generator = DocGenerator()
         title = params.get("title")
@@ -367,15 +367,15 @@ def docs_tool(
         with open(output, "w") as f:
             f.write(rst)
         
-        return f"### RST DOCS\n\n✅ Generated: {output}"
+        return f"### RST DOCS\n\n[OK] Generated: {output}"
     
     if action == "generate_json":
         if not target:
-            return "❌ File path required."
+            return "[FAIL] File path required."
         analyzer = CodeAnalyzer()
         result = analyzer.analyze_file(target)
         if not result["success"]:
-            return f"❌ Analysis error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Analysis error: {result.get('error', 'Unknown')}"
         
         generator = DocGenerator()
         json_doc = generator.generate_json(result)
@@ -384,7 +384,7 @@ def docs_tool(
         with open(output, "w") as f:
             f.write(json_doc)
         
-        return f"### JSON DOCS\n\n✅ Generated: {output}"
+        return f"### JSON DOCS\n\n[OK] Generated: {output}"
     
     if action == "module_docs":
         output_dir = params.get("output_dir", "docs")
@@ -396,7 +396,7 @@ def docs_tool(
                 lines.append(f"  - {file}")
             return "\n".join(lines)
         else:
-            return f"❌ Generation error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Generation error: {result.get('error', 'Unknown')}"
     
     if action == "readme_update":
         # Simplified: update README with module list
@@ -408,7 +408,7 @@ def docs_tool(
         with open("README.md", "w") as f:
             f.write("\n".join(lines))
         
-        return "### README UPDATE\n\n✅ Updated README.md with module list"
+        return "### README UPDATE\n\n[OK] Updated README.md with module list"
     
     return f"Unknown action: {action}"
 

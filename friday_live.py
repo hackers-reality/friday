@@ -75,6 +75,17 @@ from friday_tools import (
     opencli_init_bridge, opencli_navigate, opencli_click, opencli_type,
     opencli_extract, opencli_screenshot, opencli_scroll,
     opencli_keys, opencli_eval, opencli_state, opencli_doctor,
+    opencli_tab_list, opencli_tab_new, opencli_tab_select, opencli_tab_close,
+    opencli_close, opencli_wait_selector, opencli_find,
+    opencli_get_url, opencli_get_title, opencli_network,
+    opencli_bind, opencli_unbind,
+    search_browser_history, open_history_item, tell_alexa,
+    spotify_next, spotify_prev, spotify_volume,
+    send_instagram_dm, netflix_play, read_emails, send_email,
+    close_app, list_running_apps, generate_file,
+    get_active_window, draft_email, list_recent_history,
+    generate_file_llm, search_and_open,
+    goals_tool_handler, calendar_tool_handler, startup_tool_handler, memory_import_tool_handler,
 )
 
 load_dotenv()
@@ -160,25 +171,128 @@ You are allowed to be slightly sassy if the situation calls for it. But never di
 Be natural. Time-aware. Reference previous context if available.
 Do NOT say "How can I help you today" or anything like that. Be conversational.
 
-[TOOL EXECUTION]
-You have tools at your disposal. Use them immediately when the Boss asks.
-When the Boss gives multiple commands, call ALL tools in one turn — do not wait.
-When you execute a tool, narrate what you are doing naturally.
-For screen questions, use see_screen() immediately.
-For screen time, use stayfree_today() or stayfree_week().
-For web questions, use web_search() immediately.
-For deep reports, use deep_research().
-For desktop control, use click(), type_text(), hotkey(), drag(), scroll(), move_mouse().
-For vision-based clicking, use vision_click() to find and click elements by description.
-For apps, use open_app().
-For Spotify, use spotify_play(), spotify_pause(), or spotify_current().
-For memory, use memory_store() and memory_retrieve().
-For smart home, use home_assistant_command() or alexa_command().
-For vision analysis, you can see the screen via see_screen().
+[CRITICAL - PROACTIVE TOOL CHAINING]
+You MUST chain tools automatically. NEVER ask the Boss questions you can answer with tools.
+
+Tool chaining rules:
+1. "continue watching NETFLIX/anime/video" → IMMEDIATELY: search_browser_history("netflix") → extract URL → open_url(url). Do NOT ask what they were watching.
+2. "open latest video from MrBeast" → IMMEDIATELY: web_search("MrBeast latest video 2026") → find the actual YouTube URL → open_url(url). Do NOT open a search page.
+3. "check my goals" → IMMEDIATELY: goals_tool_handler("list"). Do NOT ask which goals.
+4. "what's on my screen" → IMMEDIATELY: see_screen("Describe everything visible"). Do NOT ask what to look for.
+5. "play [song]" → IMMEDIATELY: spotify_play(). If no device found, tell Boss to open Spotify.
+6. "what apps are running" → IMMEDIATELY: list_running_apps().
+7. "check my browser history for X" → IMMEDIATELY: search_browser_history("X").
+8. When Boss gives multiple commands, call ALL tools in the same turn.
+9. When a tool fails, try an alternative tool. If web_search fails, try open_url with a guess. If one approach fails, try another.
+
+[TOOL CATEGORIES]
+Screen & Vision:
+- see_screen(question) — capture and analyze screen with Gemini Vision. Use for: "what do you see", "find X on screen", "any errors?", "read what's on screen".
+- vision_click(target_description) — find element on screen by description and click it. Use for: "click the search button", "press submit".
+
+Browser Automation (OpenCLI):
+- opencli_navigate(url) — open a URL in Chrome via OpenCLI bridge.
+- opencli_state() — get current page: URL, title, interactive elements, text content.
+- opencli_click(target) — click an element by CSS selector or numeric ref from state.
+- opencli_type(target, text) — type text into an input field.
+- opencli_extract() — get page content as structured text.
+- opencli_screenshot() — take browser screenshot.
+- opencli_scroll(direction) — scroll page up/down.
+- opencli_keys(key) — press keyboard key (Enter, Escape, Tab, etc.).
+- opencli_eval(js) — run JavaScript in browser and get result.
+- opencli_doctor() — check if OpenCLI bridge is connected.
+Use opencli_state() first to inspect a page before interacting with it.
+
+Web & Research:
+- web_search(query) — search the web with DuckDuckGo/Bing.
+- deep_research(topic, depth) — multi-source research report.
+- video_search(query) — find and open the actual video URL.
+- open_url(url) — open any URL in browser.
+- search_and_open(query) — search browser history then web for anything.
+
+Desktop Control:
+- click(x, y), double_click(x, y), right_click(x, y) — mouse clicks at coordinates.
+- move_mouse(x, y), drag(x1, y1, x2, y2) — mouse movement.
+- type_text(text) — type text at current cursor position.
+- hotkey(keys) — press keyboard shortcut like "ctrl+c", "alt+tab".
+- press_key(key), scroll(amount) — keyboard and scroll control.
+
+Apps & System:
+- open_app(name), close_app(name) — launch or kill applications.
+- list_running_apps() — show all open windows.
+- get_active_window() — get current focused window info.
+- system_info() — OS details.
+- get_time() — current time.
+
+Spotify:
+- spotify_play() — play/resume track or search and play.
+- spotify_pause() — pause playback.
+- spotify_next() / spotify_prev() — skip tracks.
+- spotify_volume(level) — set volume 0-100.
+- spotify_current() — what's currently playing.
+
+Browser History:
+- search_browser_history(query, days_back) — search Chrome/Edge/Brave/Opera history.
+- open_history_item(query) — find and open the most relevant history match.
+- list_recent_history(count) — recent browsing history.
+
+Goals & Memory:
+- goals_tool_handler(action, goal) — add, list, update, or analyze goals.
+- memory_store(category, keyword, content) — save facts to long-term memory.
+- memory_retrieve(query) — recall stored memories.
+- memory_import_tool_handler(action, file_path) — import conversations from other AI assistants.
+
+Smart Home:
+- tell_alexa(command) — send voice command to Alexa.
+- smart_home_command(action, device) — control smart home devices.
+- home_assistant_command(entity_id, command) — Home Assistant control.
+
+Communication:
+- read_emails(count) — read latest Gmail messages.
+- send_email(to, subject, body) — send email via Gmail.
+- draft_email(context, recipient) — draft an email with AI.
+- send_instagram_dm(username, message) — send Instagram direct message.
+
+Media:
+- netflix_play(title) — search and play Netflix in browser.
+- video_search(query) — find and play a video.
+
+File Operations:
+- read_file(path), write_file(path, content), list_files(path)
+- find_files(pattern, path), copy_file(src, dst), move_file(src, dst), delete_file(path)
+- clipboard_get(), clipboard_set(text)
+
+Code & Dev:
+- climb_codebase(query, path) — search codebase with ripgrep.
+- git_ops(operation, message) — git status, add, commit, push.
+
+StayFree:
+- stayfree_status() — check if StayFree is installed.
+- stayfree_today() — today's screen time stats.
+- stayfree_week() — weekly screen time summary.
+
+File Generation:
+- generate_file(path, file_type, description, content) — generate code/docs files.
+- generate_file_llm(path, prompt) — generate file from LLM prompt.
+
+Calendar:
+- calendar_tool_handler(action, days) — list upcoming events or sync calendar events to goals.
+
+Startup:
+- startup_tool_handler(action) — manage Friday's auto-start behavior.
+
+[PROACTIVE SCREEN OBSERVATION]
+You receive periodic video frames of the desktop. Use these to be proactively helpful:
+- If you see an error dialog, a crash, or an installer stuck on a step → speak up and offer to fix it.
+- If you see Boss watching a tutorial/video → stay quiet unless asked.
+- If you see a long compile/build running → offer to check on it.
+- If you see something unusual (popup, alert, update nag) → mention it briefly.
+Do NOT narrate everything you see. Only speak when something needs attention or action.
 
 [THINKING]
 You think before you speak. Your internal reasoning is shown as thinking.
 Keep thinking concise and focused on problem-solving.
+Key rule: if you can use a tool to answer, do it. Do not ask.
 
 [BREVITY]
 Short responses. One or two sentences max for spoken text.
@@ -362,7 +476,7 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="video_search",
-                description="Search for videos. Returns 5 formatted results as text.",
+                description="Search for a video and open its direct playback URL in the browser. Use web_search to find the exact video and navigate directly.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "query": {"type": "STRING", "description": "Video search query."}
                 }, required=["query"]),
@@ -715,6 +829,75 @@ def _build_tools():
                 name="opencli_doctor",
                 description="Diagnose OpenCLI browser bridge connectivity and status."
             ),
+            # ======== ADDITIONAL OPENCLI COMMANDS ========
+            types.FunctionDeclaration(
+                name="opencli_tab_list",
+                description="List all open browser tabs with their URLs and titles."
+            ),
+            types.FunctionDeclaration(
+                name="opencli_tab_new",
+                description="Open a new browser tab, optionally navigating to a URL.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "url": {"type": "STRING", "description": "Optional URL to open in the new tab."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_tab_select",
+                description="Switch to a specific browser tab by its target ID.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target_id": {"type": "STRING", "description": "The tab target ID from tab_list."}
+                }, required=["target_id"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_tab_close",
+                description="Close a browser tab by target ID.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target_id": {"type": "STRING", "description": "Tab target ID to close."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_close",
+                description="Release the current browser automation tab lease."
+            ),
+            types.FunctionDeclaration(
+                name="opencli_wait_selector",
+                description="Wait for a CSS selector to appear on the page before continuing.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "selector": {"type": "STRING", "description": "CSS selector to wait for."},
+                    "timeout_ms": {"type": "INTEGER", "description": "Max wait time in milliseconds (default 10000)."}
+                }, required=["selector"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_find",
+                description="Find elements on the page matching a CSS selector.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "selector": {"type": "STRING", "description": "CSS selector to search for."},
+                    "limit": {"type": "INTEGER", "description": "Max results (default 10)."}
+                }, required=["selector"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_get_url",
+                description="Get the current page URL from the browser."
+            ),
+            types.FunctionDeclaration(
+                name="opencli_get_title",
+                description="Get the current page title from the browser."
+            ),
+            types.FunctionDeclaration(
+                name="opencli_network",
+                description="Inspect network requests made by the current page."
+            ),
+            types.FunctionDeclaration(
+                name="opencli_bind",
+                description="Bind OpenCLI to the current Chrome tab for persistent interaction.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "domain": {"type": "STRING", "description": "Optional domain to bind to."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_unbind",
+                description="Unbind from the current Chrome tab."
+            ),
             types.FunctionDeclaration(
                 name="vision_click",
                 description="Find and click an element on screen by describing it (e.g. 'the submit button', 'the play icon'). Uses Gemini Vision to locate it and clicks the coordinates.",
@@ -733,6 +916,161 @@ def _build_tools():
             types.FunctionDeclaration(
                 name="stayfree_week",
                 description="Get this week's screen time summary from StayFree."
+            ),
+            # ======== MISSING TOOL DECLARATIONS ========
+            types.FunctionDeclaration(
+                name="search_browser_history",
+                description="Search your entire Chrome/Edge/Brave/Opera browsing history for a query. Returns matching URLs, titles, and timestamps.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "query": {"type": "STRING", "description": "What to search for in browser history."},
+                    "days_back": {"type": "INTEGER", "description": "How many days back to search (default 30)."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="open_history_item",
+                description="Find and open the most recent browser history item matching a description.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "query": {"type": "STRING", "description": "Description of what to find in history."},
+                }, required=["query"]),
+            ),
+            types.FunctionDeclaration(
+                name="tell_alexa",
+                description="Send a voice command to Alexa via the webhook bridge.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "command": {"type": "STRING", "description": "Natural language command for Alexa."}
+                }, required=["command"]),
+            ),
+            types.FunctionDeclaration(
+                name="spotify_next",
+                description="Skip to the next track on Spotify."
+            ),
+            types.FunctionDeclaration(
+                name="spotify_prev",
+                description="Go back to the previous track on Spotify."
+            ),
+            types.FunctionDeclaration(
+                name="spotify_volume",
+                description="Set Spotify volume (0-100).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "level": {"type": "INTEGER", "description": "Volume level 0-100."}
+                }, required=["level"]),
+            ),
+            types.FunctionDeclaration(
+                name="send_instagram_dm",
+                description="Send a direct message on Instagram to a user by username.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "username": {"type": "STRING", "description": "Instagram username."},
+                    "message": {"type": "STRING", "description": "Message text."},
+                }, required=["username", "message"]),
+            ),
+            types.FunctionDeclaration(
+                name="netflix_play",
+                description="Search and start playing a title on Netflix in the browser.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "title": {"type": "STRING", "description": "Movie or show title to play."}
+                }, required=["title"]),
+            ),
+            types.FunctionDeclaration(
+                name="read_emails",
+                description="Read your latest emails from Gmail.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "count": {"type": "INTEGER", "description": "Number of emails to read (default 10)."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="send_email",
+                description="Send an email via Gmail API.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "to": {"type": "STRING", "description": "Recipient email address."},
+                    "subject": {"type": "STRING", "description": "Email subject."},
+                    "body": {"type": "STRING", "description": "Email body text."},
+                }, required=["to", "subject", "body"]),
+            ),
+            types.FunctionDeclaration(
+                name="close_app",
+                description="Close an application by killing its process.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "name": {"type": "STRING", "description": "Process name to kill (e.g. chrome.exe)."}
+                }, required=["name"]),
+            ),
+            types.FunctionDeclaration(
+                name="list_running_apps",
+                description="List all currently open application windows."
+            ),
+            types.FunctionDeclaration(
+                name="generate_file",
+                description="Generate a file from a description using LLM.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "description": {"type": "STRING", "description": "Description of the file to generate."},
+                    "path": {"type": "STRING", "description": "Where to save the file."},
+                }, required=["description"]),
+            ),
+            # ======== NEWLY WIRED TOOLS ========
+            types.FunctionDeclaration(
+                name="get_active_window",
+                description="Get info about the currently active window (title, process, position)."
+            ),
+            types.FunctionDeclaration(
+                name="draft_email",
+                description="Draft an email using AI based on context, addressing a recipient.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "context": {"type": "STRING", "description": "What the email should be about."},
+                    "recipient": {"type": "STRING", "description": "Recipient name or email."},
+                }, required=["context"]),
+            ),
+            types.FunctionDeclaration(
+                name="list_recent_history",
+                description="List the most recent browser history entries across all browsers.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "count": {"type": "INTEGER", "description": "Number of entries to return (default 10)."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="generate_file_llm",
+                description="Generate a file by specifying a prompt for the LLM.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path": {"type": "STRING", "description": "Output file path."},
+                    "prompt": {"type": "STRING", "description": "Prompt describing the file content."},
+                }, required=["path", "prompt"]),
+            ),
+            types.FunctionDeclaration(
+                name="search_and_open",
+                description="Search the web for something and open the most relevant result in your browser.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "query": {"type": "STRING", "description": "Search query."}
+                }, required=["query"]),
+            ),
+            types.FunctionDeclaration(
+                name="goals_tool_handler",
+                description="Track personal goals: add, list, update progress.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: add, list, update, complete, progress, analyze."},
+                    "goal": {"type": "STRING", "description": "Goal name or description."},
+                    "category": {"type": "STRING", "description": "Goal category."},
+                }, required=["action"]),
+            ),
+            types.FunctionDeclaration(
+                name="startup_tool_handler",
+                description="Manage Friday's startup behavior: check, enable, or disable auto-start.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, enable, disable."}
+                }, required=["action"]),
+            ),
+            types.FunctionDeclaration(
+                name="calendar_tool_handler",
+                description="Google Calendar: list upcoming events, sync events to goals.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, sync."},
+                    "days": {"type": "INTEGER", "description": "Number of days ahead to fetch (default 7)."},
+                }, required=["action"]),
+            ),
+            types.FunctionDeclaration(
+                name="memory_import_tool_handler",
+                description="Import conversations from other AI assistants (Claude, ChatGPT, Gemini) for Friday to learn from.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: import, audit, profile, list."},
+                    "file_path": {"type": "STRING", "description": "Path to conversation file or directory."},
+                }, required=["action"]),
             ),
         ])
     ]
@@ -800,6 +1138,40 @@ TOOL_MAP = {
     "stayfree_status": stayfree_status,
     "stayfree_today": stayfree_today,
     "stayfree_week": stayfree_week,
+    "search_browser_history": search_browser_history,
+    "open_history_item": open_history_item,
+    "tell_alexa": tell_alexa,
+    "spotify_next": spotify_next,
+    "spotify_prev": spotify_prev,
+    "spotify_volume": spotify_volume,
+    "send_instagram_dm": send_instagram_dm,
+    "netflix_play": netflix_play,
+    "read_emails": read_emails,
+    "send_email": send_email,
+    "close_app": close_app,
+    "list_running_apps": list_running_apps,
+    "generate_file": generate_file,
+    "get_active_window": get_active_window,
+    "draft_email": draft_email,
+    "list_recent_history": list_recent_history,
+    "generate_file_llm": generate_file_llm,
+    "search_and_open": search_and_open,
+    "goals_tool_handler": goals_tool_handler,
+    "calendar_tool_handler": calendar_tool_handler,
+    "startup_tool_handler": startup_tool_handler,
+    "memory_import_tool_handler": memory_import_tool_handler,
+    "opencli_tab_list": opencli_tab_list,
+    "opencli_tab_new": opencli_tab_new,
+    "opencli_tab_select": opencli_tab_select,
+    "opencli_tab_close": opencli_tab_close,
+    "opencli_close": opencli_close,
+    "opencli_wait_selector": opencli_wait_selector,
+    "opencli_find": opencli_find,
+    "opencli_get_url": opencli_get_url,
+    "opencli_get_title": opencli_get_title,
+    "opencli_network": opencli_network,
+    "opencli_bind": opencli_bind,
+    "opencli_unbind": opencli_unbind,
 }
 
 
@@ -926,24 +1298,29 @@ def _build_session_config(tools, resume_handle=None):
 # BACKGROUND SCREEN MONITOR - Phase 2
 async def background_monitor(session):
     """Proactive screen monitor: captures screen every 30s, sends to Gemini for awareness.
-    Gemini's proactivity feature handles voicing interesting observations.
-    Max one comment every 5 minutes to avoid being annoying.
+    Skips sending if the screen hasn't changed significantly (checks hash).
     """
     last_send_time = 0
+    last_hash = None
     try:
-        from PIL import ImageGrab
+        from PIL import ImageGrab, Image
         import io
+        import hashlib
         import time
         while True:
             try:
                 now = time.time()
                 if now - last_send_time >= 30:
-                    last_send_time = now
                     screen = ImageGrab.grab()
-                    screen = screen.resize((960, 540))
-                    buffer = io.BytesIO()
-                    screen.save(buffer, format="JPEG", quality=50)
-                    await session.send_realtime_input(video=buffer.getvalue())
+                    screen_resized = screen.resize((320, 180))
+                    current_hash = hashlib.md5(screen_resized.tobytes()).hexdigest()
+                    if current_hash != last_hash or (now - last_send_time >= 120):
+                        last_hash = current_hash
+                        last_send_time = now
+                        screen_small = screen.resize((960, 540))
+                        buffer = io.BytesIO()
+                        screen_small.save(buffer, format="JPEG", quality=50)
+                        await session.send_realtime_input(video=buffer.getvalue())
             except Exception:
                 pass
             await asyncio.sleep(5)
@@ -968,6 +1345,10 @@ async def keepalive_task(session):
 async def audio_worker(recorder, session, audio_ready, porcupine, winsound):
     await audio_ready.wait()
     while True:
+        # Skip sending mic audio while assistant is speaking (echo prevention)
+        if _mic_muted.is_set():
+            await asyncio.sleep(0.05)
+            continue
         frame = recorder.read()
         audio_data = struct.pack("<" + "h" * len(frame), *frame)
         wake_index = porcupine.process(frame)
@@ -1057,8 +1438,9 @@ async def friday_live_engine():
                                                 shown_input = txt
                                                 chat.add_user_message(txt)
 
-                                        # Model turn - audio + thoughts
+                                         # Model turn - audio + thoughts
                                         if sc.model_turn:
+                                            _model_turn_done.clear()  # Model is speaking — don't unmute yet
                                             for part in sc.model_turn.parts:
                                                 if part.inline_data:
                                                     _audio_playback_queue.put(part.inline_data.data)
@@ -1086,6 +1468,7 @@ async def friday_live_engine():
 
                                         # Turn complete
                                         if sc.turn_complete:
+                                            _model_turn_done.set()  # No more audio chunks coming
                                             if thinking_parts:
                                                 chat.add_thought("\n".join(thinking_parts))
                                                 thinking_parts = []

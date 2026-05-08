@@ -376,8 +376,8 @@ def nlp_tool(
     if action == "status":
         analyzer = TextAnalyzer()
         lines = ["### NLP STATUS", ""]
-        lines.append(f"**NLTK Available**: {'✅' if analyzer.nltk_available else '❌'}")
-        lines.append(f"**spaCy Available**: {'✅' if analyzer.spacy_available else '❌'}")
+        lines.append(f"**NLTK Available**: {'[OK]' if analyzer.nltk_available else '[FAIL]'}")
+        lines.append(f"**spaCy Available**: {'[OK]' if analyzer.spacy_available else '[FAIL]'}")
         lines.append("")
         lines.append("**Available Features**:")
         lines.append("  - Text analysis (readability, stats)")
@@ -391,7 +391,7 @@ def nlp_tool(
     
     if action == "analyze":
         if not text:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         analyzer = TextAnalyzer()
         result = analyzer.analyze_basic(text)
         if result["success"]:
@@ -402,22 +402,22 @@ def nlp_tool(
 **Avg Sentence Length**: {result['avg_sentence_length']}
 **Readability**: {result['readability_level']} ({result['readability_score']})"""
         else:
-            return f"❌ Analysis error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Analysis error: {result.get('error', 'Unknown')}"
     
     if action == "tokenize":
         if not text:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         analyzer = TextAnalyzer()
         result = analyzer.tokenize(text)
         if result["success"]:
             preview = ", ".join(result["tokens"][:20])
             return f"### TOKENIZATION\n\n**Tokens** ({result['count']}): {preview}..."
         else:
-            return f"❌ Tokenization error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Tokenization error: {result.get('error', 'Unknown')}"
     
     if action == "entities":
         if not text:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         analyzer = TextAnalyzer()
         result = analyzer.extract_entities(text)
         if result["success"]:
@@ -426,11 +426,11 @@ def nlp_tool(
                 lines.append(f"  - {entity['text']} ({entity['label']})")
             return "\n".join(lines)
         else:
-            return f"❌ NER error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] NER error: {result.get('error', 'Unknown')}"
     
     if action == "sentiment":
         if not text:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         analyzer = SentimentAnalyzer()
         result = analyzer.analyze(text)
         if result["success"]:
@@ -440,11 +440,11 @@ def nlp_tool(
 **Positive Words**: {result['positive_words']}
 **Negative Words**: {result['negative_words']}"""
         else:
-            return f"❌ Sentiment error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Sentiment error: {result.get('error', 'Unknown')}"
     
     if action == "summarize":
         if not text:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         num_sentences = params.get("num_sentences", 3)
         summarizer = TextSummarizer()
         result = summarizer.summarize(text, num_sentences)
@@ -456,11 +456,11 @@ def nlp_tool(
 **Summary**:
 {result['summary']}"""
         else:
-            return f"❌ Summarization error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Summarization error: {result.get('error', 'Unknown')}"
     
     if action == "language":
         if not text:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         detector = LanguageDetector()
         result = detector.detect(text)
         if result["success"]:
@@ -468,11 +468,11 @@ def nlp_tool(
 **Language**: {result['language']}
 **Confidence**: {result['confidence']}"""
         else:
-            return f"❌ Detection error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Detection error: {result.get('error', 'Unknown')}"
     
     if action == "keywords":
         if not text:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         num_keywords = params.get("num_keywords", 5)
         extractor = KeywordExtractor()
         result = extractor.extract(text, num_keywords)
@@ -482,7 +482,7 @@ def nlp_tool(
                 lines.append(f"  - {kw['word']}: {kw['count']} occurrences")
             return "\n".join(lines)
         else:
-            return f"❌ Keyword extraction error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Keyword extraction error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

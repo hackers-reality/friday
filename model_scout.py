@@ -17,12 +17,12 @@ def list_and_verify_models():
             for m in models:
                 # Look for Live/Bidi support
                 if 'bidiGenerateContent' in m.supported_generation_methods:
-                    print(f"✅ FOUND LIVE MODEL: {m.name}")
+                    print(f"[OK] FOUND LIVE MODEL: {m.name}")
                     print(f"   Methods: {m.supported_generation_methods}")
                 elif 'flash' in m.name.lower() or 'live' in m.name.lower():
                     print(f"   Potential Model: {m.name} (Methods: {m.supported_generation_methods})")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
 
 if __name__ == "__main__":
     list_and_verify_models()

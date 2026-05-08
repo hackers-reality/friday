@@ -36,7 +36,7 @@ def add_to_startup(exe_path: Optional[str] = None) -> str:
         import win32com.client
     except ImportError:
         return (
-            "❌ pywin32 not installed. Install with: pip install pywin32\n"
+            "[FAIL] pywin32 not installed. Install with: pip install pywin32\n"
             "Then run this function again."
         )
 
@@ -64,10 +64,10 @@ def add_to_startup(exe_path: Optional[str] = None) -> str:
         shortcut.Description = "Friday - Sovereign AI Assistant"
         shortcut.save()
 
-        return f"✅ Friday added to startup! Shortcut: {shortcut_path}"
+        return f"[OK] Friday added to startup! Shortcut: {shortcut_path}"
 
     except Exception as e:
-        return f"❌ Failed to add to startup: {str(e)}"
+        return f"[FAIL] Failed to add to startup: {str(e)}"
 
 def remove_from_startup() -> str:
     """Remove Friday from Windows startup."""
@@ -76,9 +76,9 @@ def remove_from_startup() -> str:
     if os.path.exists(shortcut_path):
         try:
             os.remove(shortcut_path)
-            return "✅ Friday removed from startup."
+            return "[OK] Friday removed from startup."
         except Exception as e:
-            return f"❌ Failed to remove: {str(e)}"
+            return f"[FAIL] Failed to remove: {str(e)}"
     return "Friday was not in startup."
 
 def check_startup_status() -> str:
@@ -86,8 +86,8 @@ def check_startup_status() -> str:
     shortcut_path = get_startup_shortcut_path()
 
     if os.path.exists(shortcut_path):
-        return f"✅ Friday is in startup. Shortcut: {shortcut_path}"
-    return "❌ Friday is NOT in startup."
+        return f"[OK] Friday is in startup. Shortcut: {shortcut_path}"
+    return "[FAIL] Friday is NOT in startup."
 
 def add_to_startup_simple() -> str:
     """
@@ -103,10 +103,10 @@ def add_to_startup_simple() -> str:
         with open(bat_path, "w") as f:
             f.write(bat_content)
 
-        return f"✅ Friday added to startup (batch method). File: {bat_path}"
+        return f"[OK] Friday added to startup (batch method). File: {bat_path}"
 
     except Exception as e:
-        return f"❌ Failed: {str(e)}"
+        return f"[FAIL] Failed: {str(e)}"
 
 
 if __name__ == "__main__":

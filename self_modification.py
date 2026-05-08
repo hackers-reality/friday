@@ -274,7 +274,7 @@ def self_mod_tool(
             lines = ["### CODE ANALYSIS (ALL FILES)", ""]
             for r in results:
                 if "error" in r:
-                    lines.append(f"❌ {r['file']}: {r['error']}")
+                    lines.append(f"[FAIL] {r['file']}: {r['error']}")
                 else:
                     lines.append(f"**{Path(r['file']).name}**")
                     lines.append(f"  Lines: {r['lines']} | Functions: {r['functions']} | Classes: {r['classes']}")
@@ -286,22 +286,22 @@ def self_mod_tool(
         
         result = engine.analyzer.analyze_file(filepath)
         if "error" in result:
-            return f"❌ {result['error']}"
+            return f"[FAIL] {result['error']}"
         return json.dumps(result, indent=2)
     
     if action == "propose":
         if not filepath:
-            return "❌ Filepath required."
+            return "[FAIL] Filepath required."
         result = engine.propose_improvement(filepath)
         return json.dumps(result, indent=2)
     
     if action == "apply":
         if not filepath or not new_code:
-            return "❌ Filepath and new_code required."
+            return "[FAIL] Filepath and new_code required."
         result = engine.apply_modification(filepath, new_code, reason or "Manual update")
         if result["success"]:
-            return f"✅ Modification applied to {filepath}\nBackup: {result.get('backup', 'None')}"
-        return f"❌ Failed: {result.get('error', 'Unknown')}"
+            return f"[OK] Modification applied to {filepath}\nBackup: {result.get('backup', 'None')}"
+        return f"[FAIL] Failed: {result.get('error', 'Unknown')}"
     
     if action == "list_backups":
         backups = list(engine.backup_dir.glob("*.bak"))

@@ -493,94 +493,94 @@ def web_tool(
     
     if action == "fetch":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         scraper = WebScraper()
         result = scraper.fetch(url)
         if result["success"]:
             return f"### FETCH\n\n**Status**: {result['status_code']}\n**Content Length**: {len(result['content'])} chars"
         else:
-            return f"❌ Fetch error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Fetch error: {result.get('error', 'Unknown')}"
     
     if action == "links":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         scraper = WebScraper()
         result = scraper.extract_links(url, selector or "a")
         if result["success"]:
             links_preview = "\n".join([f"  - {l['text'][:50]}: {l['href'][:60]}" for l in result["links"][:10]])
             return f"### LINKS\n\nFound {result['count']} links:\n{links_preview}"
         else:
-            return f"❌ Links error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Links error: {result.get('error', 'Unknown')}"
     
     if action == "text":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         scraper = WebScraper()
         result = scraper.extract_text(url, selector or "body")
         if result["success"]:
             preview = result["combined"][:500]
             return f"### TEXT EXTRACTION\n\n{preview}..."
         else:
-            return f"❌ Text extraction error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Text extraction error: {result.get('error', 'Unknown')}"
     
     if action == "images":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         scraper = WebScraper()
         result = scraper.extract_images(url)
         if result["success"]:
             return f"### IMAGES\n\nFound {result['count']} images."
         else:
-            return f"❌ Images error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Images error: {result.get('error', 'Unknown')}"
     
     if action == "search":
         if not query:
-            return "❌ Query required."
+            return "[FAIL] Query required."
         scraper = WebScraper()
         result = scraper.search_engine(query)
         if result["success"]:
             results_preview = "\n".join([f"  {i+1}. {r['title'][:60]}" for i, r in enumerate(result["results"][:5])])
             return f"### SEARCH RESULTS\n\nQuery: {query}\nFound {result['count']} results:\n{results_preview}"
         else:
-            return f"❌ Search error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Search error: {result.get('error', 'Unknown')}"
     
     if action == "api_get":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         client = APIClient()
         result = client.get(url, params=params)
         if result["success"]:
             return f"### API GET\n\n**Status**: {result['status_code']}\n**Data**: {json.dumps(result['data'], indent=2)[:500]}"
         else:
-            return f"❌ API error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] API error: {result.get('error', 'Unknown')}"
     
     if action == "api_post":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         client = APIClient()
         result = client.post(url, json_data=params)
         if result["success"]:
             return f"### API POST\n\n**Status**: {result['status_code']}\n**Response**: {json.dumps(result['data'], indent=2)[:500]}"
         else:
-            return f"❌ API error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] API error: {result.get('error', 'Unknown')}"
     
     if action == "extract_article":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         result = ContentExtractor.extract_article(url)
         if result["success"]:
             return f"### ARTICLE EXTRACTION\n\n**Title**: {result['title']}\n**Author**: {result.get('author', 'Unknown')}\n**Date**: {result.get('date', 'Unknown')}\n**Word Count**: {result['word_count']}"
         else:
-            return f"❌ Extraction error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Extraction error: {result.get('error', 'Unknown')}"
     
     if action == "extract_table":
         if not url:
-            return "❌ URL required."
+            return "[FAIL] URL required."
         result = ContentExtractor.extract_table(url, selector or "table")
         if result["success"]:
             return f"### TABLE EXTRACTION\n\nFound {result['table_count']} tables."
         else:
-            return f"❌ Extraction error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Extraction error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

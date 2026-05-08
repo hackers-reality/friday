@@ -302,13 +302,13 @@ def integrations_tool(
     
     if action == "slack_msg":
         if not target or "message" not in params:
-            return "❌ Channel and message required."
+            return "[FAIL] Channel and message required."
         slack = SlackIntegration()
         result = slack.send_message(target, params["message"])
         if result["success"]:
-            return f"### SLACK MESSAGE\n\n✅ Sent to {result['channel']}"
+            return f"### SLACK MESSAGE\n\n[OK] Sent to {result['channel']}"
         else:
-            return f"❌ Slack error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Slack error: {result.get('error', 'Unknown')}"
     
     if action == "slack_channels":
         slack = SlackIntegration()
@@ -319,17 +319,17 @@ def integrations_tool(
                 lines.append(f"  - #{ch['name']}")
             return "\n".join(lines)
         else:
-            return f"❌ Slack error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Slack error: {result.get('error', 'Unknown')}"
     
     if action == "discord_msg":
         if not target or "message" not in params:
-            return "❌ Channel ID and message required."
+            return "[FAIL] Channel ID and message required."
         discord = DiscordIntegration()
         result = discord.send_message(target, params["message"])
         if result["success"]:
-            return f"### DISCORD MESSAGE\n\n✅ Sent to channel {result['channel_id']}"
+            return f"### DISCORD MESSAGE\n\n[OK] Sent to channel {result['channel_id']}"
         else:
-            return f"❌ Discord error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Discord error: {result.get('error', 'Unknown')}"
     
     if action == "github_repos":
         github = GitHubIntegration()
@@ -341,21 +341,21 @@ def integrations_tool(
                 lines.append(f"  - {repo['full_name']}")
             return "\n".join(lines)
         else:
-            return f"❌ GitHub error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] GitHub error: {result.get('error', 'Unknown')}"
     
     if action == "github_issue":
         if not target or "title" not in params:
-            return "❌ Repo and title required."
+            return "[FAIL] Repo and title required."
         github = GitHubIntegration()
         result = github.create_issue(target, params["title"], params.get("body", ""))
         if result["success"]:
-            return f"### GITHUB ISSUE\n\n✅ Created #{result['number']}\nURL: {result['html_url']}"
+            return f"### GITHUB ISSUE\n\n[OK] Created #{result['number']}\nURL: {result['html_url']}"
         else:
-            return f"❌ GitHub error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] GitHub error: {result.get('error', 'Unknown')}"
     
     if action == "jira_search":
         if not target:
-            return "❌ JQL query required."
+            return "[FAIL] JQL query required."
         jira = JiraIntegration()
         result = jira.search_issues(target)
         if result["success"]:
@@ -364,17 +364,17 @@ def integrations_tool(
                 lines.append(f"  - {issue['key']}: {issue['summary']}")
             return "\n".join(lines)
         else:
-            return f"❌ Jira error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Jira error: {result.get('error', 'Unknown')}"
     
     if action == "jira_create":
         if not target or "summary" not in params:
-            return "❌ Project and summary required."
+            return "[FAIL] Project and summary required."
         jira = JiraIntegration()
         result = jira.create_issue(target, params["summary"], params.get("issuetype", "Task"))
         if result["success"]:
-            return f"### JIRA ISSUE\n\n✅ Created {result['key']}"
+            return f"### JIRA ISSUE\n\n[OK] Created {result['key']}"
         else:
-            return f"❌ Jira error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Jira error: {result.get('error', 'Unknown')}"
     
     if action == "trello_boards":
         trello = TrelloIntegration()
@@ -385,7 +385,7 @@ def integrations_tool(
                 lines.append(f"  - {board['name']}")
             return "\n".join(lines)
         else:
-            return f"❌ Trello error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Trello error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

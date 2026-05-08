@@ -320,24 +320,24 @@ def backup_tool(
     
     if action == "file_backup":
         if not target:
-            return "❌ File path required."
+            return "[FAIL] File path required."
         backup = FileBackup()
         result = backup.backup_file(target, params.get("backup_name"))
         if result["success"]:
-            return f"### FILE BACKUP\n\n✅ Backed up to {result['backup']}\nSize: {result['size']} bytes"
+            return f"### FILE BACKUP\n\n[OK] Backed up to {result['backup']}\nSize: {result['size']} bytes"
         else:
-            return f"❌ Backup error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Backup error: {result.get('error', 'Unknown')}"
     
     if action == "dir_backup":
         if not target:
-            return "❌ Directory path required."
+            return "[FAIL] Directory path required."
         backup = FileBackup()
         format_ = params.get("format", "zip")
         result = backup.backup_directory(target, format_)
         if result["success"]:
-            return f"### DIRECTORY BACKUP\n\n✅ Backed up to {result['backup']}\nFormat: {result['format']}\nSize: {result['size']} bytes"
+            return f"### DIRECTORY BACKUP\n\n[OK] Backed up to {result['backup']}\nFormat: {result['format']}\nSize: {result['size']} bytes"
         else:
-            return f"❌ Backup error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Backup error: {result.get('error', 'Unknown')}"
     
     if action == "list":
         backup = FileBackup()
@@ -349,48 +349,48 @@ def backup_tool(
     
     if action == "restore":
         if not target:
-            return "❌ Backup name required."
+            return "[FAIL] Backup name required."
         backup = FileBackup()
         restore_path = params.get("restore_path")
         result = backup.restore_file(target, restore_path)
         if result["success"]:
-            return f"### RESTORE\n\n✅ Restored to {result['restored_to']}"
+            return f"### RESTORE\n\n[OK] Restored to {result['restored_to']}"
         else:
-            return f"❌ Restore error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Restore error: {result.get('error', 'Unknown')}"
     
     if action == "db_backup":
         if not target:
-            return "❌ Database path required."
+            return "[FAIL] Database path required."
         db_backup = DatabaseBackup()
         result = db_backup.backup_sqlite(target)
         if result["success"]:
-            return f"### DATABASE BACKUP\n\n✅ Backed up to {result['backup']}\nSize: {result['size']} bytes"
+            return f"### DATABASE BACKUP\n\n[OK] Backed up to {result['backup']}\nSize: {result['size']} bytes"
         else:
-            return f"❌ Backup error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Backup error: {result.get('error', 'Unknown')}"
     
     if action == "cloud_backup":
         if not target:
-            return "❌ File path required."
+            return "[FAIL] File path required."
         provider = params.get("provider", "aws")
         cloud_backup = CloudBackup(provider)
         
         if provider == "aws":
             bucket = params.get("bucket")
             if not bucket:
-                return "❌ Bucket name required for AWS."
+                return "[FAIL] Bucket name required for AWS."
             result = cloud_backup.backup_to_s3(target, bucket)
         elif provider == "gcs":
             bucket = params.get("bucket")
             if not bucket:
-                return "❌ Bucket name required for GCS."
+                return "[FAIL] Bucket name required for GCS."
             result = cloud_backup.backup_to_gcs(target, bucket)
         else:
-            return f"❌ Unknown provider: {provider}"
+            return f"[FAIL] Unknown provider: {provider}"
         
         if result["success"]:
-            return f"### CLOUD BACKUP\n\n✅ Backed up to {result['bucket']}/{result.get('key', result.get('blob', ''))}"
+            return f"### CLOUD BACKUP\n\n[OK] Backed up to {result['bucket']}/{result.get('key', result.get('blob', ''))}"
         else:
-            return f"❌ Backup error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Backup error: {result.get('error', 'Unknown')}"
     
     if action == "schedule_list":
         scheduler = BackupScheduler()

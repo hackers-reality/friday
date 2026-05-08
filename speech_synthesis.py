@@ -117,7 +117,7 @@ class SystemTTSEngine(TTSEngine):
     ) -> str:
         """Use Windows SAPI via PowerShell."""
         if not self.available:
-            return "❌ System TTS not available (Windows only)."
+            return "[FAIL] System TTS not available (Windows only)."
         
         # Escape quotes in text
         safe_text = text.replace("'", "''")
@@ -139,11 +139,11 @@ class SystemTTSEngine(TTSEngine):
             )
             
             if result.returncode == 0:
-                return f"✅ Audio saved: {output_path}"
-            return f"❌ TTS error: {result.stderr.decode()}"
+                return f"[OK] Audio saved: {output_path}"
+            return f"[FAIL] TTS error: {result.stderr.decode()}"
             
         except Exception as e:
-            return f"❌ TTS error: {e}"
+            return f"[FAIL] TTS error: {e}"
     
     def get_available_voices(self) -> List[VoiceProfile]:
         """Get installed voices (simplified)."""
@@ -178,7 +178,7 @@ class GTTSEngine(TTSEngine):
     ) -> str:
         """Use gTTS for synthesis."""
         if not self.available:
-            return "❌ gTTS not installed. Run: pip install gtts"
+            return "[FAIL] gTTS not installed. Run: pip install gtts"
         
         try:
             from gtts import gTTS
@@ -203,10 +203,10 @@ class GTTSEngine(TTSEngine):
                 import shutil
                 shutil.move(temp_path, output_path)
             
-            return f"✅ Audio saved: {output_path}"
+            return f"[OK] Audio saved: {output_path}"
             
         except Exception as e:
-            return f"❌ gTTS error: {e}"
+            return f"[FAIL] gTTS error: {e}"
     
     def get_available_voices(self) -> List[VoiceProfile]:
         """gTTS doesn't have voice selection."""
@@ -239,7 +239,7 @@ class EdgeTTSEngine(TTSEngine):
     ) -> str:
         """Use edge-tts for synthesis."""
         if not self.available:
-            return "❌ edge-tts not installed. Run: pip install edge-tts"
+            return "[FAIL] edge-tts not installed. Run: pip install edge-tts"
         
         try:
             import edge_tts
@@ -250,10 +250,10 @@ class EdgeTTSEngine(TTSEngine):
                 await communicate.save(output_path)
             
             asyncio.run(_synthesize())
-            return f"✅ Audio saved: {output_path}"
+            return f"[OK] Audio saved: {output_path}"
             
         except Exception as e:
-            return f"❌ Edge TTS error: {e}"
+            return f"[FAIL] Edge TTS error: {e}"
     
     def get_available_voices(self) -> List[VoiceProfile]:
         """Get Edge TTS voices (simplified)."""
@@ -325,7 +325,7 @@ class TTSManager:
         elif self.active_engine:
             engine = self.engines[self.active_engine]
         else:
-            return "❌ No TTS engine available."
+            return "[FAIL] No TTS engine available."
         
         # Choose voice
         voice = self.voices.get(voice_id) if voice_id else None
@@ -335,7 +335,7 @@ class TTSManager:
             voice = voices[0] if voices else None
         
         if not voice:
-            return "❌ No voices available."
+            return "[FAIL] No voices available."
         
         # Generate output path
         if not output_path:
@@ -349,7 +349,7 @@ class TTSManager:
         """List available TTS engines."""
         lines = ["### TTS ENGINES", ""]
         for name, engine in self.engines.items():
-            icon = "✅" if name == self.active_engine else "⚙"
+            icon = "[OK]" if name == self.active_engine else "⚙"
             lines.append(f"{icon} {name}")
         return "\n".join(lines)
     
@@ -379,7 +379,7 @@ class TTSManager:
     ) -> str:
         """Clone a voice (simplified)."""
         if not audio_samples:
-            return "❌ Audio samples required."
+            return "[FAIL] Audio samples required."
         
         # Simplified: just create a profile
         cloned = VoiceProfile(
@@ -391,7 +391,7 @@ class TTSManager:
         cloned.cloned_from = audio_samples[0]
         self.voices[new_voice_id] = cloned
         
-        return f"✅ Voice cloned: {new_name} (simplified)"
+        return f"[OK] Voice cloned: {new_name} (simplified)"
     
     def save_voices(self, path: str):
         """Save voices to file."""
@@ -447,7 +447,7 @@ def tts_tool(
     
     if action == "synthesize":
         if not text:
-            return "❌ Text required for synthesis."
+            return "[FAIL] Text required for synthesis."
         
         result = manager.synthesize(text, voice_id, output_path, engine)
         return result
@@ -460,12 +460,12 @@ def tts_tool(
     
     if action == "clone_voice":
         if not text or not voice_id:  # Reuse text param for audio_samples JSON
-            return "❌ voice_id and audio_samples (in text param as JSON) required."
+            return "[FAIL] voice_id and audio_samples (in text param as JSON) required."
         
         try:
             samples = json.loads(text)
         except:
-            return "❌ audio_samples must be JSON array."
+            return "[FAIL] audio_samples must be JSON array."
         
         return manager.clone_voice(samples, voice_id, output_path or "cloned_voice")
     

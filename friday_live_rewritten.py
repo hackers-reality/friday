@@ -625,7 +625,7 @@ Current status: Standing by. Run stark_doctor and greet Boss appropriately.""")]
                     status_msg.update(get_status_panel("STANDBY", f"Connecting: {current_model}..."))
 
                     async with client.aio.live.connect(model=current_model, config=config) as session:
-                        console.print(f"[bold green]✅ Neural Link Established via {current_model}[/]")
+                        console.print(f"[bold green][OK] Neural Link Established via {current_model}[/]")
                         reconnect_attempts = 0
 
                         await session.send_client_content(

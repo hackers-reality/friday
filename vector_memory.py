@@ -70,7 +70,7 @@ class VectorMemory:
         Returns the ID of the added item.
         """
         if not self.is_available():
-            return "❌ Vector memory not available."
+            return "[FAIL] Vector memory not available."
         
         try:
             # Generate ID if not provided
@@ -92,10 +92,10 @@ class VectorMemory:
                 ids=[id]
             )
             
-            return f"✅ Added to vector memory (ID: {id[:8]}...)"
+            return f"[OK] Added to vector memory (ID: {id[:8]}...)"
             
         except Exception as e:
-            return f"❌ Error adding to memory: {e}"
+            return f"[FAIL] Error adding to memory: {e}"
     
     def search(
         self,
@@ -141,7 +141,7 @@ class VectorMemory:
     def get_stats(self) -> str:
         """Get statistics about the vector memory."""
         if not self.is_available():
-            return "❌ Vector memory not available."
+            return "[FAIL] Vector memory not available."
         
         try:
             count = self.collection.count()
@@ -149,33 +149,33 @@ class VectorMemory:
 ### VECTOR MEMORY STATS
 **Collection**: {self.collection_name}
 **Items**: {count}
-**Status**: ✅ Active
+**Status**: [OK] Active
 """
         except Exception as e:
-            return f"❌ Error getting stats: {e}"
+            return f"[FAIL] Error getting stats: {e}"
     
     def delete(self, id: str) -> str:
         """Delete an item from memory."""
         if not self.is_available():
-            return "❌ Vector memory not available."
+            return "[FAIL] Vector memory not available."
         
         try:
             self.collection.delete(ids=[id])
-            return f"✅ Deleted item {id[:8]}..."
+            return f"[OK] Deleted item {id[:8]}..."
         except Exception as e:
-            return f"❌ Error deleting: {e}"
+            return f"[FAIL] Error deleting: {e}"
     
     def clear(self) -> str:
         """Clear all items from memory."""
         if not self.is_available():
-            return "❌ Vector memory not available."
+            return "[FAIL] Vector memory not available."
         
         try:
             self.client.delete_collection(self.collection_name)
             self._init_chroma()  # Reinitialize
-            return "✅ Vector memory cleared."
+            return "[OK] Vector memory cleared."
         except Exception as e:
-            return f"❌ Error clearing: {e}"
+            return f"[FAIL] Error clearing: {e}"
 
 
 # ─── Singleton Instance ────────────────────────────────────#
@@ -207,16 +207,16 @@ def vector_memory_tool(
     memory = get_vector_memory()
     
     if not memory.is_available():
-        return "❌ Vector memory not available. Install: pip install chromadb"
+        return "[FAIL] Vector memory not available. Install: pip install chromadb"
     
     if action == "search":
         if not query:
-            return "❌ Query required for search."
+            return "[FAIL] Query required for search."
         results = memory.search(query, n_results=n_results)
         if not results:
             return "No results found."
         if "error" in results[0]:
-            return f"❌ {results[0]['error']}"
+            return f"[FAIL] {results[0]['error']}"
         
         lines = [f"### SEARCH RESULTS (top {len(results)})", ""]
         for i, r in enumerate(results, 1):
@@ -230,7 +230,7 @@ def vector_memory_tool(
     
     if action == "add":
         if not text:
-            return "❌ Text required for add."
+            return "[FAIL] Text required for add."
         
         meta = {}
         if metadata:
@@ -246,7 +246,7 @@ def vector_memory_tool(
     
     if action == "delete":
         if not item_id:
-            return "❌ Item ID required for delete."
+            return "[FAIL] Item ID required for delete."
         return memory.delete(item_id)
     
     if action == "clear":
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     memory = get_vector_memory()
     
     if not memory.is_available():
-        print("❌ ChromaDB not available. Install: pip install chromadb")
+        print("[FAIL] ChromaDB not available. Install: pip install chromadb")
     else:
         # Test adding
         print("\nAdding test items...")

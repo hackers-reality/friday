@@ -53,7 +53,7 @@ class FileOps:
                 content = f.read()
             return f"📄 {filepath} ({len(content)} chars):\n\n{content[:3000]}" + (f"\n... [truncated, {len(content)} total chars]" if len(content) > 3000 else "")
         except Exception as e:
-            return f"❌ Error reading {filepath}: {str(e)}"
+            return f"[FAIL] Error reading {filepath}: {str(e)}"
 
     @staticmethod
     def write_file(filepath: str, content: str) -> str:
@@ -63,9 +63,9 @@ class FileOps:
             Path(filepath).parent.mkdir(parents=True, exist_ok=True)
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
-            return f"✅ Written to {filepath} ({len(content)} chars)"
+            return f"[OK] Written to {filepath} ({len(content)} chars)"
         except Exception as e:
-            return f"❌ Error writing {filepath}: {str(e)}"
+            return f"[FAIL] Error writing {filepath}: {str(e)}"
 
     @staticmethod
     def edit_file(filepath: str, old_str: str, new_str: str, replace_all: bool = False) -> str:
@@ -75,7 +75,7 @@ class FileOps:
                 content = f.read()
 
             if old_str not in content:
-                return f"❌ String not found in {filepath}"
+                return f"[FAIL] String not found in {filepath}"
 
             if replace_all:
                 new_content = content.replace(old_str, new_str)
@@ -85,9 +85,9 @@ class FileOps:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(new_content)
 
-            return f"✅ Edited {filepath} ({content.count(old_str)} replacement(s))"
+            return f"[OK] Edited {filepath} ({content.count(old_str)} replacement(s))"
         except Exception as e:
-            return f"❌ Error editing {filepath}: {str(e)}"
+            return f"[FAIL] Error editing {filepath}: {str(e)}"
 
     @staticmethod
     def list_files(directory: str = ".", pattern: str = "**/*.py") -> str:
@@ -98,7 +98,7 @@ class FileOps:
                 return f"No files matching {pattern} in {directory}"
             return f"📁 Found {len(files)} files:\n" + "\n".join(str(f) for f in files[:20])
         except Exception as e:
-            return f"❌ Error listing files: {str(e)}"
+            return f"[FAIL] Error listing files: {str(e)}"
 
 
 # ─── Shell Operations ────────────────────────────────────#
@@ -123,9 +123,9 @@ class ShellOps:
                 output += f"\n--- STDERR ---\n{result.stderr[:1000]}"
             return f"💻 {command}\nExit code: {result.returncode}\n\n{output}"
         except subprocess.TimeoutExpired:
-            return f"❌ Command timed out after {timeout}s: {command}"
+            return f"[FAIL] Command timed out after {timeout}s: {command}"
         except Exception as e:
-            return f"❌ Error running command: {str(e)}"
+            return f"[FAIL] Error running command: {str(e)}"
 
     @staticmethod
     def run_python_script(script_path: str, args: str = "") -> str:
@@ -241,7 +241,7 @@ class CodingAgent:
         """Finalize."""
         state["messages"].append({
             "role": "assistant",
-            "content": "✅ Coding task completed!"
+            "content": "[OK] Coding task completed!"
         })
         return state
 
@@ -254,7 +254,7 @@ class CodingAgent:
     def run_task(self, task: str, thread_id: str = "coding_1") -> str:
         """Run a coding task."""
         if not self.graph:
-            return "❌ LangGraph not available. Install: pip install langgraph"
+            return "[FAIL] LangGraph not available. Install: pip install langgraph"
 
         initial_state: CodingState = {
             "messages": [{"role": "user", "content": task}],
@@ -275,7 +275,7 @@ class CodingAgent:
             result = self.graph.invoke(initial_state, config)
             return "\n".join([m["content"] for m in result["messages"]])
         except Exception as e:
-            return f"❌ Error running coding task: {str(e)}"
+            return f"[FAIL] Error running coding task: {str(e)}"
 
 
 # ─── Tool Functions for Friday ────────────────────────────────────#
@@ -309,7 +309,7 @@ def coding_agent_tool(
         parts = task.split("|", 1)
         if len(parts) == 2:
             return ops.edit_file(file_path, parts[0], parts[1])
-        return "❌ edit requires 'old_str|new_str' format"
+        return "[FAIL] edit requires 'old_str|new_str' format"
 
     if action == "shell" and command:
         return shell.run_command(command)

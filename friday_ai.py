@@ -452,7 +452,7 @@ def ai_tool(
     
     if action == "chat":
         if not message:
-            return "❌ Message required."
+            return "[FAIL] Message required."
         
         provider_instance = None
         if provider == "openai":
@@ -462,7 +462,7 @@ def ai_tool(
         elif provider == "local":
             provider_instance = LocalLLMProvider()
         else:
-            return f"❌ Unknown provider: {provider}"
+            return f"[FAIL] Unknown provider: {provider}"
         
         messages = []
         if system_prompt:
@@ -474,11 +474,11 @@ def ai_tool(
         if result["success"]:
             return f"### AI CHAT\n\n**Response**:\n{result['response']}"
         else:
-            return f"❌ Chat error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Chat error: {result.get('error', 'Unknown')}"
     
     if action == "complete":
         if not message:
-            return "❌ Prompt required."
+            return "[FAIL] Prompt required."
         
         openai = OpenAIProvider()
         result = openai.complete(message, model=model or "text-davinci-003")
@@ -486,11 +486,11 @@ def ai_tool(
         if result["success"]:
             return f"### COMPLETION\n\n**Response**:\n{result['response']}"
         else:
-            return f"❌ Completion error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Completion error: {result.get('error', 'Unknown')}"
     
     if action == "embed":
         if not message:
-            return "❌ Text required."
+            return "[FAIL] Text required."
         
         engine = EmbeddingEngine()
         result = engine.embed(message)
@@ -499,11 +499,11 @@ def ai_tool(
             vec_preview = result["embedding"][:10]
             return f"### EMBEDDING\n\n**Preview** (first 10 dims): {vec_preview}\n**Dimensions**: {len(result['embedding'])}"
         else:
-            return f"❌ Embedding error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Embedding error: {result.get('error', 'Unknown')}"
     
     if action == "similarity":
         if not message or ":" not in message:
-            return "❌ Format: text1:text2"
+            return "[FAIL] Format: text1:text2"
         
         text1, text2 = message.split(":", 1)
         engine = EmbeddingEngine()
@@ -513,7 +513,7 @@ def ai_tool(
     
     if action == "local_chat":
         if not message:
-            return "❌ Message required."
+            return "[FAIL] Message required."
         
         local = LocalLLMProvider()
         messages = [{"role": "user", "content": message}]
@@ -522,7 +522,7 @@ def ai_tool(
         if result["success"]:
             return f"### LOCAL AI CHAT\n\n**Response**:\n{result['response']}"
         else:
-            return f"❌ Local chat error: {result.get('error', 'Unknown')}"
+            return f"[FAIL] Local chat error: {result.get('error', 'Unknown')}"
     
     return f"Unknown action: {action}"
 

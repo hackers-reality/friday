@@ -310,37 +310,37 @@ def learning_tool(
         lines = ["### LEARNING STATISTICS", ""]
         lines.append(f"**Total Experiences**: {stats['total_experiences']}")
         lines.append(f"**States Learned**: {stats['states_learned']}")
-        lines.append(f"**Model Saved**: {'✅' if stats['q_table_saved'] else '❌'}")
+        lines.append(f"**Model Saved**: {'[OK]' if stats['q_table_saved'] else '[FAIL]'}")
         return "\n".join(lines)
     
     if action == "learn":
         if not state or not action_taken or not next_state:
-            return "❌ state, action_taken, and next_state required."
+            return "[FAIL] state, action_taken, and next_state required."
         
         manager.add_experience(state, action_taken, reward, next_state)
-        return f"✅ Learned: {action_taken} → reward {reward}"
+        return f"[OK] Learned: {action_taken} → reward {reward}"
     
     if action == "best_action":
         if not state or not available_actions:
-            return "❌ state and available_actions (JSON list) required."
+            return "[FAIL] state and available_actions (JSON list) required."
         
         try:
             actions = json.loads(available_actions)
         except:
-            return "❌ available_actions must be JSON list."
+            return "[FAIL] available_actions must be JSON list."
         
         best = manager.get_best_action(state, actions)
-        return f"✅ Best action for state: {best}"
+        return f"[OK] Best action for state: {best}"
     
     if action == "save":
         manager.save_all()
-        return "✅ Learning data saved."
+        return "[OK] Learning data saved."
     
     if action == "reset":
         manager.experiences = []
         manager.ql_agent.q_table = defaultdict(lambda: defaultdict(float))
         manager.save_all()
-        return "✅ Learning reset."
+        return "[OK] Learning reset."
     
     return f"Unknown action: {action}"
 
