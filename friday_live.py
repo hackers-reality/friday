@@ -71,6 +71,7 @@ from friday_tools import (
     copy_file, move_file, delete_file, clipboard_get, clipboard_set,
     situational_awareness, git_ops, take_snapshot, recall_snapshot,
     smart_home_command, video_search, see_screen, stark_log,
+    vision_click, stayfree_status, stayfree_today, stayfree_week,
     opencli_init_bridge, opencli_navigate, opencli_click, opencli_type,
     opencli_extract, opencli_screenshot, opencli_scroll,
     opencli_keys, opencli_eval, opencli_state, opencli_doctor,
@@ -164,9 +165,11 @@ You have tools at your disposal. Use them immediately when the Boss asks.
 When the Boss gives multiple commands, call ALL tools in one turn — do not wait.
 When you execute a tool, narrate what you are doing naturally.
 For screen questions, use see_screen() immediately.
+For screen time, use stayfree_today() or stayfree_week().
 For web questions, use web_search() immediately.
 For deep reports, use deep_research().
 For desktop control, use click(), type_text(), hotkey(), drag(), scroll(), move_mouse().
+For vision-based clicking, use vision_click() to find and click elements by description.
 For apps, use open_app().
 For Spotify, use spotify_play(), spotify_pause(), or spotify_current().
 For memory, use memory_store() and memory_retrieve().
@@ -712,6 +715,25 @@ def _build_tools():
                 name="opencli_doctor",
                 description="Diagnose OpenCLI browser bridge connectivity and status."
             ),
+            types.FunctionDeclaration(
+                name="vision_click",
+                description="Find and click an element on screen by describing it (e.g. 'the submit button', 'the play icon'). Uses Gemini Vision to locate it and clicks the coordinates.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Description of the element to click."}
+                }, required=["target"]),
+            ),
+            types.FunctionDeclaration(
+                name="stayfree_status",
+                description="Check if StayFree screen time tracker is installed and accessible."
+            ),
+            types.FunctionDeclaration(
+                name="stayfree_today",
+                description="Get today's screen time and app usage from StayFree."
+            ),
+            types.FunctionDeclaration(
+                name="stayfree_week",
+                description="Get this week's screen time summary from StayFree."
+            ),
         ])
     ]
 
@@ -774,6 +796,10 @@ TOOL_MAP = {
     "opencli_eval": opencli_eval,
     "opencli_state": opencli_state,
     "opencli_doctor": opencli_doctor,
+    "vision_click": vision_click,
+    "stayfree_status": stayfree_status,
+    "stayfree_today": stayfree_today,
+    "stayfree_week": stayfree_week,
 }
 
 

@@ -171,36 +171,105 @@ def get_active_window() -> dict:
 
 
 def click(x: int = None, y: int = None) -> str:
-    """Click at position."""
-    return f"Clicked at {x}, {y}"
+    """Click at position using pyautogui."""
+    try:
+        import pyautogui
+        if x is not None and y is not None:
+            pyautogui.click(x, y)
+            return f"[OK] Clicked at ({x}, {y})"
+        pyautogui.click()
+        return "[OK] Clicked at current position"
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Click error: {e}"
 
 def double_click(x: int = None, y: int = None) -> str:
-    """Double click."""
-    return f"Double-clicked at {x}, {y}"
+    """Double click at position using pyautogui."""
+    try:
+        import pyautogui
+        if x is not None and y is not None:
+            pyautogui.doubleClick(x, y)
+        else:
+            pyautogui.doubleClick()
+        return "[OK] Double-clicked"
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Double-click error: {e}"
 
 def right_click(x: int = None, y: int = None) -> str:
-    """Right click."""
-    return f"Right-clicked at {x}, {y}"
+    """Right click at position using pyautogui."""
+    try:
+        import pyautogui
+        if x is not None and y is not None:
+            pyautogui.rightClick(x, y)
+        else:
+            pyautogui.rightClick()
+        return "[OK] Right-clicked"
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Right-click error: {e}"
 
 def move_mouse(x: int, y: int) -> str:
-    """Move mouse."""
-    return f"Mouse moved to {x}, {y}"
+    """Move mouse to coordinates using pyautogui."""
+    try:
+        import pyautogui
+        pyautogui.moveTo(x, y)
+        return f"[OK] Mouse moved to ({x}, {y})"
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Mouse move error: {e}"
 
 def drag(x: int, y: int, duration: float = 0.5) -> str:
-    """Drag mouse."""
-    return f"Dragged to {x}, {y} over {duration}s"
+    """Drag mouse to coordinates using pyautogui."""
+    try:
+        import pyautogui
+        pyautogui.dragTo(x, y, duration=duration)
+        return f"[OK] Dragged to ({x}, {y})"
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Drag error: {e}"
 
 def hotkey(keys: str) -> str:
-    """Press hotkey."""
-    return f"Hotkey: {keys}"
+    """Press a keyboard hotkey combination using pyautogui."""
+    try:
+        import pyautogui
+        mods = keys.lower().split("+")
+        if len(mods) > 1:
+            pyautogui.hotkey(*mods)
+        else:
+            pyautogui.press(mods[0])
+        return f"[OK] Hotkey: {keys}"
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Hotkey error: {e}"
 
 def press_key(key: str) -> str:
-    """Press key."""
-    return f"Key pressed: {key}"
+    """Press a single keyboard key using pyautogui."""
+    try:
+        import pyautogui
+        pyautogui.press(key)
+        return f"[OK] Key pressed: {key}"
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Key press error: {e}"
 
 def scroll(amount: int) -> str:
-    """Scroll mouse."""
-    return f"Scrolled: {amount}"
+    """Scroll the mouse wheel using pyautogui."""
+    try:
+        import pyautogui
+        pyautogui.scroll(amount)
+        return f"[OK] Scrolled: {amount}"
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Scroll error: {e}"
 
 def open_app(name: str) -> str:
     """Open application by name. Maps common names to executables on Windows."""
@@ -532,14 +601,75 @@ def git_ops(operation: str, message: str = "") -> str:
         return run_cmd("git push origin main")
     return f"Git {operation}"
 
-def see_screen(question: str = "") -> str:
-    """Analyze screen."""
+def see_screen(question: str = "What do you see on the screen?") -> str:
+    """Capture screen and analyze it using Gemini Vision API."""
     try:
-        from screen_watcher import get_active_window_info
-        info = get_active_window_info()
-        return f"Active Window: {info.get('title', 'Unknown')}\nQuestion: {question}"
+        import pyautogui
+        import base64, io, requests, json
+        from PIL import Image
+
+        # Capture screen
+        img = pyautogui.screenshot()
+        # Resize for API efficiency
+        img.thumbnail((1280, 720), Image.LANCZOS)
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=75)
+        img_b64 = base64.b64encode(buffer.getvalue()).decode()
+
+        api_key = os.environ.get("GOOGLE_API_KEY", "")
+        if not api_key:
+            return "[FAIL] GOOGLE_API_KEY not configured."
+
+        r = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers={"Content-Type": "application/json"},
+            params={"key": api_key},
+            json={
+                "contents": [{
+                    "parts": [
+                        {"text": f"[SCREEN ANALYSIS] {question}\nDescribe what you see. Include: visible text, UI elements, coordinates of interactive elements, any errors on screen."},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
+                    ]
+                }]
+            },
+            timeout=30,
+        )
+        data = r.json()
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        return text
+    except ImportError as e:
+        return f"[FAIL] Missing dependency: {e}. Install: pip install pyautogui pillow requests"
     except Exception as e:
-        return f"Screen analysis error: {e}"
+        return f"[FAIL] Screen analysis error: {e}"
+
+
+def vision_click(target: str) -> str:
+    """Find and click an element on screen by description using Gemini Vision.
+
+    Uses see_screen to locate the element, then clicks at the reported coordinates.
+    """
+    try:
+        import re
+        # Ask vision to find the element
+        vision_result = see_screen(
+            f"Find the exact location of '{target}' on screen. "
+            "Return ONLY the coordinates in format: X=123 Y=456"
+        )
+
+        # Extract coordinates from vision response
+        coords = re.search(r'[XYxy]\s*[=:]\s*(\d+).*?[XYxy]\s*[=:]\s*(\d+)', vision_result)
+        if not coords:
+            coords = re.search(r'\(?(\d{2,4})\s*,\s*(\d{2,4})\)?', vision_result)
+        if not coords:
+            return f"[FAIL] Could not find '{target}' on screen. Vision response:\n{vision_result[:500]}"
+
+        x, y = int(coords.group(1)), int(coords.group(2))
+        return click(x, y)
+    except ImportError:
+        return "[FAIL] pyautogui not installed."
+    except Exception as e:
+        return f"[FAIL] Vision click error: {e}"
+
 
 def search_browser_history(query: str, days_back: int = 30) -> str:
     """Search browser history across all browsers."""
@@ -1272,6 +1402,41 @@ def smart_home_command(device: str, action: str) -> str:
     return home_assistant_command(action, entity=device)
 
 
+#  StayFree Integration #
+
+def stayfree_status() -> str:
+    """Check if StayFree screen time tracker is accessible."""
+    try:
+        from stayfree_bridge import stayfree_status as _sf_status
+        return _sf_status()
+    except ImportError:
+        return "[FAIL] stayfree_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] StayFree error: {e}"
+
+
+def stayfree_today() -> str:
+    """Get today's screen time and app usage from StayFree."""
+    try:
+        from stayfree_bridge import stayfree_today as _sf_today
+        return _sf_today()
+    except ImportError:
+        return "[FAIL] stayfree_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] StayFree today error: {e}"
+
+
+def stayfree_week() -> str:
+    """Get this week's screen time summary from StayFree."""
+    try:
+        from stayfree_bridge import stayfree_week as _sf_week
+        return _sf_week()
+    except ImportError:
+        return "[FAIL] stayfree_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] StayFree week error: {e}"
+
+
 #  OpenCLI Bridge Tools #
 
 def opencli_init_bridge() -> str:
@@ -1417,9 +1582,11 @@ __all__ = [
     "search_and_open",
     "situational_awareness", "goals_tool_handler", "startup_tool_handler",
     "memory_import_tool_handler",
+    "vision_click",
     "alexa_command", "alexa_poll", "home_assistant_command",
     "multi_task", "queue_task", "queue_status", "queue_result",
     "type_text", "take_snapshot", "recall_snapshot", "smart_home_command",
+    "stayfree_status", "stayfree_today", "stayfree_week",
     "opencli_init_bridge", "opencli_navigate", "opencli_click", "opencli_type",
     "opencli_extract", "opencli_screenshot", "opencli_scroll",
     "opencli_keys", "opencli_eval", "opencli_state", "opencli_doctor",
