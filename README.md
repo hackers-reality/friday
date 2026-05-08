@@ -249,8 +249,8 @@ copy .env.example .env
 # OR Command Prompt:
 install.cmd
 
-# One-liner (PowerShell)
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+# One-liner (PowerShell, full install)
+powershell -ExecutionPolicy Bypass -NoProfile -Command "git clone https://github.com/hackers-reality/friday.git; Set-Location friday; pip install -r requirements.txt; npm install -g @jackwener/opencli; opencli browser install; Copy-Item .env.example .env; .\\install.ps1"
 ```
 
 ### Environment Variables
