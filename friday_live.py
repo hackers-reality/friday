@@ -64,6 +64,7 @@ from friday_tools import (
     home_assistant_command, memory_retrieve, memory_store, multi_task,
     open_app, open_url, queue_result, queue_status, queue_task,
     read_file, run_cmd, safe_run_cmd, spotify_pause, spotify_play,
+    spotify_current,
     stark_doctor, system_info, web_search,
     type_text, click, double_click, right_click, move_mouse, drag,
     hotkey, press_key, scroll, write_file, list_files, find_files,
@@ -167,7 +168,7 @@ For web questions, use web_search() immediately.
 For deep reports, use deep_research().
 For desktop control, use click(), type_text(), hotkey(), drag(), scroll(), move_mouse().
 For apps, use open_app().
-For Spotify, use spotify_play() or spotify_pause().
+For Spotify, use spotify_play(), spotify_pause(), or spotify_current().
 For memory, use memory_store() and memory_retrieve().
 For smart home, use home_assistant_command() or alexa_command().
 For vision analysis, you can see the screen via see_screen().
@@ -212,27 +213,49 @@ _is_ducked = False
 _original_volumes: dict[int, float] = {}
 last_audio_time = 0.0
 
+# Mic mute control: prevent echo by muting mic while assistant speaks
+_mic_muted = threading.Event()  # set = muted (don't send mic audio)
+_model_turn_done = threading.Event()  # set = Gemini finished sending this turn
+
 
 def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
     stream = pa.open(
         format=pyaudio.paInt16, channels=1, rate=sample_rate,
         output=True, frames_per_buffer=4800
     )
+    had_audio = False
+    empty_cycles = 0
     try:
         while not _audio_playback_stop.is_set():
             try:
                 chunk = _audio_playback_queue.get(timeout=0.5)
                 if chunk is None:
                     break
+                if not had_audio:
+                    had_audio = True
+                    _mic_muted.set()
                 stream.write(chunk)
                 global _is_ducked, last_audio_time
                 if not _is_ducked:
                     _is_ducked = True
                     set_audio_ducking(True)
                 last_audio_time = time.time()
+                empty_cycles = 0
             except _thread_queue.Empty:
+                # Queue empty — check if we can unmute
+                if had_audio:
+                    empty_cycles += 1
+                    # Unmute after 3 consecutive empty polls (1.5s silence)
+                    # AND only if model turn is done (no more chunks coming)
+                    if empty_cycles >= 3 and _model_turn_done.is_set():
+                        had_audio = False
+                        empty_cycles = 0
+                        _mic_muted.clear()
+                        set_audio_ducking(False)
                 continue
     finally:
+        _mic_muted.clear()
+        _model_turn_done.clear()
         stream.stop_stream()
         stream.close()
 
@@ -315,6 +338,10 @@ def _build_tools():
             types.FunctionDeclaration(
                 name="spotify_pause",
                 description="Pause Spotify playback."
+            ),
+            types.FunctionDeclaration(
+                name="spotify_current",
+                description="Get currently playing track info from Spotify."
             ),
             types.FunctionDeclaration(
                 name="open_app",
@@ -692,6 +719,7 @@ TOOL_MAP = {
     "stark_doctor": stark_doctor,
     "spotify_play": spotify_play,
     "spotify_pause": spotify_pause,
+    "spotify_current": spotify_current,
     "open_app": open_app,
     "web_search": web_search,
     "video_search": video_search,

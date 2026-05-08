@@ -284,41 +284,107 @@ def open_url(url: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-def spotify_play(query: str) -> str:
-    """Focus Spotify, search for song, play it using keyboard shortcuts."""
+#  Spotify API Integration (via spotipy) #
+
+def _get_spotify_client():
+    """Create an authenticated Spotify API client using env credentials."""
+    try:
+        import spotipy
+        from spotipy.oauth2 import SpotifyOAuth
+        client_id = os.environ.get("SPOTIFY_CLIENT_ID")
+        client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
+        redirect_uri = os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback")
+        if not client_id or not client_secret:
+            return None
+        cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".spotify_cache")
+        sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            scope="user-modify-playback-state user-read-playback-state user-read-currently-playing",
+            cache_path=cache_path,
+        ))
+        # Quick ping to verify
+        sp.current_user()
+        return sp
+    except Exception:
+        return None
+
+
+def spotify_play(query: str = "") -> str:
+    """Play a track, album, or playlist on Spotify via the Web API.
+    Falls back to keyboard simulation if API credentials are not configured."""
+    try:
+        sp = _get_spotify_client()
+        if sp is None:
+            # Fallback: keyboard simulation
+            return _spotify_play_keyboard(query)
+
+        if not query:
+            # Resume playback
+            sp.start_playback()
+            return "[OK] Resumed Spotify playback"
+
+        # Search for the track
+        results = sp.search(q=query, type="track", limit=5)
+        tracks = results.get("tracks", {}).get("items", [])
+        if not tracks:
+            # Try album search
+            results = sp.search(q=query, type="album", limit=1)
+            albums = results.get("albums", {}).get("items", [])
+            if albums:
+                sp.start_playback(context_uri=albums[0]["uri"])
+                return f"[OK] Playing album '{albums[0]['name']}' on Spotify"
+            return f"[FAIL] No results found for '{query}'"
+
+        # Play the first track
+        track = tracks[0]
+        sp.start_playback(uris=[track["uri"]])
+        artists = ", ".join(a["name"] for a in track["artists"])
+        return f"[OK] Now playing '{track['name']}' by {artists} on Spotify"
+
+    except ImportError:
+        return _spotify_play_keyboard(query)
+    except Exception as e:
+        return f"[FAIL] Spotify play error: {e}"
+
+
+def _spotify_play_keyboard(query: str) -> str:
+    """Fallback: keyboard-based Spotify control."""
     try:
         import pygetwindow as gw
         import pyautogui
-
-        # Find Spotify window
+        import time
         spotify_windows = gw.getWindowsWithTitle("Spotify")
         if not spotify_windows:
-            return "[FAIL] Spotify not found. Open Spotify first."
-
+            return "[FAIL] Spotify not found and API not configured. Open Spotify first or set SPOTIFY_CLIENT_ID/SPOTIFY_CLIENT_SECRET."
         spotify_win = spotify_windows[0]
         spotify_win.activate()
         time.sleep(1)
-
-        # Ctrl+L to focus search, then type query
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.5)
         pyautogui.typewrite(query)
         time.sleep(1)
         pyautogui.press('enter')
         time.sleep(2)
-
-        # Play first result
         pyautogui.press('enter')
-        return f"Playing '{query}' on Spotify"
-
+        return f"[OK] Playing '{query}' on Spotify (keyboard fallback)"
     except ImportError:
-        return "[FAIL] pygetwindow or pyautogui not installed. Install: pip install pygetwindow pyautogui"
+        return "[FAIL] pygetwindow or pyautogui not installed."
     except Exception as e:
-        return f"[FAIL] Spotify play error: {e}"
+        return f"[FAIL] Spotify keyboard error: {e}"
 
 
 def spotify_pause() -> str:
-    """Pause Spotify via media key."""
+    """Pause Spotify via Web API. Falls back to media key."""
+    try:
+        sp = _get_spotify_client()
+        if sp:
+            sp.pause_playback()
+            return "[OK] Spotify paused via API"
+    except Exception:
+        pass
+    # Fallback
     try:
         import pyautogui
         pyautogui.press('playpause')
@@ -326,11 +392,18 @@ def spotify_pause() -> str:
     except ImportError:
         return "[FAIL] pyautogui not installed."
     except Exception as e:
-        return f"[FAIL] Error: {e}"
+        return f"[FAIL] Spotify pause error: {e}"
 
 
 def spotify_next() -> str:
-    """Next track."""
+    """Skip to next track via Web API. Falls back to media key."""
+    try:
+        sp = _get_spotify_client()
+        if sp:
+            sp.next_track()
+            return "[OK] Skipped to next track via API"
+    except Exception:
+        pass
     try:
         import pyautogui
         pyautogui.press('nexttrack')
@@ -342,7 +415,14 @@ def spotify_next() -> str:
 
 
 def spotify_prev() -> str:
-    """Previous track."""
+    """Go to previous track via Web API. Falls back to media key."""
+    try:
+        sp = _get_spotify_client()
+        if sp:
+            sp.previous_track()
+            return "[OK] Back to previous track via API"
+    except Exception:
+        pass
     try:
         import pyautogui
         pyautogui.press('prevtrack')
@@ -354,35 +434,82 @@ def spotify_prev() -> str:
 
 
 def spotify_volume(level: int) -> str:
-    """Set Spotify volume (0-100). Uses Ctrl+Up/Down in Spotify."""
+    """Set Spotify volume via Web API (0-100). Falls back to keyboard."""
+    if not (0 <= level <= 100):
+        return "[FAIL] Volume must be 0-100"
+    try:
+        sp = _get_spotify_client()
+        if sp:
+            sp.volume(level)
+            return f"[OK] Spotify volume set to {level}% via API"
+    except Exception:
+        pass
+    # Fallback: keyboard
     try:
         import pygetwindow as gw
         import pyautogui
         import time
-
-        if not (0 <= level <= 100):
-            return "[FAIL] Volume must be 0-100"
-
         spotify_windows = gw.getWindowsWithTitle("Spotify")
         if spotify_windows:
             spotify_windows[0].activate()
             time.sleep(0.5)
-
-        # Each Ctrl+Up adds ~10%, so we press proportional times
         presses = level // 10
         for _ in range(min(presses, 10)):
             pyautogui.hotkey('ctrl', 'up')
             time.sleep(0.1)
-
-        return f"[OK] Spotify volume set to ~{level}%"
+        return f"[OK] Spotify volume set to ~{level}% (keyboard fallback)"
     except ImportError:
         return "[FAIL] pygetwindow or pyautogui not installed."
     except Exception as e:
         return f"[FAIL] Error: {e}"
 
-def web_search(query: str) -> str:
-    """Web search."""
-    return f"Search: {query}"
+
+def spotify_current() -> str:
+    """Get currently playing track info via Spotify API."""
+    try:
+        sp = _get_spotify_client()
+        if not sp:
+            return "[FAIL] Spotify API not configured. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET."
+        current = sp.current_playback()
+        if current and current.get("item"):
+            track = current["item"]
+            artists = ", ".join(a["name"] for a in track["artists"])
+            progress = current.get("progress_ms", 0) // 1000
+            duration = track.get("duration_ms", 0) // 1000
+            return f"[OK] Now playing: '{track['name']}' by {artists} ({progress//60}:{progress%60:02d}/{duration//60}:{duration%60:02d})"
+        return "[OK] Nothing currently playing on Spotify"
+    except Exception as e:
+        return f"[FAIL] Spotify current error: {e}"
+
+def web_search(query: str, max_results: int = 5) -> str:
+    """Search the web using DuckDuckGo with BeautifulSoup fallback."""
+    try:
+        from friday_web import WebScraper
+        scraper = WebScraper()
+        result = scraper.search_engine(query, engine="duckduckgo")
+        if result.get("success"):
+            items = result.get("results", [])
+            if not items:
+                # Fallback to Bing
+                result = scraper.search_engine(query, engine="bing")
+                items = result.get("results", [])
+            if items:
+                lines = [f"Search results for '{query}':"]
+                for i, item in enumerate(items[:max_results], 1):
+                    title = item.get("title", "?")
+                    url = item.get("url", "")
+                    snippet = item.get("snippet", "")
+                    lines.append(f"{i}. {title}")
+                    if url:
+                        lines.append(f"   {url}")
+                    if snippet:
+                        lines.append(f"   {snippet[:200]}")
+                return "\n".join(lines)
+        return f"[FAIL] No search results for '{query}'"
+    except ImportError:
+        return "[FAIL] friday_web.py not available."
+    except Exception as e:
+        return f"[FAIL] Web search error: {e}"
 
 def stark_doctor() -> str:
     """System diagnostic."""
@@ -606,18 +733,112 @@ def memory_retrieve(query: str) -> str:
 
 
 def video_search(query: str) -> str:
-    """Search for videos (stub)."""
-    return f"Video search for '{query}' - feature coming soon."
+    """Search for videos using web search, return found links."""
+    try:
+        import webbrowser
+        # Search for the video
+        search_query = f"{query} video"
+        result = web_search(search_query)
+        # Extract first YouTube/video URL from results and open it
+        import re
+        urls = re.findall(r'https?://[^\s]+', result)
+        video_urls = [u for u in urls if any(d in u for d in ['youtube.com', 'youtu.be', 'vimeo.com', 'dailymotion.com'])]
+        if video_urls:
+            webbrowser.open(video_urls[0])
+            return f"[OK] Found and opened: {video_urls[0]}"
+        # Fallback: open YouTube search
+        search = requests.utils.quote(f"{query} video")
+        webbrowser.open(f"https://www.youtube.com/results?search_query={search}")
+        return f"[OK] Opened YouTube search for '{query}'"
+    except Exception as e:
+        return f"[FAIL] Video search error: {e}"
 
 
-def deep_research(topic: str) -> str:
-    """Perform deep research on a topic (stub)."""
-    return f"Deep research on '{topic}' - feature coming soon."
+def deep_research(topic: str, url: str = "", depth: int = 3) -> str:
+    """Multi-source deep research with synthesized report."""
+    try:
+        from friday_web import WebScraper
+        import re
+        scraper = WebScraper()
+        all_sources = []
+
+        if url:
+            # Fetch the primary URL
+            page = scraper.fetch(url)
+            if page.get("success"):
+                all_sources.append(f"--- Primary Source ({url}) ---\n{page.get('content', '')[:3000]}")
+
+        # Search multiple queries
+        queries = [topic, f"{topic} latest 2025 2026", f"{topic} overview summary"]
+        for q in queries[:depth]:
+            result = scraper.search_engine(q)
+            if result.get("success"):
+                for item in result.get("results", [])[:3]:
+                    title = item.get("title", "")
+                    snippet = item.get("snippet", "")
+                    url_ = item.get("url", "")
+                    all_sources.append(f"• {title}\n  {url_}\n  {snippet[:300]}")
+                    if len(all_sources) >= 9:
+                        break
+            if len(all_sources) >= 9:
+                break
+
+        if all_sources:
+            report = f"Deep Research: {topic}\n{'='*40}\n"
+            report += "\n\n".join(all_sources)
+            if len(report) > 8000:
+                report = report[:8000] + "\n\n[Truncated...]"
+            return report
+        return f"[FAIL] No results found for '{topic}'"
+    except ImportError:
+        return "[FAIL] friday_web.py not available."
+    except Exception as e:
+        return f"[FAIL] Deep research error: {e}"
 
 
-def climb_codebase(query: str) -> str:
-    """Navigate and understand codebase structure (stub)."""
-    return f"Climbing codebase for '{query}' - feature coming soon."
+def climb_codebase(query: str, path: str = "") -> str:
+    """Search and analyze code in the project codebase."""
+    try:
+        import subprocess, os, glob
+
+        search_root = path if path else os.path.dirname(os.path.abspath(__file__))
+
+        # Use ripgrep if available, fallback to findstr/grep
+        try:
+            rg_result = subprocess.run(
+                ["rg", "-n", "--max-count", "15", query, search_root],
+                capture_output=True, text=True, timeout=10
+            )
+            if rg_result.returncode == 0 and rg_result.stdout:
+                lines = rg_result.stdout.strip().split("\n")[:20]
+                return f"Code search for '{query}':\n" + "\n".join(lines)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Fallback: Python grep via glob
+        results = []
+        for ext in ("*.py", "*.js", "*.ts", "*.html", "*.css", "*.json", "*.yaml", "*.md"):
+            for fpath in glob.glob(os.path.join(search_root, "**", ext), recursive=True):
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                        for i, line in enumerate(f, 1):
+                            if query.lower() in line.lower():
+                                rel = os.path.relpath(fpath, search_root)
+                                results.append(f"{rel}:{i}: {line.rstrip()[:200]}")
+                                if len(results) >= 15:
+                                    break
+                except Exception:
+                    pass
+                if len(results) >= 15:
+                    break
+            if len(results) >= 15:
+                break
+
+        if results:
+            return f"Code search for '{query}':\n" + "\n".join(results)
+        return f"[OK] No matches found for '{query}' in codebase."
+    except Exception as e:
+        return f"[FAIL] Codebase search error: {e}"
 
 def netflix_play(title: str) -> str:
     """Open Chrome, navigate to Netflix, search for title, play it."""
@@ -1124,7 +1345,7 @@ __all__ = [
     "click", "double_click", "right_click", "move_mouse", "drag",
     "hotkey", "press_key", "scroll",
     "open_app", "close_app", "list_running_apps", "open_url",
-    "spotify_play", "spotify_pause", "spotify_next", "spotify_prev", "spotify_volume",
+    "spotify_play", "spotify_pause", "spotify_next", "spotify_prev", "spotify_volume", "spotify_current",
     "netflix_play",
     "read_emails", "send_email", "draft_email",
     "send_instagram_dm",
