@@ -21,6 +21,40 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
 
 ---
 
+## Index
+
+- [What is Friday?](#what-is-friday)
+- [Feature Overview](#feature-overview)
+  - [🎙️ Voice & Audio](#️-voice--audio)
+  - [👁️ Vision & Screen Awareness](#️-vision--screen-awareness)
+  - [🖥️ Desktop Automation & Control](#️-desktop-automation--control)
+  - [🌐 Browser Integration](#-browser-integration)
+  - [🎯 Goals & Productivity Enforcement](#-goals--productivity-enforcement)
+  - [📬 Communication & Messaging](#-communication--messaging)
+  - [🤖 AI & LLM](#-ai--llm)
+  - [🧠 Memory & User Understanding](#-memory--user-understanding)
+  - [🚀 System & Startup](#-system--startup)
+  - [🖼️ Dashboard & UI](#-dashboard--ui)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+    - [Fully Automatic Installation](#fully-automatic-installation)
+    - [Manual](#manual)
+  - [Environment Variables](#environment-variables)
+  - [Launch Friday](#launch-friday)
+  - [Add to Windows Startup](#add-to-windows-startup)
+- [Voice Commands](#voice-commands)
+- [Module Reference](#module-reference)
+- [Development Roadmap](#development-roadmap)
+- [Contributing](#contributing)
+- [Known Issues](#known-issues)
+- [License](#license)
+- [Author](#author)
+- [Community — Join NexSemble](#community--join-nexsemble)
+
+---
+
 ## What is Friday?
 
 Friday is not a chatbot. It is a **fully autonomous desktop AI agent** that lives on your Windows machine, watches your screen, listens to your voice, understands your goals, and takes action — [...]
@@ -233,7 +267,7 @@ Other LLM providers (Claude, OpenAI, Groq text, Ollama) are coming soon — use 
 ```bash
 
 # One-liner (PowerShell, full install + prompts)
-powershell -ExecutionPolicy Bypass -NoProfile -Command "& { git clone https://github.com/hackers-reality/friday.git; Set-Location friday; pip install -r requirements.txt; npm install -g @jackwener/opencli; opencli browser install; Copy-Item .env.example .env; $google=Read-Host 'GOOGLE_API_KEY (Gemini - required)'; $picovoice=Read-Host 'PICOVOICE_ACCESS_KEY (required)'; $spotifyId=Read-Host 'SPOTIFY_CLIENT_ID (required)'; $spotifySecret=Read-Host 'SPOTIFY_CLIENT_SECRET (required)'; $spotifyRedirect=Read-Host 'SPOTIFY_REDIRECT_URI (required, e.g. http://localhost:8888/callback)'; $groq=''; if ((Read-Host 'Have GROQ_API_KEY for Whisper STT? (y/n)') -match '^[Yy]') { $groq=Read-Host 'GROQ_API_KEY' }; $anthropic=''; if ((Read-Host 'Have ANTHROPIC_API_KEY (coming soon)? (y/n)') -match '^[Yy]') { $anthropic=Read-Host 'ANTHROPIC_API_KEY' }; $openai=''; if ((Read-Host 'Have OPENAI_API_KEY (coming soon)? (y/n)') -match '^[Yy]') { $openai=Read-Host 'OPENAI_API_KEY' }; $ollama=''; if ((Read-Host 'Use Ollama base URL (coming soon)? (y/n)') -match '^[Yy]') { $ollama=Read-Host 'OLLAMA_BASE_URL (e.g. http://192.168.1.x:11434)' }; $alexa=''; if ((Read-Host 'Have ALEXA_WEBHOOK_URL? (y/n)') -match '^[Yy]') { $alexa=Read-Host 'ALEXA_WEBHOOK_URL' }; $haUrl=''; $haToken=''; if ((Read-Host 'Use Home Assistant? (y/n)') -match '^[Yy]') { $haUrl=Read-Host 'HOME_ASSISTANT_URL'; $haToken=Read-Host 'HA_TOKEN' }; $envLines=@("GOOGLE_API_KEY=$google","PICOVOICE_ACCESS_KEY=$picovoice","SPOTIFY_CLIENT_ID=$spotifyId","SPOTIFY_CLIENT_SECRET=$spotifySecret","SPOTIFY_REDIRECT_URI=$spotifyRedirect"); if ($groq) { $envLines+="GROQ_API_KEY=$groq" }; if ($anthropic) { $envLines+="ANTHROPIC_API_KEY=$anthropic" }; if ($openai) { $envLines+="OPENAI_API_KEY=$openai" }; if ($ollama) { $envLines+="OLLAMA_BASE_URL=$ollama" }; if ($alexa) { $envLines+="ALEXA_WEBHOOK_URL=$alexa" }; if ($haUrl) { $envLines+="HOME_ASSISTANT_URL=$haUrl" }; if ($haToken) { $envLines+="HA_TOKEN=$haToken" }; Set-Content -Path .env -Value $envLines -Encoding UTF8; .\\install.ps1 }"
+powershell -ExecutionPolicy Bypass -NoProfile -Command "& { git clone https://github.com/hackers-reality/friday.git; Set-Location friday; pip install -r requirements.txt; npm install -g @jackwene[...]
 ```
 ### Manual
 
