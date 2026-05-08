@@ -27,6 +27,8 @@ Friday is not a chatbot. It is a **fully autonomous desktop AI agent** that live
 
 Think of it as having a real-world version of Tony Stark's FRIDAY running on your PC. It monitors what you're doing, proactively comments and helps, controls your entire desktop via voice, manages your goals and deadlines, integrates with your browser history, smart home devices, email, and social media — and it does all of this continuously in the background.
 
+What makes Friday different from other agents: **she learns who you are**. Import your conversation history from Claude, ChatGPT, or Gemini and Friday extracts your preferences, communication style, likes, and dislikes — so from day one she already knows you, and speaks to you like she's been around for years.
+
 Friday is **open source**, **Windows-native**, **self-hosted**, and built to eventually compete with commercial agents like Devin, Cline, and Claude Code.
 
 ---
@@ -100,7 +102,17 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Deep research tool | ✅ Working | Real-time web research + reports |
 | Self-modifying code | 🔧 In Progress | `self_modification.py` |
 
-### 📁 File Generation
+### 🧠 Memory & User Understanding
+| Feature | Status | Details |
+|---------|--------|---------|
+| Cross-chatbot history import | ✅ Working | Import chats from Claude, ChatGPT, Gemini — Friday reads and learns from them |
+| Preference extraction | ✅ Working | Parses imported conversations to build a user profile: likes, dislikes, habits, tone |
+| Personality adaptation | ✅ Working | Friday adjusts how she speaks based on your learned profile — no cold starts |
+| Persistent memory vault | 🔧 In Progress | `vector_memory.py` — stores facts, preferences, patterns across sessions |
+| Semantic memory search | 🔧 In Progress | Pulls relevant past context before every response |
+| Knowledge vault | 🔧 In Progress | Combined LLM knowledge + everything Friday has learned about you |
+
+
 | Feature | Status | Details |
 |---------|--------|---------|
 | Universal file generator | 🔧 In Progress | `file_generator.py` — all formats |
@@ -346,6 +358,14 @@ Friday responds to natural language. No rigid syntax required.
 "Friday, generate a Python Flask server file"
 ```
 
+### Memory & Learning
+```
+"Friday, I've imported my Claude chat history — learn from it"
+"Friday, what do you know about me?"
+"Friday, update your understanding of my preferences"
+"Friday, forget what I told you about X"
+```
+
 ---
 
 ## Module Reference
@@ -390,6 +410,8 @@ Friday responds to natural language. No rigid syntax required.
 - [x] Deep research tool
 - [x] File generation
 - [x] Spotify API integration (Client ID + Secret)
+- [x] Cross-chatbot history import (Claude, ChatGPT, Gemini)
+- [x] User preference extraction from imported chats
 
 ### v1.1 — Intelligence Layer 🔧
 - [ ] Active window detection (stable)
@@ -469,7 +491,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 **Friday is solely built by Arnav** ([@hackers-reality](https://github.com/hackers-reality))  
 Co-leader of [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community based in Pune, Maharashtra, India.
 
-> *"This is not Open Interpreter. This is Friday — the real one."*
+> *"This is not a chatbot . This is Friday — the real one."*
 
 ---
 
@@ -479,9 +501,9 @@ Friday is built in public and shared through **NexSemble** — a community of bu
 
 <div align="center">
 
-[![Discord](https://img.shields.io/discord/1483417587034493009?style=for-the-badge&logo=discord&logoColor=white&label=NexSemble%20Discord&color=5865F2)](https://discord.com/widget?id=1483417587034493009)
+[![Discord](https://img.shields.io/discord/1483417587034493009?style=for-the-badge&logo=discord&logoColor=white&label=NexSemble%20Discord&color=5865F2)](https://discord.gg/Ttqz3jHGk2)
 
-**[→ Join the NexSemble Discord](https://discord.com/widget?id=1483417587034493009)**
+**[→ Join the NexSemble Discord](https://discord.gg/Ttqz3jHGk2)**
 
 </div>
 
