@@ -733,23 +733,84 @@ def memory_retrieve(query: str) -> str:
 
 
 def video_search(query: str) -> str:
-    """Search for videos using web search, return found links."""
+    """Search for videos with metadata (views, date, duration), return results."""
     try:
+        import re, requests, json, time
+        from bs4 import BeautifulSoup
+
+        output = []
+        # Approach 1: DuckDuckGo HTML video search
+        ddg_url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}&ia=videos&iar=videos"
+        resp = requests.get(ddg_url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }, timeout=10)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for i, result in enumerate(soup.select(".result"), 1):
+                if i > 8:
+                    break
+                title_el = result.select_one(".result__title a")
+                snippet_el = result.select_one(".result__snippet")
+                url_el = result.select_one(".result__url")
+                if not title_el:
+                    continue
+                title = title_el.get_text(strip=True)
+                url = url_el.get_text(strip=True) if url_el else ""
+                snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+                # Check if it's a video URL
+                if not any(d in url for d in ['youtube.com', 'youtu.be', 'vimeo.com']):
+                    continue
+                # Extract YouTube video ID for oembed info
+                vid_id = ""
+                yt_match = re.search(r'(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]+)', url)
+                if yt_match:
+                    vid_id = yt_match.group(1)
+                    try:
+                        oembed = requests.get(
+                            f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid_id}&format=json",
+                            timeout=5
+                        )
+                        if oembed.status_code == 200:
+                            data = oembed.json()
+                            title = data.get("title", title)
+                    except Exception:
+                        pass
+                output.append(f"{i}. {title}")
+                output.append(f"   URL: {url}")
+                # Parse snippet for metadata (DDG often includes views/date)
+                if snippet:
+                    output.append(f"   {snippet[:200]}")
+                # Try to get engagement stats from oembed
+                if vid_id:
+                    try:
+                        insights_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid_id}&format=json"
+                        # Add a second call to innertube API for stats (no key needed)
+                        # YouTube's public API endpoint
+                        stats_url = f"https://www.youtube.com/watch?v={vid_id}"
+                        stats_resp = requests.get(stats_url, headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                        }, timeout=5)
+                        if stats_resp.status_code == 200:
+                            # Extract view count and date from page
+                            view_match = re.search(r'([\d,]+)\s*views', stats_resp.text)
+                            date_match = re.search(r'(\d+\s+(?:year|month|week|day|hour|minute|second)s?\s+ago)', stats_resp.text)
+                            if view_match:
+                                output.append(f"   Views: {view_match.group(1)}")
+                            if date_match:
+                                output.append(f"   Uploaded: {date_match.group(1)}")
+                    except Exception:
+                        pass
+                output.append("")
+
+        if output:
+            return "\n".join(output)
+
+        # Fallback: open YouTube search page
         import webbrowser
-        # Search for the video
-        search_query = f"{query} video"
-        result = web_search(search_query)
-        # Extract first YouTube/video URL from results and open it
-        import re
-        urls = re.findall(r'https?://[^\s]+', result)
-        video_urls = [u for u in urls if any(d in u for d in ['youtube.com', 'youtu.be', 'vimeo.com', 'dailymotion.com'])]
-        if video_urls:
-            webbrowser.open(video_urls[0])
-            return f"[OK] Found and opened: {video_urls[0]}"
-        # Fallback: open YouTube search
-        search = requests.utils.quote(f"{query} video")
-        webbrowser.open(f"https://www.youtube.com/results?search_query={search}")
+        search_url = f"https://www.youtube.com/results?search_query={requests.utils.quote(query)}"
+        webbrowser.open(search_url)
         return f"[OK] Opened YouTube search for '{query}'"
+
     except Exception as e:
         return f"[FAIL] Video search error: {e}"
 
@@ -1350,7 +1411,7 @@ __all__ = [
     "read_emails", "send_email", "draft_email",
     "send_instagram_dm",
     "tell_alexa",
-    "web_search", "stark_doctor", "git_ops",
+    "web_search", "video_search", "stark_doctor", "git_ops",
     "see_screen", "search_browser_history", "open_history_item",
     "list_recent_history", "generate_file", "generate_file_llm",
     "search_and_open",
