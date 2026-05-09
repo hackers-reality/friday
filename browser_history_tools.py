@@ -61,8 +61,9 @@ def _copy_history_db(src: str) -> str:
         # If copy fails (very fresh Chrome), try direct
         return src
 
-def _read_history(db_path: str, days_back: int = 30, limit: int = 1000) -> List[Dict[str, Any]]:
-    """Read history entries from a Chrome-format history DB."""
+def _read_history(db_path: str, days_back: int = 3650, limit: int = 10000) -> List[Dict[str, Any]]:
+    """Read history entries from a Chrome-format history DB.
+    Uses days_back=3650 (10 years) to effectively search ALL history by default."""
     temp_path = None
     try:
         # Copy to avoid lock
@@ -72,7 +73,7 @@ def _read_history(db_path: str, days_back: int = 30, limit: int = 1000) -> List[
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Calculate cutoff
+        # Calculate cutoff — use full history (3650 days = ~10 years covers everything)
         cutoff = int((datetime.now() - timedelta(days=days_back)).timestamp() * 1_000_000)
         
         query = """
@@ -116,10 +117,11 @@ def _read_history(db_path: str, days_back: int = 30, limit: int = 1000) -> List[
             except:
                 pass
 
-def search_all_history(query: str, days_back: int = 30, limit_per_browser: int = 50) -> str:
+
+def search_all_history(query: str, days_back: int = 3650, limit_per_browser: int = 500) -> str:
     """
-    Search all installed browsers for a query in URL or title.
-    Returns the most recent matching entry across all browsers.
+    Search ALL installed browsers for a query in URL or title (no time limit).
+    Returns the most relevant matching entries across all browsers.
     """
     all_results = []
     
@@ -165,7 +167,7 @@ def search_all_history(query: str, days_back: int = 30, limit_per_browser: int =
     
     return "\n".join(lines)
 
-def find_latest_by_keyword(keyword: str, days_back: int = 90) -> Optional[Dict[str, Any]]:
+def find_latest_by_keyword(keyword: str, days_back: int = 3650) -> Optional[Dict[str, Any]]:
     """
     Find the most recent history entry matching a keyword.
     Returns the entry dict or None.
@@ -177,7 +179,7 @@ def find_latest_by_keyword(keyword: str, days_back: int = 90) -> Optional[Dict[s
         if not db_path:
             continue
         
-        entries = _read_history(db_path, days_back=days_back, limit=200)
+        entries = _read_history(db_path, days_back=days_back, limit=5000)
         
         for entry in entries:
             if "error" in entry:
@@ -200,7 +202,7 @@ def open_latest_in_browser(query: str) -> str:
     Find the most recent history entry matching query and open it in the default browser.
     General-purpose: works for ANYTHING - anime, repos, chats, blogs, courses, etc.
     """
-    entry = find_latest_by_keyword(query, days_back=90)
+    entry = find_latest_by_keyword(query, days_back=3650)
     
     if not entry:
         return f"[FAIL] No recent history found for '{query}'.\n\nTrying web search instead..."
@@ -324,7 +326,7 @@ def search_and_open(query: str, category_hint: str = None) -> str:
         if not db_path:
             continue
         
-        entries = _read_history(db_path, days_back=90, limit=500)
+        entries = _read_history(db_path, days_back=3650, limit=10000)
         
         for entry in entries:
             if "error" in entry:
@@ -403,7 +405,7 @@ def search_by_category(query: str, category: str) -> str:
         if not db_path:
             continue
         
-        entries = _read_history(db_path, days_back=90, limit=500)
+        entries = _read_history(db_path, days_back=3650, limit=10000)
         
         for entry in entries:
             if "error" in entry:
@@ -519,7 +521,7 @@ def browser_history_tool(action: str = "status", query: str = "", **kwargs) -> s
     if action == "search":
         if not query:
             return "[FAIL] Query required for search."
-        return search_all_history(query, days_back=kwargs.get("days_back", 30))
+        return search_all_history(query, days_back=kwargs.get("days_back", 3650))
     
     if action == "open_latest":
         if not query:
@@ -528,8 +530,8 @@ def browser_history_tool(action: str = "status", query: str = "", **kwargs) -> s
     
     if action == "list_recent":
         return list_browser_histories(
-            days_back=kwargs.get("days_back", 7),
-            limit=kwargs.get("limit", 20)
+            days_back=kwargs.get("days_back", 30),
+            limit=kwargs.get("limit", 50)
         )
     
     if action == "find_and_open":
