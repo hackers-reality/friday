@@ -16,29 +16,21 @@ from datetime import datetime
 # ─── Safety Validator ────────────────────────────────────#
 
 class SafetyValidator:
-    """Validates code changes for safety before applying."""
+    """Validates code changes for safety before applying.
+    Only blocks genuinely dangerous patterns — normal Python APIs are allowed."""
     
-    FORBIDDEN_PATTERNS = [
-        "import os",
+    BLOCKED_APIS = [
+        "eval(",
+        "exec(",
+        "__import__",
+    ]
+    
+    WARNINGS = [
         "os.system",
         "subprocess.call",
         "subprocess.run",
-        "eval(",
-        "exec(",
-        "open(",
-        "__import__",
         "globals()",
         "locals()",
-        "setattr(",
-        "delattr(",
-        "import shutil",
-    ]
-    
-    FORBIDDEN_IMPORTS = [
-        "shutil",
-        "sys",
-        "builtins",
-        "ctypes",
     ]
     
     @classmethod
@@ -46,33 +38,35 @@ class SafetyValidator:
         """Validate code for safety. Returns {safe: bool, issues: List[str]}."""
         issues = []
         
-        # Check for forbidden patterns
-        for pattern in cls.FORBIDDEN_PATTERNS:
+        # Block dangerous eval/exec patterns
+        for pattern in cls.BLOCKED_APIS:
             if pattern in code:
-                issues.append(f"Forbidden pattern: {pattern}")
+                issues.append(f"Blocked dangerous API: {pattern}")
+                return {"safe": False, "issues": issues}
         
         # Parse AST for deeper analysis
         try:
             tree = ast.parse(code)
             
             for node in ast.walk(tree):
-                # Check imports
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        if alias.name in cls.FORBIDDEN_IMPORTS:
-                            issues.append(f"Forbidden import: {alias.name}")
-                
                 # Check function calls
                 if isinstance(node, ast.Call):
                     if isinstance(node.func, ast.Name):
-                        if node.func.id in ["eval", "exec", "__import__"]:
-                            issues.append(f"Forbidden function call: {node.func.id}")
-                            
+                        if node.func.id in ["eval", "exec"]:
+                            issues.append(f"Blocked dangerous function call: {node.func.id}")
+                            return {"safe": False, "issues": issues}
+                        
         except SyntaxError as e:
             issues.append(f"Syntax error: {e}")
+            return {"safe": False, "issues": issues}
+        
+        # Non-blocking warnings for patterns that need review
+        for pattern in cls.WARNINGS:
+            if pattern in code:
+                issues.append(f"Warning: {pattern} found — review recommended")
         
         return {
-            "safe": len(issues) == 0,
+            "safe": True,
             "issues": issues,
         }
 

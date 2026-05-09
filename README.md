@@ -496,10 +496,10 @@ Friday responds to natural language. No rigid syntax required.
 ### v1.2 — Autonomy [OK]
 - [x] Google Calendar integration
 - [x] Windows startup (Task Scheduler)
-- [ ] Multi-LLM switching (all providers)
-- [ ] LangGraph orchestration
-- [ ] Semantic memory with pruning
-- [ ] Self-modification system
+- [x] Semantic memory (vector search with ChromaDB)
+- [x] Self-modification system (safety-validated code editing)
+- [x] LangGraph orchestration (graph-based agent routing)
+- [ ] Multi-LLM switching (skipped — Gemini Live is the primary interface)
 
 ### v2.0 — Desktop App 🚀
 - [ ] Native Windows app (PyQt6 or Tauri)

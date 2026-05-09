@@ -272,89 +272,51 @@ def scroll(amount: int) -> str:
         return f"[FAIL] Scroll error: {e}"
 
 def open_app(name: str) -> str:
-    """Open application by name. Maps common names to executables on Windows."""
+    """Open ANY application by name using system discovery. No hardcoded paths."""
     import subprocess
     import os
 
-    # Common Windows app install locations
-    paths = {
-        "spotify": [
-            os.path.expandvars(r"%APPDATA%\Spotify\Spotify.exe"),
-            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WindowsApps\Spotify.exe"),
-            "spotify.exe",
-        ],
-        "chrome": [
-            os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
-            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
-            "chrome.exe",
-        ],
-        "firefox": [
-            os.path.expandvars(r"%PROGRAMFILES%\Mozilla Firefox\firefox.exe"),
-            "firefox.exe",
-        ],
-        "edge": [
-            os.path.expandvars(r"%PROGRAMFILES(x86)%\Microsoft\Edge\Application\msedge.exe"),
-            "msedge.exe",
-        ],
-        "discord": [
-            os.path.expandvars(r"%LOCALAPPDATA%\Discord\Discord.exe"),
-            "Discord.exe",
-        ],
-        "steam": [
-            os.path.expandvars(r"%PROGRAMFILES(x86)%\Steam\steam.exe"),
-            "steam.exe",
-        ],
-        "roblox": ["RobloxPlayerBeta.exe"],
-        "notepad": ["notepad.exe"],
-        "calculator": ["calc.exe"],
-        "explorer": ["explorer.exe"],
-        "vscode": [
-            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"),
-            "code.exe",
-        ],
-        "terminal": [
-            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe"),
-            "cmd.exe",
-        ],
-        "settings": ["ms-settings:"],
-    }
+    name = name.strip().strip('"').strip("'")
 
-    name_lower = name.lower()
-    candidates = paths.get(name_lower, [name])
-
-    # Try launching via shell: uri or start for special apps
-    if name_lower == "settings":
-        subprocess.run("start ms-settings:", shell=True)
-        return "[OK] Opening Settings"
-
-    for exe in candidates:
-        try:
-            if exe.startswith("ms-"):
-                subprocess.run(["start", exe], shell=True)
-                return f"[OK] Opening {name}"
-            if os.name == 'nt':
-                os.startfile(exe)
-            else:
-                subprocess.Popen(exe)
-            return f"[OK] Opening app: {name}"
-        except FileNotFoundError:
-            continue
-        except OSError:
-            continue
-        except Exception:
-            continue
-
-    # Final fallback: try finding via where/whereis
+    # Strategy 1: Try `start` with the name directly (Windows resolves through PATH and App Paths)
     try:
-        result = subprocess.run(f"where {name}.exe", shell=True, capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            path = result.stdout.strip().split("\n")[0]
-            os.startfile(path)
-            return f"[OK] Opening {name}"
+        subprocess.run(f"start \"\" \"{name}\"", shell=True, timeout=10)
+        return f"[OK] Opening: {name}"
     except Exception:
         pass
 
-    return f"[FAIL] Could not find {name}. Try installing it or providing the full path."
+    # Strategy 2: Use `where` to find the full path, then open it
+    try:
+        result = subprocess.run(f"where {name}", shell=True, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            path = result.stdout.strip().split("\n")[0].strip()
+            if path:
+                os.startfile(path)
+                return f"[OK] Opening: {name} ({path})"
+    except Exception:
+        pass
+
+    # Strategy 3: Try with .exe extension if not present
+    if not name.lower().endswith('.exe'):
+        try:
+            result = subprocess.run(f"where {name}.exe", shell=True, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                path = result.stdout.strip().split("\n")[0].strip()
+                if path:
+                    os.startfile(path)
+                    return f"[OK] Opening: {name} ({path})"
+        except Exception:
+            pass
+
+    # Strategy 4: Try `start` with shell URI schemes (ms-settings:, mailto:, etc.)
+    if ":" not in name:
+        try:
+            subprocess.run(f"start \"\" \"{name}\"", shell=True, timeout=10)
+            return f"[OK] Opening: {name}"
+        except Exception:
+            pass
+
+    return f"[FAIL] Could not find '{name}'. Make sure it's installed and in your PATH."
 
 
 def close_app(name: str) -> str:
@@ -715,9 +677,10 @@ def git_ops(operation: str, message: str = "") -> str:
     return f"Git {operation}"
 
 def see_screen(question: str = "What do you see on the screen?") -> str:
-    """Capture screen and analyze it using Gemini Vision API."""
+    """Capture screen and analyze it using Gemini Vision API.
+    Uses gemini-1.5-flash (higher quota) with automatic retry + model fallback on 429."""
     try:
-        import base64, io, requests, json
+        import base64, io, requests, json, time
         from PIL import Image, ImageGrab
 
         # Capture screen: try pyautogui first, fallback to PIL ImageGrab
@@ -741,26 +704,48 @@ def see_screen(question: str = "What do you see on the screen?") -> str:
         if not api_key:
             return "[FAIL] GOOGLE_API_KEY not configured."
 
-        r = requests.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-            headers={"Content-Type": "application/json"},
-            params={"key": api_key},
-            json={
-                "contents": [{
-                    "parts": [
-                        {"text": f"[SCREEN ANALYSIS] {question}\nDescribe what you see. Include: visible text, UI elements, coordinates of interactive elements, any errors on screen."},
-                        {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
-                    ]
-                }]
-            },
-            timeout=30,
-        )
-        data = r.json()
-        if "candidates" not in data or not data["candidates"]:
-            error_info = data.get("error", {}).get("message", str(data))
-            return f"[FAIL] API returned no response: {error_info}"
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
-        return text
+        models = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-2.0-flash"]
+        last_error = ""
+
+        for model in models:
+            for attempt in range(2):
+                try:
+                    r = requests.post(
+                        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                        headers={"Content-Type": "application/json"},
+                        params={"key": api_key},
+                        json={
+                            "contents": [{
+                                "parts": [
+                                    {"text": f"[SCREEN ANALYSIS] {question}\nDescribe what you see. Include: visible text, UI elements, coordinates of interactive elements, any errors on screen."},
+                                    {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
+                                ]
+                            }]
+                        },
+                        timeout=30,
+                    )
+                    data = r.json()
+                    if r.status_code == 429:
+                        last_error = f"Rate limited on {model}"
+                        time.sleep(2 ** attempt)
+                        continue
+                    if r.status_code != 200:
+                        last_error = f"{model} HTTP {r.status_code}: {data.get('error', {}).get('message', '')}"
+                        break
+                    if "candidates" not in data or not data["candidates"]:
+                        error_info = data.get("error", {}).get("message", str(data))
+                        last_error = f"{model} no response: {error_info}"
+                        break
+                    text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    return text
+                except requests.exceptions.Timeout:
+                    last_error = f"{model} timeout"
+                    continue
+                except Exception as e:
+                    last_error = f"{model} error: {e}"
+                    break
+
+        return f"[FAIL] Screen analysis failed. All models exhausted. Last error: {last_error}"
     except ImportError as e:
         return f"[FAIL] Missing dependency: {e}. Install: pip install pillow requests"
     except Exception as e:
@@ -1575,10 +1560,33 @@ def stayfree_week() -> str:
 #  OpenCLI Bridge Tools #
 
 def opencli_init_bridge() -> str:
-    """Initialize the OpenCLI browser bridge."""
+    """Initialize the OpenCLI browser bridge and install Chrome extension."""
     try:
         from opencli_integration import opencli_init
-        return opencli_init()
+        import subprocess, os
+
+        result = opencli_init()
+        if "[FAIL]" not in result:
+            return result
+
+        # Init failed — try installing the browser extension first
+        try:
+            inst = subprocess.run(["opencli", "browser", "install"], capture_output=True, text=True, timeout=30)
+            if inst.returncode == 0:
+                result2 = opencli_init()
+                if "[FAIL]" not in result2:
+                    return result2 + " (Chrome extension installed)"
+        except Exception:
+            pass
+
+        return (
+            "[FAIL] OpenCLI bridge not connected. To set up:\n"
+            "  1. Open Chrome and go to chrome://extensions\n"
+            "  2. Enable Developer mode (top right)\n"
+            "  3. Run: opencli browser install\n"
+            "  4. Run: opencli browser init\n"
+            "  5. Make sure the OpenCLI extension is enabled"
+        )
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
     except Exception as e:
@@ -1825,6 +1833,22 @@ def opencli_unbind() -> str:
         return "[FAIL] opencli_integration.py not available."
     except Exception as e:
         return f"[FAIL] Unbind error: {e}"
+
+
+def execute_tool(name: str, args: dict = None) -> str:
+    """Execute a tool by name with given args. Used by friday_langgraph.py."""
+    import inspect
+    args = args or {}
+    func = globals().get(name)
+    if not func:
+        return f"[FAIL] Unknown tool: {name}"
+    try:
+        sig = inspect.signature(func)
+        filtered = {k: v for k, v in args.items() if k in sig.parameters}
+        result = func(**filtered)
+        return str(result)
+    except Exception as e:
+        return f"[FAIL] {name} error: {e}"
 
 
 #  Export list for friday_live.py #

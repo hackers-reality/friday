@@ -88,6 +88,8 @@ from friday_tools import (
     goals_tool_handler, calendar_tool_handler, startup_tool_handler, memory_import_tool_handler,
 )
 
+from vector_memory import vector_memory_tool
+
 load_dotenv()
 console = Console()
 
@@ -238,6 +240,7 @@ Browser History:
 
 Goals & Memory:
 - goals_tool_handler(action, goal) — add, list, update, or analyze goals.
+- vector_memory_tool(action, query, text) — semantic memory with vector search. Use 'add' to store facts, 'search' to recall.
 - memory_store(category, keyword, content) — save facts to long-term memory.
 - memory_retrieve(query) — recall stored memories.
 - memory_import_tool_handler(action, file_path) — import conversations from other AI assistants.
@@ -1057,6 +1060,16 @@ def _build_tools():
                 }, required=["action"]),
             ),
             types.FunctionDeclaration(
+                name="vector_memory_tool",
+                description="Semantic memory: store and search facts, preferences, and patterns using vector search.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: search, add, stats, delete, clear."},
+                    "query": {"type": "STRING", "description": "Search query (required for search action)."},
+                    "text": {"type": "STRING", "description": "Text to store (required for add action)."},
+                    "n_results": {"type": "INTEGER", "description": "Number of results to return (default 5)."},
+                }, required=["action"]),
+            ),
+            types.FunctionDeclaration(
                 name="calendar_tool_handler",
                 description="Google Calendar: list upcoming events, sync events to goals.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1157,6 +1170,7 @@ TOOL_MAP = {
     "generate_file_llm": generate_file_llm,
     "search_and_open": search_and_open,
     "goals_tool_handler": goals_tool_handler,
+    "vector_memory_tool": vector_memory_tool,
     "calendar_tool_handler": calendar_tool_handler,
     "startup_tool_handler": startup_tool_handler,
     "memory_import_tool_handler": memory_import_tool_handler,
