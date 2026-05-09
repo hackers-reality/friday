@@ -100,6 +100,7 @@ Thumbs.db
 *.sqlite
 backups/
 docs/
+stark_logs.txt
 
 # Temp / scratch files
 fix_*.py
