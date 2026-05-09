@@ -11,15 +11,40 @@ from typing import Optional, Dict, Any
 
 
 def _get_stayfree_dir() -> Optional[str]:
-    """Locate the StayFree data directory."""
+    """Locate the StayFree data directory. Checks multiple possible locations."""
     appdata = os.environ.get("LOCALAPPDATA", "")
-    if not appdata:
-        return None
-    candidates = [
-        os.path.join(appdata, "StayFree"),
-        os.path.join(appdata, "StayFree", "data"),
-        os.path.join(appdata, "StayFree", "storage"),
-    ]
+    appdata_roaming = os.environ.get("APPDATA", "")
+    userprofile = os.environ.get("USERPROFILE", "")
+    programdata = os.environ.get("PROGRAMDATA", "")
+    candidates = []
+    if appdata:
+        candidates += [
+            os.path.join(appdata, "StayFree"),
+            os.path.join(appdata, "StayFree", "data"),
+            os.path.join(appdata, "StayFree", "storage"),
+            os.path.join(appdata, "StayFree", "app"),
+            os.path.join(appdata, "StayFree", "usage-data"),
+        ]
+    if appdata_roaming:
+        candidates += [
+            os.path.join(appdata_roaming, "StayFree"),
+            os.path.join(appdata_roaming, "StayFree", "data"),
+        ]
+    if userprofile:
+        candidates += [
+            os.path.join(userprofile, "StayFree"),
+            os.path.join(userprofile, "Documents", "StayFree"),
+        ]
+    if programdata:
+        candidates += [
+            os.path.join(programdata, "StayFree"),
+        ]
+    # Also check common Chrome extension storage paths
+    if appdata:
+        candidates += [
+            os.path.join(appdata, "Google", "Chrome", "User Data", "Default", "Local Extension Settings", "ccebnhfcmbpgkdapgkmbpgcpeblebili"),
+            os.path.join(appdata, "Google", "Chrome", "User Data", "Default", "Storage", "ext", "ccebnhfcmbpgkdapgkmbpgcpeblebili"),
+        ]
     for c in candidates:
         if os.path.isdir(c):
             return c

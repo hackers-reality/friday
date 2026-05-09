@@ -1,6 +1,10 @@
 """
-OpenCLI Integration — wraps the real @jackwener/opencli binary for browser automation.
-Uses `opencli browser` subcommands directly. Falls back to CDP/vision only if binary not found.
+OpenCLI Integration — wraps the real @jackwener/opencli binary.
+Provides:
+  - Browser automation via opencli browser * primitives (navigate, click, type, extract, etc.)
+  - Built-in site adapters for 100+ sites (hackernews, reddit, twitter, bilibili, etc.)
+  - Desktop app control via CDP (Cursor, Codex, ChatGPT, Notion, Discord)
+  - CLI Hub for local binaries (gh, docker, etc.)
 """
 
 import subprocess
@@ -151,6 +155,77 @@ def opencli_eval(js: str) -> str:
         return f"[FAIL] {e}"
     except Exception as e:
         return f"[FAIL] Eval error: {e}"
+
+
+def opencli_run(args: str) -> str:
+    """Run ANY opencli command with arbitrary arguments. Flexible catch-all."""
+    try:
+        import shlex
+        return _run_opencli(shlex.split(args), timeout=60)
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] opencli run error: {e}"
+
+
+# ======== BUILT-IN SITE ADAPTERS ========
+# These use opencli's 100+ built-in deterministic adapters (no browser needed).
+
+def opencli_site_site(site: str, command: str, args: str = "") -> str:
+    """Run a built-in OpenCLI site adapter command.
+    Example: opencli_site_site('hackernews', 'top', '--limit 5')
+    """
+    try:
+        import shlex
+        cmd_args = [site, command] + shlex.split(args)
+        return _run_opencli(cmd_args, timeout=30)
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] opencli site error: {e}"
+
+
+def opencli_hackernews(command: str = "top", limit: int = 5) -> str:
+    """Get HackerNews posts. Commands: top, new, best, ask, show, jobs."""
+    try:
+        return _run_opencli(["hackernews", command, "--limit", str(limit)])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] HackerNews error: {e}"
+
+
+def opencli_reddit(command: str = "hot", subreddit: str = "", limit: int = 5) -> str:
+    """Get Reddit posts. Commands: hot, frontpage, popular, search, subreddit."""
+    try:
+        args = ["reddit", command, "--limit", str(limit)]
+        if subreddit and command == "subreddit":
+            args.append(subreddit)
+        return _run_opencli(args)
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Reddit error: {e}"
+
+
+def opencli_twitter(command: str = "trending", limit: int = 5) -> str:
+    """Get Twitter/X data. Commands: trending, search, timeline, tweets, profile."""
+    try:
+        return _run_opencli(["twitter", command, "--limit", str(limit)])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] Twitter error: {e}"
+
+
+def opencli_list_adapters() -> str:
+    """List all available OpenCLI commands and site adapters."""
+    try:
+        return _run_opencli(["list"])
+    except RuntimeError as e:
+        return f"[FAIL] {e}"
+    except Exception as e:
+        return f"[FAIL] List error: {e}"
 
 
 def opencli_back() -> str:

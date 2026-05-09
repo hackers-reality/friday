@@ -704,7 +704,7 @@ def see_screen(question: str = "What do you see on the screen?") -> str:
         if not api_key:
             return "[FAIL] GOOGLE_API_KEY not configured."
 
-        models = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-2.0-flash"]
+        models = ["gemini-2.5-flash-preview-04-17", "gemini-2.0-flash", "gemini-1.5-flash"]
         last_error = ""
 
         for model in models:
@@ -1152,49 +1152,32 @@ def climb_codebase(query: str, path: str = "") -> str:
         return f"[FAIL] Codebase search error: {e}"
 
 def netflix_play(title: str) -> str:
-    """Open Chrome, navigate to Netflix, search for title, play it."""
+    """Search web for Netflix title ID, then open the direct watch URL."""
     try:
-        import webbrowser
-        import pygetwindow as gw
-        import pyautogui
-        import time
+        import webbrowser, re
 
-        # Open Netflix search URL in Chrome
+        # Search for the Netflix title ID via web search
+        search_result = web_search(f"netflix {title} site:netflix.com/title")
+        # Extract Netflix title IDs from search results
+        title_ids = re.findall(r'netflix\.com/title/(\d+)', search_result)
+        if title_ids:
+            direct_url = f"https://www.netflix.com/title/{title_ids[0]}"
+            webbrowser.open(direct_url)
+            return f"[OK] Opening Netflix: {title} (title ID: {title_ids[0]})"
+
+        # Try broader search for any Netflix content URL
+        search_result2 = web_search(f"netflix {title}")
+        title_ids2 = re.findall(r'netflix\.com/(?:watch|title)/(\d+)', search_result2)
+        if title_ids2:
+            direct_url = f"https://www.netflix.com/title/{title_ids2[0]}"
+            webbrowser.open(direct_url)
+            return f"[OK] Opening Netflix: {title} (ID: {title_ids2[0]})"
+
+        # Fallback: Open Netflix search page
         search_url = f"https://www.netflix.com/search?q={title.replace(' ', '+')}"
         webbrowser.open(search_url)
-        time.sleep(4)
+        return f"[OK] Opening Netflix search for '{title}' (title ID not found via web search)"
 
-        # Try direct play URL first (works for known titles)
-        direct_url = f"https://www.netflix.com/search?q={title.replace(' ', '+')}&play=true"
-        webbrowser.open(direct_url)
-        time.sleep(3)
-
-        # Confirm page loaded - look for any browser window
-        browser_windows = [w for w in gw.getAllTitles() if any(b in w for b in ['Chrome', 'Edge', 'Browser', 'Netflix', 'Mozilla Firefox'])]
-        if not browser_windows:
-            return f"[OK] Opened Netflix search for '{title}'. Please click the result to play."
-
-        # Focus browser window
-        for w in browser_windows:
-            try:
-                gw.getWindowsWithTitle(w)[0].activate()
-                break
-            except Exception:
-                pass
-
-        time.sleep(1)
-        # Try to click first search result using Enter key
-        pyautogui.press('enter')
-        time.sleep(3)
-
-        # Try to play
-        pyautogui.press('enter')
-        time.sleep(1)
-
-        return f"[OK] Started playing '{title}' on Netflix."
-
-    except ImportError:
-        return "[FAIL] pygetwindow or pyautogui not installed. Install: pip install pygetwindow pyautogui"
     except Exception as e:
         return f"[FAIL] Netflix play error: {e}"
 
@@ -1558,6 +1541,33 @@ def stayfree_week() -> str:
 
 
 #  OpenCLI Bridge Tools #
+
+def opencli_run(command: str) -> str:
+    """Run ANY OpenCLI command (site adapters, browser, desktop apps, CLI hub).
+    For built-in site adapters: opencli_run('hackernews top --limit 5')
+    For browser automation: opencli_run('browser open https://...')
+    For desktop apps: opencli_run('cursor ...')
+    For CLI hub tools: opencli_run('gh pr list --limit 5')
+    Use opencli_run('list') to see all available commands."""
+    try:
+        from opencli_integration import opencli_run
+        return opencli_run(command)
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI run error: {e}"
+
+
+def opencli_list_adapters() -> str:
+    """List all available OpenCLI commands and built-in site adapters."""
+    try:
+        from opencli_integration import opencli_list_adapters
+        return opencli_list_adapters()
+    except ImportError:
+        return "[FAIL] opencli_integration.py not available."
+    except Exception as e:
+        return f"[FAIL] OpenCLI list error: {e}"
+
 
 def opencli_init_bridge() -> str:
     """Initialize the OpenCLI browser bridge and install Chrome extension."""

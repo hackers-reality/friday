@@ -325,6 +325,28 @@ def stark_initialization():
     console.print("\n")
 
 
+# VISION QUEUE — bridges see_screen to use Live WebSocket instead of REST
+_vision_response_queue = _thread_queue.Queue()
+_vision_pending = threading.Event()
+_event_loop = None
+
+def _get_event_loop():
+    return _event_loop
+
+def _capture_screen_for_live() -> bytes:
+    """Capture screen, return JPEG bytes for Live API video frame."""
+    try:
+        from PIL import ImageGrab, Image
+        import io
+        screen = ImageGrab.grab()
+        screen = screen.resize((960, 540))
+        buf = io.BytesIO()
+        screen.save(buf, format="JPEG", quality=50)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
 # AUDIO PLAYBACK THREAD - zero async overhead
 _audio_playback_queue = _thread_queue.Queue()
 _audio_playback_stop = threading.Event()
@@ -1189,10 +1211,35 @@ TOOL_MAP = {
 }
 
 
-def _invoke_tool(func_name, args):
+def _invoke_tool(func_name, args, session=None):
     func = TOOL_MAP.get(func_name)
     if not func:
         return {"error": f"Unknown tool: {func_name}"}
+    # Use Live WebSocket for see_screen if session is available
+    if func_name == "see_screen" and session:
+        try:
+            import asyncio
+            img_bytes = _capture_screen_for_live()
+            if img_bytes:
+                _vision_pending.set()
+                _vision_response_queue = globals().get("_vision_response_queue")
+                # Send video frame through Live session
+                coro = session.send_realtime_input(
+                    video=types.Blob(data=img_bytes, mime_type="image/jpeg"),
+                    text=f"[SCREEN ANALYSIS] {args.get('question', 'What do you see?')}\nDescribe what you see concisely."
+                )
+                fut = asyncio.run_coroutine_threadsafe(coro, _get_event_loop())
+                fut.result(timeout=10)
+                # Wait for model's vision response
+                try:
+                    result_text = _vision_response_queue.get(timeout=15)
+                    return {"result": result_text}
+                except Exception:
+                    return {"result": "[FAIL] Vision response timed out via Live API"}
+            else:
+                return {"result": "[FAIL] Screen capture failed for Live API"}
+        except Exception as e:
+            return {"result": f"[FAIL] Live vision error: {e}"}
     try:
         if not isinstance(args, dict):
             args = {"command": str(args)} if args else {}
@@ -1380,6 +1427,8 @@ async def audio_worker(recorder, session, audio_ready, porcupine, winsound):
 
 # MAIN ENGINE
 async def friday_live_engine():
+    global _event_loop
+    _event_loop = asyncio.get_running_loop()
     stark_initialization()
     tools = _build_tools()
     chat = ChatDisplay(console)
@@ -1462,6 +1511,12 @@ async def friday_live_engine():
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
 
+                                        # Intercept vision response if see_screen was called via Live
+                                        if _vision_pending.is_set() and sc.output_transcription and sc.output_transcription.text:
+                                            vision_text = sc.output_transcription.text.strip()
+                                            if vision_text:
+                                                _vision_response_queue.put(vision_text)
+
                                         # Output transcription - show progressively
                                         if sc.output_transcription and sc.output_transcription.text:
                                             new_text = sc.output_transcription.text.strip()
@@ -1482,6 +1537,8 @@ async def friday_live_engine():
 
                                         # Turn complete
                                         if sc.turn_complete:
+                                            if _vision_pending.is_set():
+                                                _vision_pending.clear()
                                             _model_turn_done.set()  # No more audio chunks coming
                                             if thinking_parts:
                                                 chat.add_thought("\n".join(thinking_parts))
@@ -1525,7 +1582,7 @@ async def friday_live_engine():
                                             name = fc.name
                                             args = fc.args or {}
                                             chat.add_system(f"Executing: {name}")
-                                            result = _invoke_tool(name, args)
+                                            result = _invoke_tool(name, args, session)
                                             responses.append(
                                                 types.FunctionResponse(
                                                     name=name, id=fc.id, response=result
