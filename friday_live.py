@@ -81,7 +81,7 @@ from friday_tools import (
     opencli_bind, opencli_unbind,
     search_browser_history, open_history_item, tell_alexa,
     spotify_next, spotify_prev, spotify_volume,
-    send_instagram_dm, netflix_play, gmail_authorize, read_emails, send_email,
+    send_instagram_dm, netflix_play, google_authorize, gmail_authorize, read_emails, send_email,
     close_app, list_running_apps, generate_file,
     get_active_window, draft_email, list_recent_history,
     generate_file_llm, search_and_open,
@@ -326,7 +326,8 @@ Goals & Memory:
 - memory_import_tool_handler(action, file_path) — import chat history
 
 Communication:
-- gmail_authorize() — one-time Gmail OAuth setup (if emails fail)
+- google_authorize() — one-time Google OAuth (Gmail + Calendar, run if emails/calendar fail)
+- gmail_authorize() — alias for google_authorize
 - read_emails(count) — read Gmail inbox
 - send_email(to, subject, body) — send email
 - draft_email(context, recipient) — AI-drafted email
@@ -1048,8 +1049,12 @@ def _build_tools():
                 }, required=["title"]),
             ),
             types.FunctionDeclaration(
+                name="google_authorize",
+                description="Authorize ALL Google services (Gmail + Calendar). Opens browser for OAuth consent. Run this if emails or calendar fail due to auth. Only needed once.",
+            ),
+            types.FunctionDeclaration(
                 name="gmail_authorize",
-                description="Run the Gmail OAuth authorization flow. Opens a browser for you to grant Friday access to your Gmail account. Only needed once.",
+                description="Alias for google_authorize. Authorizes Gmail + Calendar together.",
             ),
             types.FunctionDeclaration(
                 name="read_emails",
@@ -1368,6 +1373,7 @@ TOOL_MAP = {
     "spotify_volume": spotify_volume,
     "send_instagram_dm": send_instagram_dm,
     "netflix_play": netflix_play,
+    "google_authorize": google_authorize,
     "gmail_authorize": gmail_authorize,
     "read_emails": read_emails,
     "send_email": send_email,

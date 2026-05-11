@@ -62,6 +62,11 @@ def _get_gmail_service():
         return None
 
 
+def google_authorize() -> str:
+    """Authorize ALL Google services (Gmail + Calendar). Same as gmail_authorize."""
+    return gmail_authorize()
+
+
 def gmail_authorize() -> str:
     """Run unified OAuth flow for Gmail + Calendar. Opens browser for consent.
     Only needed once — subsequent calls reuse the saved token.

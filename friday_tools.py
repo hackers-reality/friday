@@ -1240,6 +1240,17 @@ def netflix_play(title: str) -> str:
 
 #  Email (Gmail) Functions 
 
+def google_authorize() -> str:
+    """Authorize ALL Google services (Gmail + Calendar). Opens browser for OAuth consent. Only needed once."""
+    try:
+        from friday_gmail import google_authorize
+        return google_authorize()
+    except ImportError:
+        return "[FAIL] friday_gmail.py not available."
+    except Exception as e:
+        return f"[FAIL] Google authorize error: {e}"
+
+
 def gmail_authorize() -> str:
     """Run the Gmail OAuth flow — opens browser for you to authorize Friday. Only needed once."""
     try:
@@ -2136,7 +2147,7 @@ __all__ = [
     "open_app", "close_app", "list_running_apps", "open_url",
     "spotify_play", "spotify_pause", "spotify_next", "spotify_prev", "spotify_volume", "spotify_current",
     "netflix_play",
-    "gmail_authorize", "read_emails", "send_email", "draft_email",
+    "google_authorize", "gmail_authorize", "read_emails", "send_email", "draft_email",
     "send_instagram_dm",
     "tell_alexa",
     "web_search", "video_search", "stark_doctor", "git_ops",
