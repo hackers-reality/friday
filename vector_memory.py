@@ -25,10 +25,36 @@ class VectorMemory:
         self._init_chroma()
     
     def _init_chroma(self):
-        """Initialize ChromaDB client and collection."""
-        try:
+        """Initialize ChromaDB client and collection with timeout protection."""
+        def _try_import():
             import chromadb
             from chromadb.config import Settings
+            return (chromadb, Settings)
+        
+        try:
+            import threading
+            result = [None, None]
+            done = threading.Event()
+            
+            def _import_thread():
+                try:
+                    chromadb, Settings = _try_import()
+                    result[0] = chromadb
+                    result[1] = Settings
+                except Exception as e:
+                    result[0] = e
+                finally:
+                    done.set()
+            
+            t = threading.Thread(target=_import_thread, daemon=True)
+            t.start()
+            if not done.wait(timeout=10):
+                return
+            
+            if isinstance(result[0], Exception):
+                raise result[0]
+            
+            chromadb, Settings = result
             
             # Create persistent client
             db_path = os.path.join(os.path.dirname(__file__), "friday_memory", "chroma_db")
@@ -47,7 +73,7 @@ class VectorMemory:
             print(f"[VectorMemory] Initialized: {self.collection_name}")
             
         except ImportError:
-            print("[VectorMemory] chromadb not installed. Run: pip install chromadb")
+            print("[VectorMemory] chromadb not installed or timed out. pip install chromadb onnxruntime")
             self.client = None
             self.collection = None
         except Exception as e:

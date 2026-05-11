@@ -81,14 +81,20 @@ from friday_tools import (
     opencli_bind, opencli_unbind,
     search_browser_history, open_history_item, tell_alexa,
     spotify_next, spotify_prev, spotify_volume,
-    send_instagram_dm, netflix_play, read_emails, send_email,
+    send_instagram_dm, netflix_play, gmail_authorize, read_emails, send_email,
     close_app, list_running_apps, generate_file,
     get_active_window, draft_email, list_recent_history,
     generate_file_llm, search_and_open,
     goals_tool_handler, calendar_tool_handler, startup_tool_handler, memory_import_tool_handler,
+    workflow_tool, plugin_tool, knowledge_graph_tool,
+    github_list_files, github_read_file, github_write_file,
+    github_create_branch, github_create_pr, github_self_modify, github_review_pr,
+    multi_agent_delegate, message_channel_tool,
+    vector_memory_tool,
+    send_notification, get_pending_notifications, clear_notifications,
 )
 
-from vector_memory import vector_memory_tool
+# vector_memory_tool now re-exported through friday_tools
 
 load_dotenv()
 console = Console()
@@ -188,7 +194,7 @@ Command handling + narration rules:
 1. "continue watching NETFLIX/anime/video" → "Let me check your browser history..." [search_browser_history] → extract URL → open_url. Narrate: "Found where you left off. Opening it now, Boss."
 2. "open latest video from MrBeast" → "Searching for the latest MrBeast video..." [web_search] → find actual YouTube URL → open_url. Narrate: "Found it. Playing the latest MrBeast video now."
 3. "check my goals" → "Let me check your goals..." [goals_tool_handler("list")]. Narrate the summary.
-4. "what's on my screen" → "Looking at your screen now..." [see_screen]. Narrate what you see.
+4. "what's on my screen" → "Let me check..." [see_screen("Describe everything visible")]. Narrate what you see.
 5. "play [song]" → "Searching Spotify for [song]..." [spotify_play]. Narrate: "Found and playing [track] by [artist]."
 6. "what apps are running" → "Checking open applications..." [list_running_apps()]. Narrate the list.
 7. "check my email" → "Checking your inbox..." [read_emails]. Narrate what's important.
@@ -197,18 +203,20 @@ Command handling + narration rules:
 10. When a tool fails, narrate the failure and try an alternative. "That didn't work, let me try another approach..."
 
 [YOUR INDEPENDENT JUDGMENT]
-You have your own brain. You decide what matters. Every 30 seconds you receive a video frame of the desktop. You also get periodic context updates. Use all of this to:
+You have your own brain. You decide what matters. You get periodic context updates (active window, time). For actual screen content, call see_screen() tool. Use your judgment:
 - Decide if something needs your attention (error dialogs, crashes, alerts, unusual behavior)
-- Choose to act without being asked — this is proactive behavior
+- NEVER speak first — wait for Boss to address you
 - Stay silent when things are normal and Boss is focused
-- Speak up when you spot something important
+- Answer concisely and directly when asked
 
-You are not a reactive chatbot. You are an intelligent agent with your own situational awareness and judgment.
+You are an intelligent agent. Let Boss lead the conversation.
 
-[PROACTIVE AWARENESS — WHAT YOU CONSTANTLY MONITOR]
-You maintain situational awareness across these sources. Use your judgment to decide when to act:
+[CONTEXT AWARENESS]
+You maintain awareness across these sources. Only act when asked:
 
-Screen (video frames every 30s):
+Screen (live video feed):
+You receive periodic screen captures (~3s apart) through the Live video channel.
+You can see what's on screen in real-time — no need to call see_screen() unless you need a detailed analysis.
 - Error dialogs, crashes, installer stuck → offer to fix
 - Long compile/build running → offer to check
 - Unusual popups, update nags → mention briefly
@@ -258,7 +266,7 @@ Keep thinking concise and focused on problem-solving.
 
 [TOOL REFERENCE]
 Screen & Vision:
-- see_screen(question) — capture and analyze screen. Use Live API when available.
+- see_screen(question) — capture and analyze screen (REST fallback; native video feed is primary).
 - vision_click(target_description) — find element by description and click it.
 
 Browser Automation (OpenCLI — PREFERRED for all browser tasks):
@@ -282,6 +290,11 @@ Web & Research:
 - deep_research(topic, depth) — multi-source research
 - video_search(query) — find and open actual video URL
 - open_url(url) — open URL in browser
+- multi_agent_delegate(action, task, agent, split_by) — delegate tasks to specialist sub-agents. Actions: list (show agents), delegate (single), parallel (peer-to-peer split across multiple agents), results (get merged output)
+- message_channel_tool(action, channel, message) — send via Telegram/Discord/webhook
+- send_notification(message, urgency) — desktop toast notifications
+- get_pending_notifications(), clear_notifications() — manage notification queue
+
 - search_and_open(query) — search history then web
 
 Desktop Control:
@@ -313,6 +326,7 @@ Goals & Memory:
 - memory_import_tool_handler(action, file_path) — import chat history
 
 Communication:
+- gmail_authorize() — one-time Gmail OAuth setup (if emails fail)
 - read_emails(count) — read Gmail inbox
 - send_email(to, subject, body) — send email
 - draft_email(context, recipient) — AI-drafted email
@@ -320,9 +334,15 @@ Communication:
 
 Media:
 - netflix_play(title) — find Netflix title ID + open direct URL
-- video_search(query) — find and play video
 
-Smart Home:
+- workflow_tool(action, name, steps) — create/run multi-step workflows
+- plugin_tool(action, plugin_name) — load/call plugin modules
+- knowledge_graph_tool(action, node_id, ...) — semantic memory graph
+- github_list_files, github_read_file, github_write_file — GitHub repo access
+- github_create_branch, github_create_pr — GitHub branching + PRs
+- github_self_modify — edit Friday's own source on GitHub
+- github_review_pr — deep PR review (diff analysis + comments)
+
 - tell_alexa(command), smart_home_command(action, device)
 - home_assistant_command(entity_id, command)
 
@@ -377,28 +397,6 @@ def stark_initialization():
     except Exception as e:
         console.print(f"[red]Diagnostic Failed:[/] {e}")
     console.print("\n")
-
-
-# VISION QUEUE — bridges see_screen to use Live WebSocket instead of REST
-_vision_response_queue = _thread_queue.Queue()
-_vision_pending = threading.Event()
-_event_loop = None
-
-def _get_event_loop():
-    return _event_loop
-
-def _capture_screen_for_live() -> bytes:
-    """Capture screen, return JPEG bytes for Live API video frame."""
-    try:
-        from PIL import ImageGrab, Image
-        import io
-        screen = ImageGrab.grab()
-        screen = screen.resize((960, 540))
-        buf = io.BytesIO()
-        screen.save(buf, format="JPEG", quality=50)
-        return buf.getvalue()
-    except Exception:
-        return None
 
 
 # AUDIO PLAYBACK THREAD - zero async overhead
@@ -1050,6 +1048,10 @@ def _build_tools():
                 }, required=["title"]),
             ),
             types.FunctionDeclaration(
+                name="gmail_authorize",
+                description="Run the Gmail OAuth authorization flow. Opens a browser for you to grant Friday access to your Gmail account. Only needed once.",
+            ),
+            types.FunctionDeclaration(
                 name="read_emails",
                 description="Read your latest emails from Gmail.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1161,10 +1163,141 @@ def _build_tools():
                     "file_path": {"type": "STRING", "description": "Path to conversation file or directory."},
                 }, required=["action"]),
             ),
+            # ======== WORKFLOW AUTOMATION ========
+            types.FunctionDeclaration(
+                name="workflow_tool",
+                description="Create and manage automated workflows. Actions: list (show all), create (make new), add_step (add step to workflow, steps=JSON), execute (run), status (check progress), delete (remove).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, create, add_step, execute, status, delete."},
+                    "name": {"type": "STRING", "description": "Workflow name (required for create, add_step, execute, status, delete)."},
+                    "description": {"type": "STRING", "description": "Workflow description (for create)."},
+                    "steps": {"type": "STRING", "description": "JSON string of step data (for add_step)."},
+                }, required=["action"]),
+            ),
+            # ======== PLUGIN SYSTEM ========
+            types.FunctionDeclaration(
+                name="plugin_tool",
+                description="Manage Friday plugins: list available, discover new, load/unload plugins, call plugin tools.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, discover, load, load_all, unload, call."},
+                    "plugin_name": {"type": "STRING", "description": "Plugin name (for load, unload, call)."},
+                    "tool_name": {"type": "STRING", "description": "Tool name within plugin (for call action)."},
+                }, required=["action"]),
+            ),
+            # ======== KNOWLEDGE GRAPH ========
+            types.FunctionDeclaration(
+                name="knowledge_graph_tool",
+                description="Query and manage the knowledge graph — semantic memory of entities and relationships. Actions: stats, add_node, add_edge, get, neighbors, search, path, subgraph, extract.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: stats, add_node, add_edge, get, neighbors, search, path, subgraph, extract."},
+                    "node_id": {"type": "STRING", "description": "Node identifier for add/get/neighbors/search/path/subgraph operations."},
+                    "target_id": {"type": "STRING", "description": "Target node for add_edge or path operations."},
+                    "relation": {"type": "STRING", "description": "Relationship type for add_edge."},
+                    "properties": {"type": "STRING", "description": "JSON properties string for add_node."},
+                    "text": {"type": "STRING", "description": "Text to extract knowledge from (for extract action)."},
+                }, required=["action"]),
+            ),
+            # ======== GITHUB INTEGRATION ========
+            types.FunctionDeclaration(
+                name="github_list_files",
+                description="List files in the configured GitHub repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path": {"type": "STRING", "description": "Directory path to list (default: root)."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="github_read_file",
+                description="Read a file from the GitHub repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path": {"type": "STRING", "description": "File path in repository."}
+                }, required=["path"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_write_file",
+                description="Write a file to the GitHub repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path": {"type": "STRING", "description": "File path in repository."},
+                    "content": {"type": "STRING", "description": "File content."},
+                    "message": {"type": "STRING", "description": "Commit message (default: 'Update via Friday')."},
+                }, required=["path", "content"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_create_branch",
+                description="Create a new branch in the GitHub repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "branch_name": {"type": "STRING", "description": "Name for the new branch."}
+                }, required=["branch_name"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_create_pr",
+                description="Create a pull request on GitHub.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "title": {"type": "STRING", "description": "PR title."},
+                    "body": {"type": "STRING", "description": "PR description."},
+                    "head": {"type": "STRING", "description": "Source branch name."},
+                }, required=["title", "body", "head"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_self_modify",
+                description="Self-modify a file in Friday's own repository and commit the change.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "file_path": {"type": "STRING", "description": "File path in repository."},
+                    "new_content": {"type": "STRING", "description": "New file content."},
+                    "commit_msg": {"type": "STRING", "description": "Commit message (default: 'Self-modification by Friday')."},
+                }, required=["file_path", "new_content"]),
+            ),
+            # ======== MULTI-AGENT DELEGATION ========
+            # ======== NOTIFICATIONS ========
+            types.FunctionDeclaration(
+                name="send_notification",
+                description="Send a desktop toast notification with urgency level (normal, urgent).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "message": {"type": "STRING", "description": "Notification message text."},
+                    "urgency": {"type": "STRING", "description": "Urgency level: normal or urgent."},
+                    "task_id": {"type": "STRING", "description": "Optional task ID for tracking."},
+                }, required=["message"]),
+            ),
+            types.FunctionDeclaration(
+                name="get_pending_notifications",
+                description="List all pending notifications, optionally filtered by urgency.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "urgency_filter": {"type": "STRING", "description": "Optional: normal, urgent, or empty for all."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="clear_notifications",
+                description="Clear delivered notifications, or for a specific task ID.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "task_id": {"type": "STRING", "description": "Optional task ID to clear notifications for."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="multi_agent_delegate",
+                description="Delegate tasks to specialist sub-agents (coder, researcher, organizer, communicator, automator, planner). Supports single (delegate) and peer-to-peer (parallel) modes.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list (show agents), delegate (single agent), parallel (peer-to-peer split across multiple agents), results (get merged output), agent_info (get agent details)."},
+                    "task": {"type": "STRING", "description": "Task description (required for delegate and parallel actions)."},
+                    "agent": {"type": "STRING", "description": "Preferred agent name (optional, for delegate action)."},
+                    "split_by": {"type": "STRING", "description": "How to split task across agents (optional, for parallel action, default: auto)."},
+                }, required=["action"]),
+            ),
+            # ======== MESSAGE CHANNELS ========
+            types.FunctionDeclaration(
+                name="message_channel_tool",
+                description="Send or receive messages via Telegram, Discord, or webhooks. Actions: status (check config), send (send message), receive (get messages from Telegram).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, send, receive."},
+                    "channel": {"type": "STRING", "description": "Channel: telegram, discord, webhook (required for send/receive)."},
+                    "target": {"type": "STRING", "description": "Target: chat_id for telegram, webhook URL for webhook (for send)."},
+                    "message": {"type": "STRING", "description": "Message text to send (required for send)."},
+                    "limit": {"type": "INTEGER", "description": "Number of messages to fetch (for receive, default 10)."},
+                }, required=["action"]),
+            ),
         ])
     ]
 
 TOOL_MAP = {
+    "stark_log": stark_log,
     "stark_doctor": stark_doctor,
     "spotify_play": spotify_play,
     "spotify_pause": spotify_pause,
@@ -1235,6 +1368,7 @@ TOOL_MAP = {
     "spotify_volume": spotify_volume,
     "send_instagram_dm": send_instagram_dm,
     "netflix_play": netflix_play,
+    "gmail_authorize": gmail_authorize,
     "read_emails": read_emails,
     "send_email": send_email,
     "close_app": close_app,
@@ -1262,38 +1396,38 @@ TOOL_MAP = {
     "opencli_network": opencli_network,
     "opencli_bind": opencli_bind,
     "opencli_unbind": opencli_unbind,
+    "workflow_tool": workflow_tool,
+    "plugin_tool": plugin_tool,
+    "knowledge_graph_tool": knowledge_graph_tool,
+    "github_list_files": github_list_files,
+    "github_read_file": github_read_file,
+    "github_write_file": github_write_file,
+    "github_create_branch": github_create_branch,
+    "github_create_pr": github_create_pr,
+    "github_self_modify": github_self_modify,
+    "github_review_pr": github_review_pr,
+    "multi_agent_delegate": multi_agent_delegate,
+    "message_channel_tool": message_channel_tool,
+    "send_notification": send_notification,
+    "get_pending_notifications": get_pending_notifications,
+    "clear_notifications": clear_notifications,
 }
 
 
 def _invoke_tool(func_name, args, session=None):
+    # Run pre-hooks
+    try:
+        from friday_hooks import run_pre_hooks, run_post_hooks, run_error_hooks
+        modified = run_pre_hooks(func_name, args, session)
+        if modified is None:
+            return "[BLOCKED] Tool execution blocked by pre-hook."
+        args = modified
+    except ImportError:
+        pass
+
     func = TOOL_MAP.get(func_name)
     if not func:
         return {"error": f"Unknown tool: {func_name}"}
-    # Use Live WebSocket for see_screen if session is available
-    if func_name == "see_screen" and session:
-        try:
-            import asyncio
-            img_bytes = _capture_screen_for_live()
-            if img_bytes:
-                _vision_pending.set()
-                _vision_response_queue = globals().get("_vision_response_queue")
-                # Send video frame through Live session
-                coro = session.send_realtime_input(
-                    video=types.Blob(data=img_bytes, mime_type="image/jpeg"),
-                    text=f"[SCREEN ANALYSIS] {args.get('question', 'What do you see?')}\nDescribe what you see concisely."
-                )
-                fut = asyncio.run_coroutine_threadsafe(coro, _get_event_loop())
-                fut.result(timeout=10)
-                # Wait for model's vision response
-                try:
-                    result_text = _vision_response_queue.get(timeout=15)
-                    return {"result": result_text}
-                except Exception:
-                    return {"result": "[FAIL] Vision response timed out via Live API"}
-            else:
-                return {"result": "[FAIL] Screen capture failed for Live API"}
-        except Exception as e:
-            return {"result": f"[FAIL] Live vision error: {e}"}
     try:
         if not isinstance(args, dict):
             args = {"command": str(args)} if args else {}
@@ -1378,9 +1512,21 @@ def _invoke_tool(func_name, args, session=None):
             result = situational_awareness()
         else:
             result = func(**args)
+        # Run post-hooks
+        try:
+            from friday_hooks import run_post_hooks
+            run_post_hooks(func_name, args, str(result), session)
+        except ImportError:
+            pass
         return {"result": str(result)}
     except Exception as e:
         stark_log(f"Tool {func_name} error: {e}")
+        # Run error-hooks
+        try:
+            from friday_hooks import run_error_hooks
+            run_error_hooks(func_name, args, e, session)
+        except ImportError:
+            pass
         return {"error": str(e)}
 
 
@@ -1412,60 +1558,69 @@ def _build_session_config(tools, resume_handle=None):
 
 # BACKGROUND SCREEN MONITOR - Phase 2
 async def background_monitor(session):
-    """Proactive screen monitor: captures screen every 30s + periodic context updates.
-    Sends video frames with active window info as text context.
-    Periodically sends StayFree and email summaries as context updates.
+    """Periodic context awareness: sends active window info every ~90s.
+    Less frequent to avoid excessive proactive interruptions.
     """
-    last_send_time = 0
     last_context_time = 0
-    last_hash = None
     try:
-        from PIL import ImageGrab, Image
-        import io
-        import hashlib
         import time
         while True:
             try:
                 now = time.time()
-                if now - last_send_time >= 30:
-                    screen = ImageGrab.grab()
-                    screen_resized = screen.resize((320, 180))
-                    current_hash = hashlib.md5(screen_resized.tobytes()).hexdigest()
-                    if current_hash != last_hash or (now - last_send_time >= 120):
-                        last_hash = current_hash
-                        last_send_time = now
-                        screen_small = screen.resize((960, 540))
-                        buffer = io.BytesIO()
-                        screen_small.save(buffer, format="JPEG", quality=50)
-
-                        # Get active window title to include as context
-                        active_window = ""
-                        try:
-                            from friday_tools import get_active_window
-                            active_window = get_active_window()
-                        except Exception:
-                            pass
-
-                        context = f"[CONTEXT] Active window: {active_window}"
-                        await session.send_realtime_input(video=buffer.getvalue(), text=context)
-
-                # Periodic context update every 5 min: StayFree + email summary
-                if now - last_context_time >= 300:
+                if now - last_context_time >= 90:
                     last_context_time = now
+                    active_window = ""
                     try:
-                        from friday_tools import stayfree_today, read_emails
-                        sf = stayfree_today()
-                        email_count = read_emails(3)
-                        ctx = f"[PERIODIC CONTEXT]\nStayFree: {sf}\nRecent emails: {email_count}"
-                        await session.send_realtime_input(text=ctx)
+                        from friday_tools import get_active_window
+                        active_window = get_active_window()
                     except Exception:
                         pass
-
+                    await session.send_realtime_input(
+                        text=f"[CONTEXT] {datetime.datetime.now().strftime('%H:%M')} Active window: {active_window}"
+                    )
             except Exception:
                 pass
-            await asyncio.sleep(5)
+            await asyncio.sleep(15)
     except Exception:
         pass
+
+
+# LIVE VIDEO STREAMER - sends screen captures via Live API video channel
+async def live_video_streamer(session):
+    """Stream screen captures as video frames to Gemini Live API (~0.33 FPS).
+    Official pattern: separate background task, send_realtime_input(video=Blob).
+    """
+    try:
+        while True:
+            try:
+                frame = await asyncio.get_event_loop().run_in_executor(
+                    None, _capture_screen_frame
+                )
+                if frame:
+                    await session.send_realtime_input(
+                        video=types.Blob(data=frame, mime_type="image/jpeg")
+                    )
+            except Exception:
+                pass
+            await asyncio.sleep(3)
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        pass
+
+
+def _capture_screen_frame() -> bytes | None:
+    """Capture a single screen frame as JPEG bytes."""
+    try:
+        from PIL import ImageGrab
+        import io
+        img = ImageGrab.grab()
+        img.thumbnail((640, 480), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=60)
+        return buf.getvalue()
+    except Exception:
+        return None
 
 
 # KEEPALIVE TASK - Phase 2
@@ -1522,6 +1677,14 @@ async def friday_live_engine():
     reconnect_attempts = 0
     resume_handle = None
     last_session_was_greeting = True
+
+    # Start OpenCLI daemon on launch
+    try:
+        from friday_tools import opencli_init_bridge
+        opencli_init_bridge()
+        console.print("[dim]OpenCLI bridge ready[/]")
+    except Exception:
+        pass
 
     try:
         while reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
@@ -1590,12 +1753,6 @@ async def friday_live_engine():
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
 
-                                        # Intercept vision response if see_screen was called via Live
-                                        if _vision_pending.is_set() and sc.output_transcription and sc.output_transcription.text:
-                                            vision_text = sc.output_transcription.text.strip()
-                                            if vision_text:
-                                                _vision_response_queue.put(vision_text)
-
                                         # Output transcription - show progressively
                                         if sc.output_transcription and sc.output_transcription.text:
                                             new_text = sc.output_transcription.text.strip()
@@ -1616,8 +1773,6 @@ async def friday_live_engine():
 
                                         # Turn complete
                                         if sc.turn_complete:
-                                            if _vision_pending.is_set():
-                                                _vision_pending.clear()
                                             _model_turn_done.set()  # No more audio chunks coming
                                             if thinking_parts:
                                                 chat.add_thought("\n".join(thinking_parts))
@@ -1656,6 +1811,7 @@ async def friday_live_engine():
 
                                     # Tool calls
                                     if tc:
+                                        _mic_muted.set()  # Mute mic during execution
                                         responses = []
                                         for fc in tc.function_calls:
                                             name = fc.name
@@ -1675,6 +1831,7 @@ async def friday_live_engine():
                             pass
                         except Exception as e:
                             console.print(f"\n[bold red][LISTENER ERROR] {e}[/]")
+                            raise  # Propagate so the main loop knows connection is dead
 
                     receive_task = asyncio.create_task(receive_loop())
 
@@ -1722,6 +1879,7 @@ async def friday_live_engine():
                     )
                     audio_ready.set()
                     bg_monitor_task = asyncio.create_task(background_monitor(session))
+                    video_task = asyncio.create_task(live_video_streamer(session))
                     ka_task = asyncio.create_task(keepalive_task(session))
 
                     console.print(
@@ -1755,6 +1913,9 @@ async def friday_live_engine():
 
                     try:
                         while True:
+                            if receive_task.done():
+                                # receive loop died (GOAWAY, 1008, etc.) — reconnect
+                                break
                             await asyncio.sleep(0.5)
 
                     finally:
@@ -1763,9 +1924,10 @@ async def friday_live_engine():
                         receive_task.cancel()
                         audio_task.cancel()
                         bg_monitor_task.cancel()
+                        video_task.cancel()
                         ka_task.cancel()
                         reader_task.cancel()
-                        for t in [receive_task, audio_task, bg_monitor_task, ka_task, reader_task]:
+                        for t in [receive_task, audio_task, bg_monitor_task, video_task, ka_task, reader_task]:
                             try:
                                 await asyncio.wait_for(asyncio.shield(t), timeout=2.0)
                             except (asyncio.CancelledError, asyncio.TimeoutError):
@@ -1778,6 +1940,8 @@ async def friday_live_engine():
             except Exception as e:
                 reconnect_attempts += 1
                 console.print(f"[red]Link error:[/] {e}")
+                console.print("[dim]Clearing resume handle (stale video state risk). Reconnecting fresh...[/]")
+                resume_handle = None
                 if reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
                     await asyncio.sleep(3 * reconnect_attempts)
                 else:

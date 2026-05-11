@@ -264,11 +264,11 @@ Other LLM providers (Claude, OpenAI, Groq text, Ollama) are coming soon — use 
 ## Installation
 
 
-### fully Automatic installtion
-```bash
+### Fully Automatic Installation
+```powershell
 
-# One-liner (PowerShell, full install + prompts)
-powershell -ExecutionPolicy Bypass -NoProfile -Command "& { git clone https://github.com/hackers-reality/friday.git; Set-Location friday; pip install -r requirements.txt; npm install -g @jackwene[...]
+# One-liner (PowerShell — installs everything needed)
+powershell -ExecutionPolicy Bypass -NoProfile -Command "& { git clone https://github.com/hackers-reality/friday.git; Set-Location friday; pip install -r requirements.txt; npm install -g @jackwener/opencli; opencli browser install; .\install.ps1 }"
 ```
 ### Manual
 
@@ -340,6 +340,25 @@ ALEXA_WEBHOOK_URL=your_alexa_webhook_url
 # Home Assistant (alternative to Alexa)
 HOME_ASSISTANT_URL=http://homeassistant.local:8123
 HA_TOKEN=your_long_lived_access_token
+
+# GitHub (optional) — enables code/PR tools
+GITHUB_TOKEN=your_github_personal_access_token
+GITHUB_REPO=owner/repo_name
+```
+
+### Google Calendar Setup (optional)
+
+For `calendar_tool_handler` to work:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project → Enable **Google Calendar API**
+3. Go to **Credentials** → Create OAuth 2.0 Client ID (Desktop app)
+4. Download the JSON and save as `credentials.json` in the project root
+5. First run auto-generates the token at `friday_memory/calendar_token.json`
+
+```env
+# In .env (not strictly required, Calendar uses credentials.json OAuth flow)
+# But you still need GOOGLE_API_KEY for Gemini
 ```
 
 ### Launch Friday

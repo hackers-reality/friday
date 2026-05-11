@@ -102,12 +102,17 @@ backups/
 docs/
 stark_logs.txt
 
+# Secrets & credentials
+credentials.json
+friday_memory/calendar_token.json
+
+# Runtime data (all auto-created by modules)
+friday_memory/
+!.gitkeep
+
 # Temp / scratch files
 fix_*.py
 check_syntax.py
 test_feature*.py
 scratch/
 .spotify_cache
-friday_memory/imported_chats/
-friday_memory/user_profile.*
-friday_memory/memory.json

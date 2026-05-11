@@ -6,17 +6,21 @@ StayFree stores data in JSON files at %LOCALAPPDATA%/StayFree.
 import os
 import json
 import glob
+import subprocess
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
 
 def _get_stayfree_dir() -> Optional[str]:
-    """Locate the StayFree data directory. Checks multiple possible locations."""
+    """Locate the StayFree data directory. Checks 20+ possible locations + Windows Registry."""
     appdata = os.environ.get("LOCALAPPDATA", "")
     appdata_roaming = os.environ.get("APPDATA", "")
     userprofile = os.environ.get("USERPROFILE", "")
     programdata = os.environ.get("PROGRAMDATA", "")
+    systemdrive = os.environ.get("SystemDrive", "C:")
     candidates = []
+
+    # Standard StayFree app data dirs
     if appdata:
         candidates += [
             os.path.join(appdata, "StayFree"),
@@ -24,6 +28,9 @@ def _get_stayfree_dir() -> Optional[str]:
             os.path.join(appdata, "StayFree", "storage"),
             os.path.join(appdata, "StayFree", "app"),
             os.path.join(appdata, "StayFree", "usage-data"),
+            os.path.join(appdata, "StayFree", "session-data"),
+            os.path.join(appdata, "StayFree", "tracking-data"),
+            os.path.join(appdata, "Programs", "StayFree"),
         ]
     if appdata_roaming:
         candidates += [
@@ -33,21 +40,65 @@ def _get_stayfree_dir() -> Optional[str]:
     if userprofile:
         candidates += [
             os.path.join(userprofile, "StayFree"),
+            os.path.join(userprofile, "StayFree", "data"),
             os.path.join(userprofile, "Documents", "StayFree"),
+            os.path.join(userprofile, "AppData", "Local", "StayFree"),
+            os.path.join(userprofile, "AppData", "Roaming", "StayFree"),
         ]
     if programdata:
         candidates += [
             os.path.join(programdata, "StayFree"),
         ]
-    # Also check common Chrome extension storage paths
+
+    # Chrome extension storage (LevelDB / indexeddb)
     if appdata:
         candidates += [
             os.path.join(appdata, "Google", "Chrome", "User Data", "Default", "Local Extension Settings", "ccebnhfcmbpgkdapgkmbpgcpeblebili"),
             os.path.join(appdata, "Google", "Chrome", "User Data", "Default", "Storage", "ext", "ccebnhfcmbpgkdapgkmbpgcpeblebili"),
+            os.path.join(appdata, "Google", "Chrome", "User Data", "Default", "IndexedDB", "chrome-extension_ccebnhfcmbpgkdapgkmbpgcpeblebili"),
         ]
+
+    # Microsoft Store apps (per-user AppData)
+    if userprofile:
+        candidates += [
+            os.path.join(userprofile, "AppData", "Local", "Packages", "StayFree"),
+            os.path.join(userprofile, "AppData", "Local", "Packages", "StayFreeApp"),
+        ]
+
+    # Direct root paths
+    candidates += [
+        os.path.join(systemdrive, "\\", "StayFree"),
+        os.path.join(systemdrive, "\\", "Program Files", "StayFree"),
+        os.path.join(systemdrive, "\\", "Program Files (x86)", "StayFree"),
+    ]
+
     for c in candidates:
         if os.path.isdir(c):
             return c
+
+    # Fallback: try Windows Registry to find StayFree install path
+    try:
+        for hive, key in [
+            ("HKEY_LOCAL_MACHINE", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            ("HKEY_LOCAL_MACHINE", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+            ("HKEY_CURRENT_USER", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        ]:
+            result = subprocess.run(
+                ["reg", "query", f"{hive}\\{key}", "/s", "/f", "StayFree", "/e"],
+                capture_output=True, text=True, timeout=10
+            )
+            if "StayFree" in result.stdout:
+                # Extract InstallLocation or DisplayIcon path
+                for line in result.stdout.splitlines():
+                    if "InstallLocation" in line or "DisplayIcon" in line:
+                        parts = line.strip().split("  ", 2)
+                        if len(parts) >= 3:
+                            path = parts[-1].strip()
+                            if os.path.isdir(os.path.dirname(path)):
+                                return os.path.dirname(path)
+    except Exception:
+        pass
+
     return None
 
 
@@ -82,19 +133,43 @@ def stayfree_today() -> str:
         for fpath in files:
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                    raw = f.read()
+                # Try parsing as JSON or NDJSON (newline-delimited JSON)
+                if raw.startswith("[") or raw.startswith("{"):
+                    data = json.loads(raw)
+                else:
+                    # NDJSON — try each line
+                    for line in raw.strip().splitlines():
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(data, dict):
+                            entries = data.get("entries", data.get("data", data.get("usage", data.get("records", []))))
+                            if isinstance(entries, list):
+                                for entry in entries:
+                                    date = str(entry.get("date", entry.get("day", entry.get("timestamp", ""))))
+                                    if today in date:
+                                        today_data.append(entry)
+                            date = str(data.get("date", data.get("day", data.get("timestamp", ""))))
+                            if today in date:
+                                today_data.append(data)
+                    continue  # NDJSON already processed
                 if isinstance(data, dict):
-                    # Check various known StayFree formats
-                    entries = data.get("entries", data.get("data", data.get("usage", [])))
+                    entries = data.get("entries", data.get("data", data.get("usage", data.get("records", []))))
                     if isinstance(entries, list):
                         for entry in entries:
-                            date = entry.get("date", entry.get("day", ""))
-                            if today in str(date):
+                            date = str(entry.get("date", entry.get("day", entry.get("timestamp", ""))))
+                            if today in date:
                                 today_data.append(entry)
-                    # Single day record
-                    date = data.get("date", data.get("day", data.get("timestamp", "")))
-                    if today in str(date):
+                    date = str(data.get("date", data.get("day", data.get("timestamp", ""))))
+                    if today in date:
                         today_data.append(data)
+                elif isinstance(data, list):
+                    for entry in data:
+                        date = str(entry.get("date", entry.get("day", entry.get("timestamp", ""))))
+                        if today in date:
+                            today_data.append(entry)
             except Exception:
                 continue
 
@@ -138,9 +213,29 @@ def stayfree_week() -> str:
         for fpath in files:
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, dict):
-                    entries = data.get("entries", data.get("data", data.get("usage", [data])))
+                    raw = f.read()
+                if raw.startswith("[") or raw.startswith("{"):
+                    data = json.loads(raw)
+                else:
+                    for line in raw.strip().splitlines():
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(data, dict):
+                            for entry in [data] + data.get("entries", data.get("data", data.get("usage", data.get("records", [])))):
+                                date = entry.get("date", entry.get("day", "")) if isinstance(entry, dict) else ""
+                                if date >= week_ago:
+                                    week_data.append(entry)
+                    continue
+                if isinstance(data, list):
+                    for entry in data:
+                        if isinstance(entry, dict):
+                            date = entry.get("date", entry.get("day", ""))
+                            if date >= week_ago:
+                                week_data.append(entry)
+                elif isinstance(data, dict):
+                    entries = data.get("entries", data.get("data", data.get("usage", data.get("records", [data]))))
                     if isinstance(entries, list):
                         for entry in entries:
                             date = entry.get("date", entry.get("day", ""))

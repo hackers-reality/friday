@@ -138,6 +138,62 @@ class GitHubIntegration:
         return f"Self-modification: {result}"
 
 
+    def review_pull_request(self, pr_number: int) -> str:
+        """Deep PR review: fetches diff, analyzes with Gemini, returns structured review."""
+        if not self.token:
+            return "GitHub token not configured. Set GITHUB_TOKEN environment variable."
+
+        endpoint = f"/repos/{self.repo}/pulls/{pr_number}"
+        result = self._request("GET", endpoint)
+        if "error" in result:
+            return f"Error: {result['error']}"
+
+        # Get diff
+        import requests
+        diff_url = result.get("diff_url", "")
+        try:
+            diff_resp = requests.get(diff_url, headers=self.headers, timeout=15)
+            diff = diff_resp.text[:30000]  # Limit to 30k chars
+        except Exception as e:
+            return f"Error fetching diff: {e}"
+
+        pr_title = result.get("title", "N/A")
+        pr_body = (result.get("body") or "")[:2000]
+
+        # Analyze with Gemini
+        try:
+            from google import genai
+            client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+            prompt = f"""Review this GitHub PR and provide structured feedback:
+
+## PR: {pr_title}
+## Description: {pr_body}
+
+## Diff:
+{diff[:25000]}
+
+Provide a review covering:
+1. **Summary** — what does this PR do?
+2. **Code Quality** — readability, maintainability issues
+3. **Security** — any vulnerabilities or unsafe patterns
+4. **Performance** — potential performance concerns
+5. **Correctness** — logic bugs or edge cases
+6. **Specific Suggestions** — line-level improvements with code snippets
+7. **Verdict** — approve / changes requested / reject"""
+            response = client.models.generate_content(
+                model="gemini-2.5-flash", contents=prompt
+            )
+            review = response.text
+            
+            # Post review comment on GitHub
+            comment_data = {"body": f"## 🤖 Friday AI Review\n\n{review}"}
+            self._request("POST", f"/repos/{self.repo}/pulls/{pr_number}/comments", comment_data)
+            
+            return f"## 🔍 PR Review #{pr_number}: {pr_title}\n\n{review}"
+        except Exception as e:
+            return f"Error analyzing PR: {e}"
+
+
 # Global instance
 github = GitHubIntegration()
 
@@ -170,3 +226,8 @@ def github_create_pr(title: str, body: str, head: str) -> str:
 def github_self_modify(file_path: str, new_content: str, commit_msg: str = "Self-modification by Friday") -> str:
     """Self-modify a file in the repository."""
     return github.self_modify(file_path, new_content, commit_msg)
+
+
+def github_review_pr(pr_number: int) -> str:
+    """Deep PR review: fetches diff, analyzes with Gemini, posts review comments on the PR."""
+    return github.review_pull_request(pr_number)

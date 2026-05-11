@@ -14,7 +14,7 @@ def _get_gmail_service():
     """Get authenticated Gmail service."""
     try:
         from google.oauth2.credentials import Credentials
-        from google.oauth2.flow import InstalledAppFlow
+        from google_auth_oauthlib.flow import InstalledAppFlow
         from googleapiclient.discovery import build
         
         SCOPES = [
@@ -37,13 +37,51 @@ def _get_gmail_service():
                 if not os.path.exists(creds_path):
                     return None
                 flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-                creds = flow.run_local_server(port=0)
+                creds = flow.run_local_server(port=8080)
             with open(token_path, "w") as token:
                 token.write(creds.to_json())
         
         return build("gmail", "v1", credentials=creds)
     except Exception:
         return None
+
+
+def gmail_authorize() -> str:
+    """Run the Gmail OAuth flow to generate .gmail_token.json.
+    Opens a browser for you to authorize Friday to access your Gmail.
+    Only needed once — subsequent calls reuse the saved token.
+    """
+    try:
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+
+        SCOPES = [
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.modify",
+        ]
+
+        creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "credentials.json")
+        if not os.path.exists(creds_path):
+            return (
+                "[FAIL] credentials.json not found. Download it from Google Cloud Console:\n"
+                "  1. Go to https://console.cloud.google.com/\n"
+                "  2. Create project → Enable Gmail API\n"
+                "  3. Credentials → Create OAuth 2.0 Client ID (Desktop app)\n"
+                "  4. Download JSON → save as credentials.json in the Friday folder"
+            )
+
+        flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+        creds = flow.run_local_server(port=8080, open_browser=True)
+
+        token_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gmail_token.json")
+        with open(token_path, "w") as token:
+            token.write(creds.to_json())
+
+        return f"[OK] Gmail authorized! Token saved to {token_path}"
+    except Exception as e:
+        return f"[FAIL] Gmail authorization failed: {e}"
 
 
 def gmail_list_messages(query: str = "is:unread", max_results: int = 10) -> str:

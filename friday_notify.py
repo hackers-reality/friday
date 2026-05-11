@@ -54,8 +54,8 @@ def get_pending_notifications(urgency_filter: str = "") -> str:
             return "No pending notifications."
         
         filtered = _notif_queue
-        if urgence_filter:
-            filtered = [n for n in _notif_queue if n["urgency"] == urgence_filter]
+        if urgency_filter:
+            filtered = [n for n in _notif_queue if n["urgency"] == urgency_filter]
         
         lines = [f"### Pending Notifications ({len(filtered)})"]
         for i, n in enumerate(filtered[:20]):
@@ -65,6 +65,7 @@ def get_pending_notifications(urgency_filter: str = "") -> str:
 
 def clear_notifications(task_id: str = "") -> str:
     """Clear delivered notifications, or specific task_id."""
+    global _notif_queue
     with _notif_lock:
         if task_id:
             before = len(_notif_queue)

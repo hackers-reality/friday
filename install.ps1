@@ -59,24 +59,35 @@ Write-Host "`n[4/6] Installing Python packages..." -ForegroundColor Yellow
 Write-Host "  This may take a few minutes..." -ForegroundColor Yellow
 
 $packages = @(
-    "langgraph>=1.0",
-    "langchain>=0.2",
-    "langchain-google-genai>=1.0",
-    "langchain-community>=0.2",
-    "mcp>=1.0",
-    "pywinctl>=0.0.52",
-    "pycaw>=1.5",
-    "psutil>=5.9",
-    "browser-history>=0.5",
-    "google-auth>=2.28",
-    "google-auth-oauthlib>=1.2",
-    "google-auth-httplib2>=0.2",
-    "google-api-python-client>=2.125",
+    "google-genai>=1.0",
     "requests>=2.31",
+    "python-dotenv>=1.0",
+    "pvporcupine>=3.0",
+    "pvrecorder>=1.2",
+    "PyAudio>=0.2.14",
+    "pycaw>=1.5",
+    "pygame>=2.5",
     "Pillow>=10.0",
-    "pyautogui>=0.9",
-    "pyscreeze>=0.1.29",
-    "langgraph-checkpoint-sqlite>=3.0"
+    "opencv-python>=4.8",
+    "pywinctl>=0.0.52",
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.125",
+    "google-auth-httplib2>=0.2",
+    "python-telegram-bot>=20.0",
+    "discord.py>=2.3",
+    "browser-history>=0.5",
+    "psutil>=5.9",
+    "schedule>=1.2",
+    "chromadb>=0.4",
+    "numpy>=1.24",
+    "langchain-core>=0.2",
+    "langchain-google-genai>=1.0",
+    "langgraph>=1.0",
+    "mcp>=1.0",
+    "flask>=3.0",
+    "flask-socketio>=5.3",
+    "rich>=13.0",
+    "colorama>=0.4.6"
 )
 
 foreach ($pkg in $packages) {
@@ -92,11 +103,8 @@ foreach ($pkg in $packages) {
 # Optional packages
 Write-Host "`n[5/6] Installing optional packages..." -ForegroundColor Yellow
 $optional = @(
-    "pvporcupine",  # Voice wake word
-    "openwakeword",  # Alternative voice wake
-    "python-telegram-bot",  # Telegram integration
-    "discord.py",  # Discord integration
-    "selenium",  # WhatsApp automation
+    "pvporcupine",  # Voice wake word (already installed if main)
+    "selenium",  # Legacy browser automation
     "playwright"  # Modern browser automation
 )
 
@@ -175,20 +183,29 @@ Write-Host "  Verifying installation..." -ForegroundColor Yellow
 Write-Host "=============================================================" -ForegroundColor Cyan
 
 $testFiles = @(
-    "friday_graph.py",
-    "friday_mcp.py",
     "friday_live.py",
-    "screen_watcher.py",
-    "proactive_commentary.py",
+    "friday_tools.py",
+    "friday_master.py",
+    "friday_vision.py",
+    "friday_automation.py",
+    "opencli_integration.py",
     "browser_history_tools.py",
     "goal_memory.py",
-    "file_generator.py",
+    "stayfree_bridge.py",
+    "friday_gmail.py",
+    "friday_github.py",
+    "friday_notify.py",
     "multi_agent.py",
-    "voice_wake.py",
     "message_channels.py",
-    "coding_agent.py",
-    "self_improvement.py",
-    "friday_master.py"
+    "workflow_automation.py",
+    "plugin_system.py",
+    "knowledge_graph.py",
+    "vector_memory.py",
+    "file_generator.py",
+    "startup_integration.py",
+    "friday_scheduler.py",
+    "friday_config.py",
+    "friday_security.py"
 )
 
 $allGood = $true

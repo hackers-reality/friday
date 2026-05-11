@@ -704,7 +704,7 @@ def see_screen(question: str = "What do you see on the screen?") -> str:
         if not api_key:
             return "[FAIL] GOOGLE_API_KEY not configured."
 
-        models = ["gemini-2.5-flash-preview-04-17", "gemini-2.0-flash", "gemini-1.5-flash"]
+        models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"]
         last_error = ""
 
         for model in models:
@@ -1183,6 +1183,17 @@ def netflix_play(title: str) -> str:
 
 
 #  Email (Gmail) Functions 
+
+def gmail_authorize() -> str:
+    """Run the Gmail OAuth flow — opens browser for you to authorize Friday. Only needed once."""
+    try:
+        from friday_gmail import gmail_authorize
+        return gmail_authorize()
+    except ImportError:
+        return "[FAIL] friday_gmail.py not available."
+    except Exception as e:
+        return f"[FAIL] Gmail authorize error: {e}"
+
 
 def read_emails(count: int = 10) -> str:
     """Read latest N emails. Returns formatted string with sender, subject, snippet."""
@@ -1845,6 +1856,201 @@ def opencli_unbind() -> str:
         return f"[FAIL] Unbind error: {e}"
 
 
+#  Workflow Automation Tool #
+
+def workflow_tool(action: str = "list", name: str = None, description: str = None, steps: str = None) -> str:
+    """Create, manage, and execute automated workflows. Actions: list, create, add_step, execute, delete, status."""
+    try:
+        from workflow_automation import workflow_tool as _wf_tool
+        return _wf_tool(action=action, name=name, description=description, steps=steps)
+    except ImportError:
+        return "[FAIL] workflow_automation.py not available."
+    except Exception as e:
+        return f"[FAIL] Workflow error: {e}"
+
+
+#  Plugin System Tool #
+
+def plugin_tool(action: str = "list", plugin_name: str = None, tool_name: str = None, **kwargs) -> str:
+    """Manage Friday plugins: load, unload, call plugin tools. Actions: list, discover, load, load_all, unload, call."""
+    try:
+        from plugin_system import plugin_tool as _pl_tool
+        return _pl_tool(action=action, plugin_name=plugin_name, tool_name=tool_name, **kwargs)
+    except ImportError:
+        return "[FAIL] plugin_system.py not available."
+    except Exception as e:
+        return f"[FAIL] Plugin error: {e}"
+
+
+#  Knowledge Graph Tool #
+
+def knowledge_graph_tool(action: str = "stats", node_id: str = None, target_id: str = None,
+                         relation: str = None, properties: str = None, text: str = None) -> str:
+    """Query and manage the knowledge graph. Actions: stats, add_node, add_edge, get, neighbors, search, path, subgraph, extract."""
+    try:
+        from knowledge_graph import knowledge_graph_tool as _kg_tool
+        return _kg_tool(action=action, node_id=node_id, target_id=target_id,
+                        relation=relation, properties=properties, text=text)
+    except ImportError:
+        return "[FAIL] knowledge_graph.py not available."
+    except Exception as e:
+        return f"[FAIL] Knowledge graph error: {e}"
+
+
+#  GitHub Integration Tools #
+
+def github_list_files(path: str = "") -> str:
+    """List files in the configured GitHub repository."""
+    try:
+        from friday_github import github_list_files
+        return github_list_files(path)
+    except ImportError:
+        return "[FAIL] friday_github.py not available."
+    except Exception as e:
+        return f"[FAIL] GitHub error: {e}"
+
+
+def github_read_file(path: str) -> str:
+    """Read a file from the GitHub repository."""
+    try:
+        from friday_github import github_read_file
+        return github_read_file(path)
+    except ImportError:
+        return "[FAIL] friday_github.py not available."
+    except Exception as e:
+        return f"[FAIL] GitHub error: {e}"
+
+
+def github_write_file(path: str, content: str, message: str = "Update via Friday") -> str:
+    """Write a file to the GitHub repository."""
+    try:
+        from friday_github import github_write_file
+        return github_write_file(path, content, message)
+    except ImportError:
+        return "[FAIL] friday_github.py not available."
+    except Exception as e:
+        return f"[FAIL] GitHub error: {e}"
+
+
+def github_create_branch(branch_name: str) -> str:
+    """Create a new branch in the GitHub repository."""
+    try:
+        from friday_github import github_create_branch
+        return github_create_branch(branch_name)
+    except ImportError:
+        return "[FAIL] friday_github.py not available."
+    except Exception as e:
+        return f"[FAIL] GitHub error: {e}"
+
+
+def github_create_pr(title: str, body: str, head: str) -> str:
+    """Create a pull request on GitHub."""
+    try:
+        from friday_github import github_create_pr
+        return github_create_pr(title, body, head)
+    except ImportError:
+        return "[FAIL] friday_github.py not available."
+    except Exception as e:
+        return f"[FAIL] GitHub error: {e}"
+
+
+def github_self_modify(file_path: str, new_content: str, commit_msg: str = "Self-modification by Friday") -> str:
+    """Self-modify a file in Friday's own GitHub repository."""
+    try:
+        from friday_github import github_self_modify
+        return github_self_modify(file_path, new_content, commit_msg)
+    except ImportError:
+        return "[FAIL] friday_github.py not available."
+    except Exception as e:
+        return f"[FAIL] GitHub error: {e}"
+
+
+def github_review_pr(pr_number: int) -> str:
+    """Deep PR review: fetches diff, analyzes with Gemini, posts review comments."""
+    try:
+        from friday_github import github_review_pr
+        return github_review_pr(pr_number)
+    except ImportError:
+        return "[FAIL] friday_github.py not available."
+    except Exception as e:
+        return f"[FAIL] GitHub review error: {e}"
+
+
+#  Notification Tools #
+
+def send_notification(message: str, urgency: str = "normal", task_id: str = "") -> str:
+    """Send a desktop toast notification with urgency level (normal, urgent)."""
+    try:
+        from friday_notify import send_notification as _sn
+        return _sn(message=message, urgency=urgency, task_id=task_id)
+    except ImportError:
+        return "[FAIL] friday_notify.py not available."
+    except Exception as e:
+        return f"[FAIL] Notification error: {e}"
+
+
+def get_pending_notifications(urgency_filter: str = "") -> str:
+    """List pending notifications, optionally filtered by urgency."""
+    try:
+        from friday_notify import get_pending_notifications as _gpn
+        return _gpn(urgency_filter=urgency_filter)
+    except ImportError:
+        return "[FAIL] friday_notify.py not available."
+    except Exception as e:
+        return f"[FAIL] Notifications error: {e}"
+
+
+def clear_notifications(task_id: str = "") -> str:
+    """Clear all delivered notifications, or for a specific task."""
+    try:
+        from friday_notify import clear_notifications as _cn
+        return _cn(task_id=task_id)
+    except ImportError:
+        return "[FAIL] friday_notify.py not available."
+    except Exception as e:
+        return f"[FAIL] Clear error: {e}"
+
+
+#  Vector Memory Tool (re-exported from vector_memory.py) #
+
+def vector_memory_tool(action: str = "stats", query: str = None, text: str = None, n_results: int = 5) -> str:
+    """Semantic memory: store and search facts, preferences, and patterns using vector search."""
+    try:
+        from vector_memory import vector_memory_tool as _vm_tool
+        return _vm_tool(action=action, query=query, text=text, n_results=n_results)
+    except ImportError:
+        return "[FAIL] vector_memory.py not available."
+    except Exception as e:
+        return f"[FAIL] Vector memory error: {e}"
+
+
+#  Multi-Agent Delegation Tool #
+
+def multi_agent_delegate(action: str = "list", task: str = None, agent: str = None) -> str:
+    """Delegate tasks to specialist sub-agents. Actions: list (show agents), delegate (assign task)."""
+    try:
+        from multi_agent import multi_agent_delegate as _ma_delegate
+        return _ma_delegate(action=action, task=task, agent=agent)
+    except ImportError:
+        return "[FAIL] multi_agent.py not available."
+    except Exception as e:
+        return f"[FAIL] Multi-agent error: {e}"
+
+
+#  Message Channel Tool #
+
+def message_channel_tool(action: str = "status", channel: str = None, target: str = None,
+                         message: str = None, limit: int = 10) -> str:
+    """Send/receive messages via Telegram, Discord, or webhooks. Actions: status, send, receive."""
+    try:
+        from message_channels import message_channel_tool as _mc_tool
+        return _mc_tool(action=action, channel=channel, target=target, message=message, limit=limit)
+    except ImportError:
+        return "[FAIL] message_channels.py not available."
+    except Exception as e:
+        return f"[FAIL] Message channel error: {e}"
+
+
 def execute_tool(name: str, args: dict = None) -> str:
     """Execute a tool by name with given args. Used by friday_langgraph.py."""
     import inspect
@@ -1874,7 +2080,7 @@ __all__ = [
     "open_app", "close_app", "list_running_apps", "open_url",
     "spotify_play", "spotify_pause", "spotify_next", "spotify_prev", "spotify_volume", "spotify_current",
     "netflix_play",
-    "read_emails", "send_email", "draft_email",
+    "gmail_authorize", "read_emails", "send_email", "draft_email",
     "send_instagram_dm",
     "tell_alexa",
     "web_search", "video_search", "stark_doctor", "git_ops",
@@ -1897,6 +2103,12 @@ __all__ = [
     "opencli_close", "opencli_wait_selector", "opencli_find",
     "opencli_get_url", "opencli_get_title", "opencli_network",
     "opencli_bind", "opencli_unbind",
+    "vector_memory_tool",
+    "workflow_tool", "plugin_tool", "knowledge_graph_tool",
+    "github_list_files", "github_read_file", "github_write_file",
+    "github_create_branch", "github_create_pr", "github_self_modify", "github_review_pr",
+    "multi_agent_delegate", "message_channel_tool",
+    "send_notification", "get_pending_notifications", "clear_notifications",
 ]
 
 if __name__ == "__main__":
