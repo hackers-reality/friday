@@ -116,3 +116,7 @@ check_syntax.py
 test_feature*.py
 scratch/
 .spotify_cache
+
+.gmail_token.json
+
+.gmail_token.json
