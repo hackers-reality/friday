@@ -1,4 +1,3 @@
-
 """F.R.I.D.A.Y. main live engine - Sovereign AI, Stark Industries OS.
 
 Gemini 3.1 Flash Live API with:
@@ -14,6 +13,7 @@ Gemini 3.1 Flash Live API with:
 
 from __future__ import annotations
 
+import importlib
 import asyncio
 import datetime
 import json
@@ -59,7 +59,7 @@ if sys.platform == "win32":
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from friday_tools import (
+from friday.tools import (
     alexa_command, alexa_poll, climb_codebase, deep_research, get_time,
     home_assistant_command, memory_retrieve, memory_store, multi_task,
     open_app, open_url, queue_result, queue_status, queue_task,
@@ -104,16 +104,15 @@ console = Console()
 print("Loading Friday modules...")
 
 for _mod_name in [
-    "friday_core", "friday_voice", "friday_web", "friday_ai",
-    "friday_tools", "friday_vision", "browser_history_tools",
-    "file_generator", "friday_security", "friday_database",
-    "friday_automation", "friday_monitor", "friday_scheduler",
+    "friday.core", "friday.voice", "friday.web", "friday.ai",
+    "friday.tools", "friday.vision", "friday.browser_history",
+    "friday.filegen", "friday.security", "friday.database",
+    "friday.automation", "friday.monitor", "friday.scheduler",
 ]:
     try:
-        __import__(_mod_name)
-        print(f"[OK] {_mod_name}")
+        importlib.import_module(_mod_name)
     except Exception:
-        print(f"[OK] {_mod_name} (via tools)")
+        pass
 
 print("=" * 60)
 print("Friday Module Loading Complete!")
@@ -1140,9 +1139,9 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="goals_tool_handler",
-                description="Track personal goals: add, list, update, complete, delete, check progress, enforce. Always include url and deadline when creating a goal.",
+                description="Track personal goals: add, list, update, complete, delete, check progress, enforce, okr score, morning plan, evening review. Always include url and deadline when creating a goal.",
                 parameters=types.Schema(type="OBJECT", properties={
-                    "action": {"type": "STRING", "description": "Action: add, list, update, complete, delete, check, enforce, sync_calendar, calendar, profile."},
+                    "action": {"type": "STRING", "description": "Action: add, list, update, complete, delete, check, enforce, okr, morning, evening, plan, review, sync_calendar, calendar, profile."},
                     "goal": {"type": "STRING", "description": "Goal title or name (used when action=add)."},
                     "category": {"type": "STRING", "description": "Goal category: generic, course, exam, assignment (used when action=add)."},
                     "deadline": {"type": "STRING", "description": "Goal deadline date in YYYY-MM-DD format (used when action=add)."},
@@ -1442,7 +1441,7 @@ TOOL_MAP = {
 def _invoke_tool(func_name, args, session=None):
     # Run pre-hooks
     try:
-        from friday_hooks import run_pre_hooks, run_post_hooks, run_error_hooks
+        from friday.hooks import run_pre_hooks, run_post_hooks, run_error_hooks
         modified = run_pre_hooks(func_name, args, session)
         if modified is None:
             return "[BLOCKED] Tool execution blocked by pre-hook."
@@ -1539,7 +1538,7 @@ def _invoke_tool(func_name, args, session=None):
             result = func(**args)
         # Run post-hooks
         try:
-            from friday_hooks import run_post_hooks
+            from friday.hooks import run_post_hooks
             run_post_hooks(func_name, args, str(result), session)
         except ImportError:
             pass
@@ -1548,7 +1547,7 @@ def _invoke_tool(func_name, args, session=None):
         stark_log(f"Tool {func_name} error: {e}")
         # Run error-hooks
         try:
-            from friday_hooks import run_error_hooks
+            from friday.hooks import run_error_hooks
             run_error_hooks(func_name, args, e, session)
         except ImportError:
             pass
@@ -1596,7 +1595,7 @@ async def background_monitor(session):
                     last_context_time = now
                     active_window = ""
                     try:
-                        from friday_tools import get_active_window
+                        from friday.tools import get_active_window
                         active_window = get_active_window()
                     except Exception:
                         pass
@@ -1705,7 +1704,7 @@ async def friday_live_engine():
 
     # Start OpenCLI daemon on launch
     try:
-        from friday_tools import opencli_init_bridge
+        from friday.tools import opencli_init_bridge
         opencli_init_bridge()
         console.print("[dim]OpenCLI bridge ready[/]")
     except Exception:

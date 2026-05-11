@@ -22,7 +22,7 @@ server = Server("friday-mcp-server")
 
 # Import Friday's tools
 try:
-    import friday_tools as ft
+    from friday import tools as ft
     TOOLS_AVAILABLE = True
 except Exception as e:
     print(f"[MCP] Friday tools not available: {e}", file=sys.stderr)

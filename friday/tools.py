@@ -649,7 +649,7 @@ def spotify_current() -> str:
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web using multiple engines with fallback chain."""
     try:
-        from friday_web import WebScraper
+        from friday.web import WebScraper
         import requests
         from bs4 import BeautifulSoup
 
@@ -839,7 +839,7 @@ def vision_click(target: str) -> str:
 def search_browser_history(query: str, days_back: int = 30) -> str:
     """Search browser history across all browsers."""
     try:
-        from browser_history_tools import browser_history_tool
+        from friday.browser_history import browser_history_tool
         if browser_history_tool:
             return browser_history_tool("search", query=query, days_back=days_back)
         return f"Browser history not available. Searching for: {query}"
@@ -849,7 +849,7 @@ def search_browser_history(query: str, days_back: int = 30) -> str:
 def open_history_item(query: str) -> str:
     """Find and open the most recent browser history item matching query."""
     try:
-        from browser_history_tools import browser_history_tool
+        from friday.browser_history import browser_history_tool
         if browser_history_tool:
             return browser_history_tool("open_latest", query=query)
         return f"Browser history not available. Looking for: {query}"
@@ -859,7 +859,7 @@ def open_history_item(query: str) -> str:
 def list_recent_history(days_back: int = 7, limit: int = 20) -> str:
     """List recent browser history from all browsers."""
     try:
-        from browser_history_tools import browser_history_tool
+        from friday.browser_history import browser_history_tool
         if browser_history_tool:
             return browser_history_tool("list_recent", days_back=days_back, limit=limit)
         return "Browser history not available."
@@ -869,7 +869,7 @@ def list_recent_history(days_back: int = 7, limit: int = 20) -> str:
 def generate_file(path: str, file_type: str = "auto", description: str = "", content: str = "") -> str:
     """Generate any type of file."""
     try:
-        from file_generator import file_generator_tool
+        from friday.filegen import file_generator_tool
         if file_generator_tool:
             return file_generator_tool("generate", path=path, file_type=file_type, description=description, content=content)
         return f"File generator not available. Would create: {path}"
@@ -879,7 +879,7 @@ def generate_file(path: str, file_type: str = "auto", description: str = "", con
 def generate_file_llm(path: str, prompt: str) -> str:
     """Generate file content using LLM."""
     try:
-        from file_generator import file_generator_tool
+        from friday.filegen import file_generator_tool
         if file_generator_tool:
             return file_generator_tool("generate_llm", path=path, prompt=prompt)
         return f"LLM file generation not available. Path: {path}"
@@ -889,7 +889,7 @@ def generate_file_llm(path: str, prompt: str) -> str:
 def situational_awareness() -> str:
     """Get system context."""
     try:
-        from screen_watcher import get_active_window_info
+        from friday.screen_watcher import get_active_window_info
         info = get_active_window_info()
         return f"Active window: {info.get('title', 'Unknown')}\nProcess: {info.get('process_name', 'Unknown')}"
     except Exception as e:
@@ -898,7 +898,7 @@ def situational_awareness() -> str:
 def calendar_tool_handler(action: str = "list", days: int = 7) -> str:
     """Google Calendar integration: list events, sync with goals."""
     try:
-        from goal_memory import fetch_calendar_events, sync_calendar_to_goals
+        from friday.goals import fetch_calendar_events, sync_calendar_to_goals
         if action == "list":
             return fetch_calendar_events(max_results=days * 5, days_ahead=days)
         elif action == "sync":
@@ -914,7 +914,7 @@ def calendar_tool_handler(action: str = "list", days: int = 7) -> str:
 def goals_tool_handler(action: str, **kwargs) -> str:
     """Handler for goals tool. Maps Gemini parameter names to goal_memory names."""
     try:
-        from goal_memory import goals_tool_handler as gh
+        from friday.goals import goals_tool_handler as gh
         mapped = dict(kwargs)
         if "goal" in mapped and "title" not in mapped:
             mapped["title"] = mapped.pop("goal")
@@ -943,7 +943,7 @@ def startup_tool_handler(action: str = "run", **kwargs) -> str:
     if action == "run":
         # Check browser history status
         try:
-            from browser_history_tools import browser_history_tool
+            from friday.browser_history import browser_history_tool
             status = browser_history_tool("status")
             results.append(f"[BrowserHistory] {status}")
         except Exception as e:
@@ -975,7 +975,7 @@ def search_and_open(query: str, category_hint: str = None) -> str:
     """
     try:
         # First: try browser history
-        from browser_history_tools import browser_history_tool
+        from friday.browser_history import browser_history_tool
         if browser_history_tool:
             result = browser_history_tool("find_and_open", query=query, category=(category_hint or ""))
             if result and not result.startswith("[FAIL]"):
@@ -1124,7 +1124,7 @@ def video_search(query: str) -> str:
 def deep_research(topic: str, url: str = "", depth: int = 3) -> str:
     """Multi-source deep research with synthesized report."""
     try:
-        from friday_web import WebScraper
+        from friday.web import WebScraper
         import re
         scraper = WebScraper()
         all_sources = []
@@ -1243,7 +1243,7 @@ def netflix_play(title: str) -> str:
 def google_authorize() -> str:
     """Authorize ALL Google services (Gmail + Calendar). Opens browser for OAuth consent. Only needed once."""
     try:
-        from friday_gmail import google_authorize
+        from friday.gmail import google_authorize
         return google_authorize()
     except ImportError:
         return "[FAIL] friday_gmail.py not available."
@@ -1254,7 +1254,7 @@ def google_authorize() -> str:
 def gmail_authorize() -> str:
     """Run the Gmail OAuth flow — opens browser for you to authorize Friday. Only needed once."""
     try:
-        from friday_gmail import gmail_authorize
+        from friday.gmail import gmail_authorize
         return gmail_authorize()
     except ImportError:
         return "[FAIL] friday_gmail.py not available."
@@ -1265,7 +1265,7 @@ def gmail_authorize() -> str:
 def exchange_oauth_code(redirect_url: str) -> str:
     """Complete OAuth by pasting the browser redirect URL when auto-flow fails."""
     try:
-        from friday_gmail import exchange_oauth_code
+        from friday.gmail import exchange_oauth_code
         return exchange_oauth_code(redirect_url)
     except ImportError:
         return "[FAIL] friday_gmail.py not available."
@@ -1276,7 +1276,7 @@ def exchange_oauth_code(redirect_url: str) -> str:
 def read_emails(count: int = 10) -> str:
     """Read latest N emails. Returns formatted string with sender, subject, snippet."""
     try:
-        from friday_gmail import gmail_list_messages
+        from friday.gmail import gmail_list_messages
         return gmail_list_messages(query="", max_results=count)
     except ImportError:
         return "[FAIL] friday_gmail.py not available."
@@ -1287,7 +1287,7 @@ def read_emails(count: int = 10) -> str:
 def send_email(to: str, subject: str, body: str) -> str:
     """Send email via Gmail API."""
     try:
-        from friday_gmail import gmail_send
+        from friday.gmail import gmail_send
         return gmail_send(to, subject, body)
     except ImportError:
         return "[FAIL] friday_gmail.py not available."
@@ -1298,11 +1298,11 @@ def send_email(to: str, subject: str, body: str) -> str:
 def draft_email(context: str, recipient: str) -> str:
     """Use LLM to draft a professional email from context string."""
     try:
-        from friday_gmail import gmail_draft
+        from friday.gmail import gmail_draft
 
         # Generate email content using LLM
         try:
-            from friday_ai import ai_tool
+            from friday.ai import ai_tool
             prompt = f"Draft a professional email based on this context: {context}. Include proper greeting, body, and closing."
             draft_body = ai_tool(prompt)
 
@@ -1562,7 +1562,7 @@ def type_text(text: str) -> str:
 def take_snapshot(name: str = None) -> str:
     """Take a snapshot of the current screen."""
     try:
-        from screen_watcher import capture_screen
+        from friday.screen_watcher import capture_screen
         import base64
         screenshot_bytes = capture_screen(resize_to=(1280, 720), quality=70)
         name = name or f"snapshot_{int(time.time())}"
@@ -1599,7 +1599,7 @@ def smart_home_command(device: str, action: str) -> str:
 def stayfree_status() -> str:
     """Check if StayFree screen time tracker is accessible."""
     try:
-        from stayfree_bridge import stayfree_status as _sf_status
+        from friday.stayfree import stayfree_status as _sf_status
         return _sf_status()
     except ImportError:
         return "[FAIL] stayfree_bridge.py not available."
@@ -1610,7 +1610,7 @@ def stayfree_status() -> str:
 def stayfree_today() -> str:
     """Get today's screen time and app usage from StayFree."""
     try:
-        from stayfree_bridge import stayfree_today as _sf_today
+        from friday.stayfree import stayfree_today as _sf_today
         return _sf_today()
     except ImportError:
         return "[FAIL] stayfree_bridge.py not available."
@@ -1621,7 +1621,7 @@ def stayfree_today() -> str:
 def stayfree_week() -> str:
     """Get this week's screen time summary from StayFree."""
     try:
-        from stayfree_bridge import stayfree_week as _sf_week
+        from friday.stayfree import stayfree_week as _sf_week
         return _sf_week()
     except ImportError:
         return "[FAIL] stayfree_bridge.py not available."
@@ -1639,7 +1639,7 @@ def opencli_run(command: str) -> str:
     For CLI hub tools: opencli_run('gh pr list --limit 5')
     Use opencli_run('list') to see all available commands."""
     try:
-        from opencli_integration import opencli_run
+        from friday.opencli import opencli_run
         return opencli_run(command)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1650,7 +1650,7 @@ def opencli_run(command: str) -> str:
 def opencli_list_adapters() -> str:
     """List all available OpenCLI commands and built-in site adapters."""
     try:
-        from opencli_integration import opencli_list_adapters
+        from friday.opencli import opencli_list_adapters
         return opencli_list_adapters()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1661,7 +1661,7 @@ def opencli_list_adapters() -> str:
 def opencli_init_bridge() -> str:
     """Initialize the OpenCLI browser bridge and install Chrome extension."""
     try:
-        from opencli_integration import opencli_init
+        from friday.opencli import opencli_init
         import subprocess, os
 
         result = opencli_init()
@@ -1695,7 +1695,7 @@ def opencli_init_bridge() -> str:
 def opencli_navigate(url: str) -> str:
     """Open a URL in the OpenCLI browser automation window."""
     try:
-        from opencli_integration import opencli_navigate
+        from friday.opencli import opencli_navigate
         return opencli_navigate(url)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1706,7 +1706,7 @@ def opencli_navigate(url: str) -> str:
 def opencli_click(target: str) -> str:
     """Click an element in the browser by selector or text."""
     try:
-        from opencli_integration import opencli_click
+        from friday.opencli import opencli_click
         return opencli_click(target)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1717,7 +1717,7 @@ def opencli_click(target: str) -> str:
 def opencli_type(target: str, text: str) -> str:
     """Type text into a browser element."""
     try:
-        from opencli_integration import opencli_type
+        from friday.opencli import opencli_type
         return opencli_type(target, text)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1728,7 +1728,7 @@ def opencli_type(target: str, text: str) -> str:
 def opencli_extract() -> str:
     """Extract page content as markdown from the current browser page."""
     try:
-        from opencli_integration import opencli_extract
+        from friday.opencli import opencli_extract
         return opencli_extract()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1739,7 +1739,7 @@ def opencli_extract() -> str:
 def opencli_screenshot(path: str = None) -> str:
     """Take a screenshot of the current browser page."""
     try:
-        from opencli_integration import opencli_screenshot
+        from friday.opencli import opencli_screenshot
         return opencli_screenshot(path)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1750,7 +1750,7 @@ def opencli_screenshot(path: str = None) -> str:
 def opencli_scroll(direction: str = "down") -> str:
     """Scroll the browser page (down, up, top, bottom)."""
     try:
-        from opencli_integration import opencli_scroll
+        from friday.opencli import opencli_scroll
         return opencli_scroll(direction)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1761,7 +1761,7 @@ def opencli_scroll(direction: str = "down") -> str:
 def opencli_keys(key: str) -> str:
     """Press a keyboard key in the browser (Enter, Escape, Tab, etc.)."""
     try:
-        from opencli_integration import opencli_keys
+        from friday.opencli import opencli_keys
         return opencli_keys(key)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1772,7 +1772,7 @@ def opencli_keys(key: str) -> str:
 def opencli_eval(js: str) -> str:
     """Execute JavaScript in the browser page."""
     try:
-        from opencli_integration import opencli_eval
+        from friday.opencli import opencli_eval
         return opencli_eval(js)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1783,7 +1783,7 @@ def opencli_eval(js: str) -> str:
 def opencli_state() -> str:
     """Get current browser page state (URL, title, interactive elements)."""
     try:
-        from opencli_integration import opencli_state
+        from friday.opencli import opencli_state
         return opencli_state()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1794,7 +1794,7 @@ def opencli_state() -> str:
 def opencli_doctor() -> str:
     """Diagnose OpenCLI browser bridge connectivity."""
     try:
-        from opencli_integration import opencli_doctor
+        from friday.opencli import opencli_doctor
         return opencli_doctor()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1805,7 +1805,7 @@ def opencli_doctor() -> str:
 def opencli_tab_list() -> str:
     """List all browser tabs."""
     try:
-        from opencli_integration import opencli_tab_list
+        from friday.opencli import opencli_tab_list
         return opencli_tab_list()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1816,7 +1816,7 @@ def opencli_tab_list() -> str:
 def opencli_tab_new(url: str = "") -> str:
     """Open a new browser tab."""
     try:
-        from opencli_integration import opencli_tab_new
+        from friday.opencli import opencli_tab_new
         return opencli_tab_new(url)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1827,7 +1827,7 @@ def opencli_tab_new(url: str = "") -> str:
 def opencli_tab_select(target_id: str) -> str:
     """Switch to a specific browser tab."""
     try:
-        from opencli_integration import opencli_tab_select
+        from friday.opencli import opencli_tab_select
         return opencli_tab_select(target_id)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1838,7 +1838,7 @@ def opencli_tab_select(target_id: str) -> str:
 def opencli_tab_close(target_id: str = "") -> str:
     """Close a browser tab."""
     try:
-        from opencli_integration import opencli_tab_close
+        from friday.opencli import opencli_tab_close
         return opencli_tab_close(target_id)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1849,7 +1849,7 @@ def opencli_tab_close(target_id: str = "") -> str:
 def opencli_close() -> str:
     """Release the current browser automation tab lease."""
     try:
-        from opencli_integration import opencli_close
+        from friday.opencli import opencli_close
         return opencli_close()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1860,7 +1860,7 @@ def opencli_close() -> str:
 def opencli_wait_selector(selector: str, timeout_ms: int = 10000) -> str:
     """Wait for a CSS selector to appear on the page."""
     try:
-        from opencli_integration import opencli_wait_selector
+        from friday.opencli import opencli_wait_selector
         return opencli_wait_selector(selector, timeout_ms)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1871,7 +1871,7 @@ def opencli_wait_selector(selector: str, timeout_ms: int = 10000) -> str:
 def opencli_find(selector: str, limit: int = 10) -> str:
     """Find elements matching a CSS selector."""
     try:
-        from opencli_integration import opencli_find
+        from friday.opencli import opencli_find
         return opencli_find(selector, limit)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1882,7 +1882,7 @@ def opencli_find(selector: str, limit: int = 10) -> str:
 def opencli_get_url() -> str:
     """Get the current page URL from the browser."""
     try:
-        from opencli_integration import opencli_get_url
+        from friday.opencli import opencli_get_url
         return opencli_get_url()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1893,7 +1893,7 @@ def opencli_get_url() -> str:
 def opencli_get_title() -> str:
     """Get the current page title from the browser."""
     try:
-        from opencli_integration import opencli_get_title
+        from friday.opencli import opencli_get_title
         return opencli_get_title()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1904,7 +1904,7 @@ def opencli_get_title() -> str:
 def opencli_network() -> str:
     """Inspect network requests made by the current page."""
     try:
-        from opencli_integration import opencli_network
+        from friday.opencli import opencli_network
         return opencli_network()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1915,7 +1915,7 @@ def opencli_network() -> str:
 def opencli_bind(domain: str = "") -> str:
     """Bind OpenCLI to the current Chrome tab."""
     try:
-        from opencli_integration import opencli_bind
+        from friday.opencli import opencli_bind
         return opencli_bind(domain)
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1926,7 +1926,7 @@ def opencli_bind(domain: str = "") -> str:
 def opencli_unbind() -> str:
     """Unbind from the current Chrome tab."""
     try:
-        from opencli_integration import opencli_unbind
+        from friday.opencli import opencli_unbind
         return opencli_unbind()
     except ImportError:
         return "[FAIL] opencli_integration.py not available."
@@ -1939,7 +1939,7 @@ def opencli_unbind() -> str:
 def workflow_tool(action: str = "list", name: str = None, description: str = None, steps: str = None) -> str:
     """Create, manage, and execute automated workflows. Actions: list, create, add_step, execute, delete, status."""
     try:
-        from workflow_automation import workflow_tool as _wf_tool
+        from friday.workflow import workflow_tool as _wf_tool
         return _wf_tool(action=action, name=name, description=description, steps=steps)
     except ImportError:
         return "[FAIL] workflow_automation.py not available."
@@ -1952,7 +1952,7 @@ def workflow_tool(action: str = "list", name: str = None, description: str = Non
 def plugin_tool(action: str = "list", plugin_name: str = None, tool_name: str = None, **kwargs) -> str:
     """Manage Friday plugins: load, unload, call plugin tools. Actions: list, discover, load, load_all, unload, call."""
     try:
-        from plugin_system import plugin_tool as _pl_tool
+        from friday.plugins import plugin_tool as _pl_tool
         return _pl_tool(action=action, plugin_name=plugin_name, tool_name=tool_name, **kwargs)
     except ImportError:
         return "[FAIL] plugin_system.py not available."
@@ -1980,7 +1980,7 @@ def knowledge_graph_tool(action: str = "stats", node_id: str = None, target_id: 
 def github_list_files(path: str = "") -> str:
     """List files in the configured GitHub repository."""
     try:
-        from friday_github import github_list_files
+        from friday.github import github_list_files
         return github_list_files(path)
     except ImportError:
         return "[FAIL] friday_github.py not available."
@@ -1991,7 +1991,7 @@ def github_list_files(path: str = "") -> str:
 def github_read_file(path: str) -> str:
     """Read a file from the GitHub repository."""
     try:
-        from friday_github import github_read_file
+        from friday.github import github_read_file
         return github_read_file(path)
     except ImportError:
         return "[FAIL] friday_github.py not available."
@@ -2002,7 +2002,7 @@ def github_read_file(path: str) -> str:
 def github_write_file(path: str, content: str, message: str = "Update via Friday") -> str:
     """Write a file to the GitHub repository."""
     try:
-        from friday_github import github_write_file
+        from friday.github import github_write_file
         return github_write_file(path, content, message)
     except ImportError:
         return "[FAIL] friday_github.py not available."
@@ -2013,7 +2013,7 @@ def github_write_file(path: str, content: str, message: str = "Update via Friday
 def github_create_branch(branch_name: str) -> str:
     """Create a new branch in the GitHub repository."""
     try:
-        from friday_github import github_create_branch
+        from friday.github import github_create_branch
         return github_create_branch(branch_name)
     except ImportError:
         return "[FAIL] friday_github.py not available."
@@ -2024,7 +2024,7 @@ def github_create_branch(branch_name: str) -> str:
 def github_create_pr(title: str, body: str, head: str) -> str:
     """Create a pull request on GitHub."""
     try:
-        from friday_github import github_create_pr
+        from friday.github import github_create_pr
         return github_create_pr(title, body, head)
     except ImportError:
         return "[FAIL] friday_github.py not available."
@@ -2035,7 +2035,7 @@ def github_create_pr(title: str, body: str, head: str) -> str:
 def github_self_modify(file_path: str, new_content: str, commit_msg: str = "Self-modification by Friday") -> str:
     """Self-modify a file in Friday's own GitHub repository."""
     try:
-        from friday_github import github_self_modify
+        from friday.github import github_self_modify
         return github_self_modify(file_path, new_content, commit_msg)
     except ImportError:
         return "[FAIL] friday_github.py not available."
@@ -2046,7 +2046,7 @@ def github_self_modify(file_path: str, new_content: str, commit_msg: str = "Self
 def github_review_pr(pr_number: int) -> str:
     """Deep PR review: fetches diff, analyzes with Gemini, posts review comments."""
     try:
-        from friday_github import github_review_pr
+        from friday.github import github_review_pr
         return github_review_pr(pr_number)
     except ImportError:
         return "[FAIL] friday_github.py not available."
@@ -2059,7 +2059,7 @@ def github_review_pr(pr_number: int) -> str:
 def send_notification(message: str, urgency: str = "normal", task_id: str = "") -> str:
     """Send a desktop toast notification with urgency level (normal, urgent)."""
     try:
-        from friday_notify import send_notification as _sn
+        from friday.notify import send_notification as _sn
         return _sn(message=message, urgency=urgency, task_id=task_id)
     except ImportError:
         return "[FAIL] friday_notify.py not available."
@@ -2070,7 +2070,7 @@ def send_notification(message: str, urgency: str = "normal", task_id: str = "") 
 def get_pending_notifications(urgency_filter: str = "") -> str:
     """List pending notifications, optionally filtered by urgency."""
     try:
-        from friday_notify import get_pending_notifications as _gpn
+        from friday.notify import get_pending_notifications as _gpn
         return _gpn(urgency_filter=urgency_filter)
     except ImportError:
         return "[FAIL] friday_notify.py not available."
@@ -2081,7 +2081,7 @@ def get_pending_notifications(urgency_filter: str = "") -> str:
 def clear_notifications(task_id: str = "") -> str:
     """Clear all delivered notifications, or for a specific task."""
     try:
-        from friday_notify import clear_notifications as _cn
+        from friday.notify import clear_notifications as _cn
         return _cn(task_id=task_id)
     except ImportError:
         return "[FAIL] friday_notify.py not available."
@@ -2121,7 +2121,7 @@ def message_channel_tool(action: str = "status", channel: str = None, target: st
                          message: str = None, limit: int = 10) -> str:
     """Send/receive messages via Telegram, Discord, or webhooks. Actions: status, send, receive."""
     try:
-        from message_channels import message_channel_tool as _mc_tool
+        from friday.messages import message_channel_tool as _mc_tool
         return _mc_tool(action=action, channel=channel, target=target, message=message, limit=limit)
     except ImportError:
         return "[FAIL] message_channels.py not available."

@@ -75,7 +75,7 @@ def create_friday_graph():
 def analyze_screen_node(state: FridayAgentState) -> Dict[str, Any]:
     """Analyze the current screen."""
     try:
-        from screen_watcher import get_active_window_info
+        from friday.screen_watcher import get_active_window_info
         info = get_active_window_info()
         screen_context = f"Active: {info.get('title', 'Unknown')}"
         return {"screen_context": screen_context}
@@ -89,7 +89,7 @@ def process_tool_call_node(state: FridayAgentState) -> Dict[str, Any]:
 
     for call in tool_calls:
         try:
-            from friday_tools import execute_tool
+            from friday.tools import execute_tool
             result = execute_tool(call.get("name"), call.get("args", {}))
             results.append({
                 "tool": call.get("name"),
@@ -106,7 +106,7 @@ def process_tool_call_node(state: FridayAgentState) -> Dict[str, Any]:
 def check_goals_node(state: FridayAgentState) -> Dict[str, Any]:
     """Check and update goals."""
     try:
-        from goal_memory import load_goals
+        from friday.goals import load_goals
         goals = load_goals()
         active_goals = [g for g in goals if g.get("status") == "active"]
         return {"user_goals": active_goals}

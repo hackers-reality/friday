@@ -49,7 +49,7 @@ print("\n### PHASE 1: CORE MODULES ###\n")
 
 # Screen Watcher
 def test_screen(m):
-    from screen_watcher import get_active_window_info
+    from friday.screen_watcher import get_active_window_info
     info = get_active_window_info()
     return f"Active: {safe_str(info.get('title', 'Unknown'))}"
 
@@ -57,35 +57,35 @@ test_module("screen_watcher", "screen_watcher", test_screen)
 
 # Browser History
 def test_browser(m):
-    from browser_history_tools import get_browser_status
+    from friday.browser_history import get_browser_status
     return safe_str(get_browser_status())
 
 test_module("browser_history_tools", "browser_history_tools", test_browser)
 
 # File Generator
 def test_filegen(m):
-    from file_generator import get_generator_status
+    from friday.filegen import get_generator_status
     return safe_str(get_generator_status())
 
 test_module("file_generator", "file_generator", test_filegen)
 
 # Goal Memory
 def test_goal(m):
-    from goal_memory import get_profile_summary
+    from friday.goals import get_profile_summary
     return safe_str(get_profile_summary())
 
 test_module("goal_memory", "goal_memory", test_goal)
 
 # Friday Tools
 def test_tools(m):
-    from friday_tools import __all__
+    from friday.tools import __all__
     return f"{len(__all__)} tools loaded"
 
 test_module("friday_tools", "friday_tools", test_tools)
 
 # Startup Integration
 def test_startup(m):
-    from startup_integration import check_startup_status
+    from friday.startup import check_startup_status
     return safe_str(check_startup_status())
 
 test_module("startup_integration", "startup_integration", test_startup)
@@ -104,7 +104,7 @@ test_module("proactive_screen_monitor", "proactive_screen_monitor", test_monitor
 
 # MCP Server
 def test_mcp(m):
-    from friday_mcp_enhanced import create_mcp_server
+    from friday.mcp_enhanced import create_mcp_server
     server = create_mcp_server()
     return "Server created" if server else "Server not available"
 
@@ -112,7 +112,7 @@ test_module("friday_mcp_enhanced", "friday_mcp_enhanced", test_mcp)
 
 # LangGraph Agent
 def test_langraph(m):
-    from friday_langraph import get_langraph_status
+    from friday.langraph import get_langraph_status
     return safe_str(get_langraph_status())
 
 test_module("friday_langraph", "friday_langraph", test_langraph)
@@ -120,7 +120,7 @@ test_module("friday_langraph", "friday_langraph", test_langraph)
 # Voice (check if available)
 def test_voice(m):
     try:
-        from friday_voice import SpeechToText, TextToSpeech
+        from friday.voice import SpeechToText, TextToSpeech
         return "Voice modules available"
     except:
         return "Voice modules not available"
@@ -129,7 +129,7 @@ test_module("friday_voice", None, test_voice)
 
 # Vision
 def test_vision(m):
-    from friday_vision import vision_tool
+    from friday.vision import vision_tool
     return "Vision tool available"
 
 test_module("friday_vision", "friday_vision", test_vision)
@@ -144,7 +144,7 @@ def test_integration():
     
     # Test file generation
     try:
-        from file_generator import generate_file
+        from friday.filegen import generate_file
         r = generate_file("test_output/master_test.py", "python", "Master test")
         results.append(f"File gen: {safe_str(r)}")
     except Exception as e:
@@ -152,7 +152,7 @@ def test_integration():
     
     # Test browser search
     try:
-        from browser_history_tools import search_all_history
+        from friday.browser_history import search_all_history
         r = search_all_history("test", days_back=1)
         results.append(f"Browser search: OK")
     except Exception as e:
@@ -160,7 +160,7 @@ def test_integration():
     
     # Test goal add
     try:
-        from goal_memory import add_goal
+        from friday.goals import add_goal
         r = add_goal(title="Master Test Goal", goal_type="test")
         results.append(f"Goal add: {safe_str(r)}")
     except Exception as e:
@@ -206,7 +206,7 @@ print("\n### QUICK FEATURE DEMO ###\n")
 # Demo 1: Screen awareness
 print("1. Screen Awareness:")
 try:
-    from screen_watcher import get_active_window_info
+    from friday.screen_watcher import get_active_window_info
     info = get_active_window_info()
     print(f"   Active window: {safe_str(info.get('title', 'Unknown'))}")
 except Exception as e:
@@ -215,7 +215,7 @@ except Exception as e:
 # Demo 2: Browser history
 print("\n2. Browser History:")
 try:
-    from browser_history_tools import get_browser_status
+    from friday.browser_history import get_browser_status
     status = get_browser_status()
     for line in str(status).split("\n")[:4]:
         if line.strip():
@@ -226,7 +226,7 @@ except Exception as e:
 # Demo 3: File generation
 print("\n3. File Generation:")
 try:
-    from file_generator import get_generator_status
+    from friday.filegen import get_generator_status
     status = get_generator_status()
     for line in str(status).split("\n")[:4]:
         if line.strip():
@@ -237,7 +237,7 @@ except Exception as e:
 # Demo 4: Goal memory
 print("\n4. Goal Memory:")
 try:
-    from goal_memory import get_profile_summary
+    from friday.goals import get_profile_summary
     summary = get_profile_summary()
     for line in str(summary).split("\n")[:4]:
         if line.strip():

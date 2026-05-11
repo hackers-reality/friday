@@ -281,6 +281,29 @@ def extract_knowledge_from_text(text: str) -> Dict[str, Any]:
     }
 
 
+# ─── Simple helpers for auto-extraction hooks ──────────────
+
+def kg_exists() -> bool:
+    """Check if the knowledge graph is available and has data."""
+    try:
+        g = get_knowledge_graph()
+        return g is not None
+    except Exception:
+        return False
+
+
+def add_triple(subject: str, relation: str, obj: str) -> bool:
+    """Add a simple subject-relation-object triple to the graph."""
+    try:
+        g = get_knowledge_graph()
+        g.add_node(subject, "entity", {"label": subject})
+        g.add_node(obj, "entity", {"label": obj})
+        g.add_edge(subject, obj, relation)
+        return True
+    except Exception:
+        return False
+
+
 # ─── Tool Function for Friday ────────────────────────────#
 
 def knowledge_graph_tool(

@@ -1,33 +1,14 @@
 # -*- coding: utf-8 -*-
+"""Friday AI — Sovereign Agent entry point."""
 import os
 from dotenv import load_dotenv
-load_dotenv()  # Load .env before anything else
-import sys
-import json
-import time
-import queue
-import threading
-import uuid
-import requests
-import re
-import numpy as np
-from rich.console import Console
-from rich.panel import Panel
-from rich.live import Live
-from rich.text import Text
-from rich import print as rprint
-from colorama import Fore, Style
-from interpreter import interpreter
-import chromadb
-import pygame
+load_dotenv()
 
-# Suppress HF Hub warnings
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+from friday.live import friday_live_engine
 
-console = Console()
-
-def print_banner():
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(friday_live_engine())
     banner = """\
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣠⣤⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣦⣤⣄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣴⣾⣿⣿⣿⣿⣿⣿⣿⡿⠿⠿⠿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀

@@ -296,7 +296,7 @@ def generate_from_llm(
     try:
         # Try to use available LLM
         try:
-            from friday_ai import ai_tool
+            from friday.ai import ai_tool
             if ai_tool:
                 llm_prompt = f"""Generate the complete content for a file at path: {path}
 

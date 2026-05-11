@@ -41,6 +41,18 @@ AGENT_ROLES = {
         "description": "Specialist in scheduling, calendar, and goals",
         "capabilities": ["calendar_tool_handler", "goals_tool_handler", "memory_retrieve", "memory_store"],
     },
+    "analyst": {
+        "description": "Specialist in data analysis, file processing, and knowledge mining",
+        "capabilities": ["read_file", "search_browser_history", "climb_codebase", "web_search", "knowledge_graph_tool", "memory_retrieve"],
+    },
+    "reviewer": {
+        "description": "Specialist in quality control, review, and verification",
+        "capabilities": ["see_screen", "read_file", "github_review_pr", "search_browser_history", "stark_doctor", "climb_codebase"],
+    },
+    "integrator": {
+        "description": "Specialist in system integration, GitHub, workflow orchestration",
+        "capabilities": ["github_list_files", "github_read_file", "github_write_file", "github_create_branch", "github_create_pr", "workflow_tool", "multi_agent_delegate", "message_channel_tool"],
+    },
 }
 
 

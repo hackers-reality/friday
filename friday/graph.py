@@ -52,7 +52,7 @@ def get_checkpointer():
 
 def register_tools_to_langchain():
     """Convert Friday's tools to LangChain Tool format for LangGraph."""
-    import friday_tools as ft
+    from friday import tools as ft
     
     tool_mapping = {
         "stark_doctor": ft.stark_doctor,
@@ -124,7 +124,7 @@ def process_input(state: FridayState) -> Dict[str, Any]:
     messages = state.get("messages", [])
     
     # Add system instruction
-    from friday_live import SYSTEM_INSTRUCTION
+    from friday.live import SYSTEM_INSTRUCTION
     if not any(isinstance(m, SystemMessage) for m in messages):
         messages.insert(0, SystemMessage(content=SYSTEM_INSTRUCTION))
     
@@ -200,7 +200,7 @@ def execute_tool(state: FridayState) -> Dict[str, Any]:
         return {"tool_results": tool_results}
     
     new_messages = []
-    import friday_tools as ft
+    from friday import tools as ft
     
     for tool_call in last_msg.tool_calls:
         name = tool_call["name"]

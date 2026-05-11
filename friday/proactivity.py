@@ -16,7 +16,7 @@ from typing import Optional, Callable, Dict, Any`
 from PIL import ImageGrab`
 
 try:`
-    from screen_watcher import get_active_window_info, ScreenWatcher`
+    from friday.screen_watcher import get_active_window_info, ScreenWatcher`
     SCREEN_WATCHER_AVAILABLE = True`
 except Exception as e:`
     print(f"[ProactiveCommentary] screen_watcher not available: {e}")`

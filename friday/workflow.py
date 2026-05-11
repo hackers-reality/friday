@@ -365,7 +365,7 @@ class WorkflowManager:
         
         # Register tools from friday_tools
         try:
-            import friday_tools
+            from friday import tools
             self.executor.tool_registry = {
                 "web_search": friday_tools.web_search,
                 "run_cmd": friday_tools.run_cmd,

@@ -24,7 +24,7 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 try:
-    from screen_watcher import get_active_window_info, ScreenWatcher
+    from friday.screen_watcher import get_active_window_info, ScreenWatcher
     SCREEN_WATCHER_AVAILABLE = True
 except ImportError:
     SCREEN_WATCHER_AVAILABLE = False

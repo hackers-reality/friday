@@ -131,6 +131,53 @@ def _logging_error_hook(name: str, args: dict, error: Exception, session=None) -
         pass
 
 
+# ─── Knowledge Graph Auto-Extraction Hook (jarvis parity) ───
+
+def _kg_extraction_post_hook(name: str, args: dict, result: str, session=None) -> None:
+    """Auto-extract entities and facts from tool results into the knowledge graph."""
+    if not result or not isinstance(result, str):
+        return
+    if len(result) < 20 or len(result) > 2000:
+        return
+    try:
+        from friday.knowledge_graph import add_triple, kg_exists
+        if not kg_exists():
+            return
+        # Extract simple patterns: "X is Y", "X has Y", "X: Y"
+        import re
+        lines = result.split("\n")
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            # "[OK] Verb: Detail" → entity, relation, value
+            m = re.match(r'^\[?(OK|FAIL|WARN|INFO)\]?\s+(.+?):\s+(.+)$', line)
+            if m:
+                add_triple("Friday", m.group(2).strip().lower(), m.group(3).strip()[:100])
+            # "Title: Value" patterns
+            m2 = re.match(r'^(.+?):\s+(.+)$', line)
+            if m2:
+                key = m2.group(1).strip().lower()
+                val = m2.group(2).strip()[:100]
+                if len(key) > 3 and len(key) < 50:
+                    add_triple("Context", key, val)
+    except Exception:
+        pass
+
+
+def _kg_tool_name_filter(name: str) -> bool:
+    """Only extract from informative tools, not desktop noise."""
+    noisy = {"click", "move_mouse", "scroll", "press_key", "hotkey", "type_text",
+             "opencli_scroll", "opencli_keys", "opencli_screenshot"}
+    return name not in noisy
+
+
+_kg_active_post_hook = lambda n, a, r, s: _kg_extraction_post_hook(n, a, r, s) if _kg_tool_name_filter(n) else None
+
+# Register KG hook
+register_post_hook(_kg_active_post_hook)
+
+
 # Auto-register logging hooks on import
 register_pre_hook(_logging_pre_hook)
 register_post_hook(_logging_post_hook)

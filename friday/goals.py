@@ -409,7 +409,7 @@ def check_goal_progress(goal: Dict[str, Any]) -> Dict[str, Any]:
     # Browser history verification
     if verification_method == "browser_history":
         try:
-            from browser_history_tools import check_visited_today
+            from friday.browser_history import check_visited_today
             if check_visited_today(verification_data):
                 result["verified"] = True
                 result["message"] = f"[OK] Visited {verification_data} today."
@@ -525,6 +525,114 @@ def enforce_goal(goal_id: str, level: int = None) -> str:
     return "\n".join(lines)
 
 
+# ─── OKR Scoring (jarvis parity) ────────────────────────────
+
+def okr_score(goal_id: str = None) -> str:
+    """Calculate 0.0-1.0 OKR score for a goal. If no goal_id, scores all active goals."""
+    goals = load_goals()
+    if goal_id:
+        goals = [g for g in goals if g.get("id") == goal_id]
+    else:
+        goals = [g for g in goals if g.get("status") == "active"]
+    if not goals:
+        return "No goals to score."
+    lines = ["### OKR SCORES (0.0 - 1.0)", ""]
+    for g in goals:
+        progress = g.get("progress", 0) / 100.0
+        streak = min(g.get("streak", 0) / 7.0, 1.0)
+        deadline = g.get("deadline")
+        time_factor = 1.0
+        if deadline:
+            try:
+                remaining = (datetime.strptime(deadline, "%Y-%m-%d") - datetime.now()).days
+                if remaining < 0:
+                    time_factor = 0.0
+                elif remaining < 7:
+                    time_factor = max(0.3, remaining / 7.0)
+            except:
+                pass
+        score = round(progress * 0.5 + streak * 0.3 + time_factor * 0.2, 2)
+        score = max(0.0, min(1.0, score))
+        g["okr_score"] = score
+        bar = "█" * int(score * 10) + "░" * (10 - int(score * 10))
+        lines.append(f"{bar} {g.get('title')}: {score:.2f} (progress:{g.get('progress',0)}% streak:{g.get('streak',0)}d)")
+    save_goals(goals)
+    lines.append("")
+    avg = sum(g.get("okr_score", 0) for g in goals) / max(len(goals), 1)
+    lines.append(f"Average OKR: {avg:.2f}")
+    return "\n".join(lines)
+
+
+# ─── Morning / Evening OKR Routine ────────────────────────
+
+def morning_plan() -> str:
+    """Generate a daily action plan from active goals."""
+    goals = load_goals()
+    active = [g for g in goals if g.get("status") == "active"]
+    if not active:
+        return "No active goals. Add some with goals_tool_handler(action='add')."
+    today = datetime.now().strftime("%Y-%m-%d %A")
+    lines = [f"### MORNING PLAN — {today}", ""]
+    now = datetime.now()
+    for g in sorted(active, key=lambda x: x.get("priority", "medium")):
+        title = g.get("title", "Untitled")
+        deadline = g.get("deadline", "No deadline")
+        priority = g.get("priority", "medium")
+        progress = g.get("progress", 0)
+        remaining = ""
+        if g.get("deadline"):
+            try:
+                d = datetime.strptime(g["deadline"], "%Y-%m-%d")
+                days_left = (d - now).days
+                remaining = f" ({days_left}d left)"
+            except:
+                pass
+        # Suggest a daily action
+        suggested = f"Work on {title} for 30min"
+        if g.get("url"):
+            suggested = f"Visit {g['url']} and study"
+        lines.append(f"[{priority.upper()}] {title} — {progress}% complete{remaining}")
+        lines.append(f"  -> {suggested}")
+        lines.append("")
+    lines.append("[FRIDAY] Let's make today count, Boss.")
+    return "\n".join(lines)
+
+
+def evening_review() -> str:
+    """Review what was accomplished today, adjust OKR scores."""
+    goals = load_goals()
+    active = [g for g in goals if g.get("status") == "active"]
+    if not active:
+        return "No active goals to review."
+    today = datetime.now().strftime("%Y-%m-%d")
+    lines = [f"### EVENING REVIEW — {today}", ""]
+    all_done = True
+    for g in active:
+        title = g.get("title", "Untitled")
+        was_verified = g.get("last_verified", "")
+        verified_today = was_verified and today in was_verified
+        progress = g.get("progress", 0)
+        streak = g.get("streak", 0)
+        status_icon = "[OK]" if verified_today else "[WARN]"
+        if not verified_today:
+            all_done = False
+        # Auto-advance streak
+        if verified_today:
+            g["streak"] = streak + 1
+        else:
+            g["streak"] = 0
+        lines.append(f"{status_icon} {title} — {progress}% | Streak: {g['streak']}d")
+        if not verified_today:
+            lines.append(f"   No progress detected today. Tomorrow's a new day.")
+    save_goals(goals)
+    lines.append("")
+    if all_done:
+        lines.append("[OK] All goals addressed today. Great work, Boss!")
+    else:
+        lines.append("[FRIDAY] Some goals need attention tomorrow.")
+    return "\n".join(lines)
+
+
 # ─── Integration with Friday Tools ─────────────────────────
 
 def goals_tool_handler(action: str, **kwargs) -> str:
@@ -549,6 +657,16 @@ def goals_tool_handler(action: str, **kwargs) -> str:
         return get_profile_summary()
     elif action == "update_profile":
         return update_profile(kwargs.get("key"), kwargs.get("value"))
+    elif action == "okr":
+        return okr_score(kwargs.get("goal_id"))
+    elif action == "morning":
+        return morning_plan()
+    elif action == "evening":
+        return evening_review()
+    elif action == "plan":
+        return morning_plan()
+    elif action == "review":
+        return evening_review()
     else:
         return f"Unknown goals action: {action}"
 

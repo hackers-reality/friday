@@ -22,7 +22,7 @@ except ImportError:
 
 if MCP_AVAILABLE:
     try:
-        from friday_tools import (
+        from friday.tools import (
             get_time, system_info, run_cmd, safe_run_cmd,
             read_file, write_file, list_files, find_files,
             copy_file, move_file, delete_file,
