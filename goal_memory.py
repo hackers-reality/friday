@@ -225,22 +225,43 @@ def list_goals(status_filter: Optional[str] = None) -> str:
 # ─── Google Calendar Integration (Phase 4.2) ────────────────────
 
 def get_calendar_service():
-    """Get authenticated Google Calendar service."""
+    """Get authenticated Google Calendar service.
+    Uses unified .gmail_token.json (Gmail + Calendar) first, falls back to calendar_token.json.
+    """
     try:
         from google.oauth2.credentials import Credentials
-        from google.oauth2.flow import InstalledAppFlow
+        from google_auth_oauthlib.flow import InstalledAppFlow
         from googleapiclient.discovery import build
         
-        SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+        SCOPES = [
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/calendar.events",
+        ]
         creds = None
-        token_path = os.path.join(_MEMORY_DIR, "calendar_token.json")
         credentials_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "credentials.json")
         
-        if os.path.exists(token_path):
-            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        # 1. Try unified .gmail_token.json first (has Gmail + Calendar scopes)
+        unified_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gmail_token.json")
+        if os.path.exists(unified_path):
+            try:
+                creds = Credentials.from_authorized_user_file(unified_path, SCOPES + [
+                    "https://www.googleapis.com/auth/gmail.readonly",
+                    "https://www.googleapis.com/auth/gmail.send",
+                    "https://www.googleapis.com/auth/gmail.modify",
+                ])
+            except Exception:
+                pass
         
+        # 2. Fall back to old calendar_token.json
+        if not creds or not creds.valid:
+            token_path = os.path.join(_MEMORY_DIR, "calendar_token.json")
+            if os.path.exists(token_path):
+                creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        
+        # 3. If still no valid creds, run OAuth
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
+                from google.auth.transport.requests import Request
                 creds.refresh(Request())
             else:
                 if not os.path.exists(credentials_path):
@@ -248,7 +269,7 @@ def get_calendar_service():
                 flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
                 creds = flow.run_local_server(port=0)
             
-            with open(token_path, "w") as f:
+            with open(os.path.join(_MEMORY_DIR, "calendar_token.json"), "w") as f:
                 f.write(creds.to_json())
         
         service = build("calendar", "v3", credentials=creds)

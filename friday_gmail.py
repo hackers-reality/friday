@@ -1,87 +1,105 @@
-"""Friday Gmail / Google Cloud Integration."""
-
+"""Friday Gmail / Google Cloud Integration — unified Gmail + Calendar OAuth."""
 from __future__ import annotations
 import base64
 import os
 import json
-from typing import Optional
+from typing import Optional, Any
 
 from dotenv import load_dotenv
 load_dotenv()
 
+_ROOT = os.path.dirname(os.path.abspath(__file__))
 
-def _get_gmail_service():
-    """Get authenticated Gmail service."""
+# Unified scopes — covers both Gmail and Calendar
+_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
+]
+
+_TOKEN_PATH = os.path.join(_ROOT, ".gmail_token.json")
+
+
+def _get_credentials() -> Any | None:
+    """Get cached OAuth credentials (Gmail + Calendar scopes)."""
     try:
         from google.oauth2.credentials import Credentials
         from google_auth_oauthlib.flow import InstalledAppFlow
-        from googleapiclient.discovery import build
-        
-        SCOPES = [
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.send",
-            "https://www.googleapis.com/auth/gmail.modify",
-        ]
         
         creds = None
-        token_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gmail_token.json")
-        
-        if os.path.exists(token_path):
-            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        if os.path.exists(_TOKEN_PATH):
+            creds = Credentials.from_authorized_user_file(_TOKEN_PATH, _SCOPES)
         
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
+                from google.auth.transport.requests import Request
                 creds.refresh(Request())
             else:
-                creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "credentials.json")
+                creds_path = os.path.join(_ROOT, "credentials.json")
                 if not os.path.exists(creds_path):
                     return None
-                flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+                flow = InstalledAppFlow.from_client_secrets_file(creds_path, _SCOPES)
+                flow.open_browser = True
                 creds = flow.run_local_server(port=8080)
-            with open(token_path, "w") as token:
-                token.write(creds.to_json())
-        
+            with open(_TOKEN_PATH, "w") as f:
+                f.write(creds.to_json())
+        return creds
+    except Exception:
+        return None
+
+
+def _get_gmail_service():
+    """Get authenticated Gmail service (uses unified .gmail_token.json)."""
+    try:
+        creds = _get_credentials()
+        if not creds:
+            return None
+        from googleapiclient.discovery import build
         return build("gmail", "v1", credentials=creds)
     except Exception:
         return None
 
 
 def gmail_authorize() -> str:
-    """Run the Gmail OAuth flow to generate .gmail_token.json.
-    Opens a browser for you to authorize Friday to access your Gmail.
+    """Run unified OAuth flow for Gmail + Calendar. Opens browser for consent.
     Only needed once — subsequent calls reuse the saved token.
     """
     try:
-        from google.oauth2.credentials import Credentials
-        from google_auth_oauthlib.flow import InstalledAppFlow
-        from googleapiclient.discovery import build
-
-        SCOPES = [
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.send",
-            "https://www.googleapis.com/auth/gmail.modify",
-        ]
-
-        creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "credentials.json")
+        creds_path = os.path.join(_ROOT, "credentials.json")
         if not os.path.exists(creds_path):
             return (
-                "[FAIL] credentials.json not found. Download it from Google Cloud Console:\n"
+                "[FAIL] credentials.json not found. Download from Google Cloud Console:\n"
                 "  1. Go to https://console.cloud.google.com/\n"
-                "  2. Create project → Enable Gmail API\n"
+                "  2. Create project → Enable Gmail API + Google Calendar API\n"
                 "  3. Credentials → Create OAuth 2.0 Client ID (Desktop app)\n"
                 "  4. Download JSON → save as credentials.json in the Friday folder"
             )
 
-        flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+        creds = _get_credentials()
+        if creds:
+            return f"[OK] Already authorized. Token at {_TOKEN_PATH}"
+        
+        # Force fresh authorization
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        flow = InstalledAppFlow.from_client_secrets_file(creds_path, _SCOPES)
         creds = flow.run_local_server(port=8080, open_browser=True)
+        
+        with open(_TOKEN_PATH, "w") as f:
+            f.write(creds.to_json())
 
-        token_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gmail_token.json")
-        with open(token_path, "w") as token:
-            token.write(creds.to_json())
+        # Clean up old Calendar token (now unified)
+        old_cal_token = os.path.join(os.path.dirname(_ROOT), "friday_memory", "calendar_token.json")
+        if os.path.exists(old_cal_token):
+            os.remove(old_cal_token)
 
-        return f"[OK] Gmail authorized! Token saved to {token_path}"
+        return (
+            f"[OK] Unified authorization complete! Token saved to {_TOKEN_PATH}\n"
+            "Gmail and Google Calendar are now ready."
+        )
     except Exception as e:
-        return f"[FAIL] Gmail authorization failed: {e}"
+        return f"[FAIL] Authorization failed: {e}"
 
 
 def gmail_list_messages(query: str = "is:unread", max_results: int = 10) -> str:

@@ -320,25 +320,81 @@ def open_app(name: str) -> str:
 
 
 def close_app(name: str) -> str:
-    """Kill process by name. Tries variations if first attempt fails."""
+    """Kill process by name or window title. Handles save dialogs, UWP apps."""
+    import subprocess
+    
+    def _taskkill(name_or_title: str) -> tuple[bool, str]:
+        r = subprocess.run(f"taskkill /F /IM {name_or_title}", shell=True, capture_output=True, text=True)
+        if r.returncode == 0:
+            return True, f"[OK] Killed {name_or_title}"
+        return False, r.stderr
+
+    def _taskkill_window(title_filter: str) -> tuple[bool, str]:
+        r = subprocess.run(f'taskkill /F /FI "WINDOWTITLE eq {title_filter}"', shell=True, capture_output=True, text=True)
+        if r.returncode == 0:
+            return True, f"[OK] Killed window matching '{title_filter}'"
+        return False, r.stderr
+
+    def _wm_close(window_title: str) -> str:
+        """Send WM_CLOSE to window by title (triggers save dialog gracefully)."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            hwnd = user32.FindWindowW(None, window_title)
+            if hwnd:
+                user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+                return f"[OK] Sent close signal to '{window_title}'"
+            return "[FAIL] Window not found"
+        except Exception as e:
+            return f"[FAIL] WM_CLOSE error: {e}"
+
     try:
-        import subprocess
-        if os.name == 'nt':
-            candidates = [name]
-            if not name.lower().endswith('.exe'):
-                candidates.append(name + '.exe')
-            else:
-                candidates.append(name[:-4])
-            for candidate in candidates:
-                result = subprocess.run(f"taskkill /F /IM {candidate}", shell=True, capture_output=True, text=True)
-                if result.returncode == 0:
-                    return f"[OK] Killed {candidate}"
-            return f"[FAIL] Could not kill '{name}'. Process not found. Running: {list_running_apps()[:5]}"
-        else:
+        if os.name != 'nt':
             subprocess.run(f"pkill -f {name}", shell=True)
             return f"[OK] Killed {name}"
+
+        candidates = [name]
+        if not name.lower().endswith('.exe'):
+            candidates.append(name + '.exe')
+        else:
+            candidates.append(name[:-4])
+
+        # 1. Try taskkill by process name
+        for candidate in candidates:
+            ok, msg = _taskkill(candidate)
+            if ok:
+                return msg
+
+        # 2. Try taskkill by window title (handles UWP/modern apps)
+        ok, msg = _taskkill_window(f"*{name}*")
+        if ok:
+            return msg
+
+        # 3. Try WM_CLOSE for graceful close (handles save dialogs)
+        for title_part in [name, os.path.splitext(name)[0]]:
+            import pygetwindow as gw
+            try:
+                for w in gw.getWindowsWithTitle(title_part):
+                    if w.title.strip():
+                        result = _wm_close(w.title)
+                        if "[OK]" in result:
+                            return result
+            except Exception:
+                pass
+
+        # 4. Force kill via wmic (handles edge cases)
+        for candidate in candidates:
+            r = subprocess.run(
+                f'wmic process where name="{candidate}" delete',
+                shell=True, capture_output=True, text=True
+            )
+            if r.returncode == 0 and "deleted" in r.stdout.lower():
+                return f"[OK] Killed {candidate} via WMIC"
+
+        return f"[FAIL] Could not close '{name}'. Running: {[w for w in list_running_apps()[:8]]}"
+
     except Exception as e:
-        return f"[FAIL] Error killing {name}: {e}"
+        return f"[FAIL] Error closing {name}: {e}"
 
 
 def list_running_apps() -> list[str]:
