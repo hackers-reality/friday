@@ -104,7 +104,7 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Feature | Status | Details |
 |---------|--------|---------|
 | Cross-browser history search | ✅ Working | Chrome, Brave, Edge, Opera SQLite |
-| History-based recall & open | ✅ Working | "Open that Jarvis repo I was lo✅ing at" |
+| History-based recall & open | ✅ Working | "Open that Jarvis repo I was looking at" |
 | OpenCLI browser automation | ✅ Working | CDP-based + `@jackwener/opencli` |
 | Browser navigation by voice | ✅ Working | Opens URLs, searches |
 
@@ -123,7 +123,7 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 |---------|--------|---------|
 | Gmail read/send | ✅ Working | `friday_gmail.py` via Gmail API |
 | Instagram DM | ✅ Working | `instagram_messenger.py` via OpenCLI |
-| Alexa smart home | ✅ Working | `alexa_webho✅_server.py` |
+| Alexa smart home | ✅ Working | `alexa_webhoOK_server.py` |
 | WhatsApp messaging | 📋 Planned | Via web automation |
 
 ### 🤖 AI & LLM
@@ -335,14 +335,14 @@ OPENAI_API_KEY=your_openai_key_here
 OLLAMA_BASE_URL=http://192.168.1.x:11434
 
 # Smart home
-ALEXA_WEBHO✅_URL=your_alexa_webho✅_url
+ALEXA_WEBHOOK_URL=your_alexa_webhoOK_url
 
 # Home Assistant (alternative to Alexa)
 HOME_ASSISTANT_URL=http://homeassistant.local:8123
-HA_T✅EN=your_long_lived_access_t✅en
+HA_TOKEN=your_long_lived_access_tOKen
 
 # GitHub (optional) — enables code/PR tools
-GITHUB_T✅EN=your_github_personal_access_t✅en
+GITHUB_TOKEN=your_github_personal_access_tOKen
 GITHUB_REPO=owner/repo_name
 ```
 
@@ -354,7 +354,7 @@ For `calendar_tool_handler` to work:
 2. Create a project → Enable **Google Calendar API**
 3. Go to **Credentials** → Create OAuth 2.0 Client ID (Desktop app)
 4. Download the JSON and save as `credentials.json` in the project root
-5. First run auto-generates the t✅en at `friday_memory/calendar_t✅en.json`
+5. First run auto-generates the tOKen at `friday_memory/calendar_tOKen.json`
 
 ```env
 # In .env (not strictly required, Calendar uses credentials.json OAuth flow)
@@ -412,7 +412,7 @@ Friday responds to natural language. No rigid syntax required.
 
 ### Browser & History
 ```
-"Friday, open the Jarvis repo I was lo✅ing at — the one by vierisid"
+"Friday, open the Jarvis repo I was loOKing at — the one by vierisid"
 "Friday, what was I reading about LangGraph earlier?"
 "Friday, open my IITM course"
 ```
@@ -473,7 +473,7 @@ Friday responds to natural language. No rigid syntax required.
 | `friday_langgraph.py` | LangGraph agent orchestration |
 | `friday_gmail.py` | Gmail read/draft/send |
 | `instagram_messenger.py` | Instagram DM via OpenCLI |
-| `alexa_webho✅_server.py` | Alexa integration webho✅ |
+| `alexa_webhoOK_server.py` | Alexa integration webhoOK |
 | `file_generator.py` | Universal file generation via LLM |
 | `startup_integration.py` | Windows Task Scheduler startup registration |
 | `self_modification.py` | Self-editing toolkit |
@@ -488,7 +488,7 @@ Friday responds to natural language. No rigid syntax required.
 
 ## Development Roadmap
 
-### v1.0 — Foundation ✅
+### v1.0 — Foundation OK
 - [x] Gemini Live voice interface
 - [x] Groq Whisper STT
 - [x] Porcupine wake word detection
@@ -501,7 +501,7 @@ Friday responds to natural language. No rigid syntax required.
 - [x] Cross-chatbot history import (Claude, ChatGPT, Gemini)
 - [x] User preference extraction from imported chats
 
-### v1.1 — Intelligence Layer ✅
+### v1.1 — Intelligence Layer OK
 - [x] Active window detection (stable)
 - [x] Proactive screen commentary (non-command-triggered)
 - [x] Vision-grounded clicking (`vision_click`)
@@ -512,7 +512,7 @@ Friday responds to natural language. No rigid syntax required.
 - [x] Instagram DM (working)
 - [x] Gmail integration
 
-### v1.2 — Autonomy ✅
+### v1.2 — Autonomy OK
 - [x] Google Calendar integration
 - [x] Windows startup (Task Scheduler)
 - [x] Semantic memory (vector search with ChromaDB)
