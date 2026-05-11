@@ -1262,6 +1262,17 @@ def gmail_authorize() -> str:
         return f"[FAIL] Gmail authorize error: {e}"
 
 
+def exchange_oauth_code(redirect_url: str) -> str:
+    """Complete OAuth by pasting the browser redirect URL when auto-flow fails."""
+    try:
+        from friday_gmail import exchange_oauth_code
+        return exchange_oauth_code(redirect_url)
+    except ImportError:
+        return "[FAIL] friday_gmail.py not available."
+    except Exception as e:
+        return f"[FAIL] Exchange error: {e}"
+
+
 def read_emails(count: int = 10) -> str:
     """Read latest N emails. Returns formatted string with sender, subject, snippet."""
     try:
@@ -2147,7 +2158,7 @@ __all__ = [
     "open_app", "close_app", "list_running_apps", "open_url",
     "spotify_play", "spotify_pause", "spotify_next", "spotify_prev", "spotify_volume", "spotify_current",
     "netflix_play",
-    "google_authorize", "gmail_authorize", "read_emails", "send_email", "draft_email",
+    "google_authorize", "gmail_authorize", "exchange_oauth_code", "read_emails", "send_email", "draft_email",
     "send_instagram_dm",
     "tell_alexa",
     "web_search", "video_search", "stark_doctor", "git_ops",

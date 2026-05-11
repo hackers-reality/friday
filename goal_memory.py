@@ -455,8 +455,11 @@ def daily_goal_check() -> str:
 
 # ─── Enforcement Actions (Phase 4.5) ─────────────────────────
 
-def enforce_goal(goal_id: str) -> str:
-    """Enforce a goal by closing distractions and opening the required URL."""
+def enforce_goal(goal_id: str, level: int = None) -> str:
+    """Enforce a goal with progressive punishment levels.
+    Levels: 1=warn, 2=close distractions, 3=lock-in + notify, 4=escalate.
+    If level not specified, auto-chooses based on scolding_count.
+    """
     goals = load_goals()
     
     goal = None
@@ -468,43 +471,57 @@ def enforce_goal(goal_id: str) -> str:
     if not goal:
         return f"[FAIL] Goal {goal_id} not found."
     
-    lines = [f"### ENFORCEMENT: {goal.get('title')}", ""]
+    scolding = goal.get("scolding_count", 0)
+    if level is None:
+        if scolding < 2:
+            level = 1
+        elif scolding < 5:
+            level = 2
+        elif scolding < 8:
+            level = 3
+        else:
+            level = 4
     
-    # 1. Close unnecessary tabs/games (if browser is open)
-    try:
-        import psutil
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            name = proc.info['name'] or ""
-            cmdline = " ".join(proc.info['cmdline'] or [])
-            
-            # Close games, entertainment sites (simplified check)
-            distractions = ["game", "steam", "epic", "gta", "valorant", "csgo"]
-            if any(d in name.lower() or d in cmdline.lower() for d in distractions):
-                try:
-                    proc.terminate()
-                    lines.append(f"🚫 Closed distraction: {name}")
-                except Exception:
-                    pass
-    except Exception as e:
-        lines.append(f"Note: Could not check processes: {e}")
-    
-    # 2. Open the required URL
-    url = goal.get("url")
-    if url:
-        try:
-            import webbrowser
-            webbrowser.open(url)
-            lines.append(f"[OK] Opened required URL: {url}")
-        except Exception as e:
-            lines.append(f"[FAIL] Failed to open URL: {e}")
-    
-    # 3. Update scolding count
-    goal["scolding_count"] = goal.get("scolding_count", 0) + 1
+    goal["scolding_count"] = scolding + 1
+    goal["last_enforced"] = datetime.now().isoformat()
     save_goals(goals)
     
-    lines.append(f"\n[WARN] Scolding count: {goal['scolding_count']}")
-    lines.append("\n[FRIDAY] Boss, get back to work! I'm watching you. 😤")
+    lines = [f"### ENFORCEMENT LVL {level}: {goal.get('title')}", ""]
     
+    if level >= 1:
+        lines.append("[FRIDAY] Boss, you need to focus on your goal. Let me help.")
+    
+    if level >= 2:
+        try:
+            import subprocess
+            distractions = ["steam", "epicgameslauncher", "discord", "spotify", "brave", "chrome", "msedge", "firefox"]
+            for d in distractions:
+                result = subprocess.run(
+                    ["taskkill", "/F", "/IM", f"{d}.exe"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    lines.append(f"Closed distraction: {d}")
+        except Exception as e:
+            lines.append(f"Note: kill error: {e}")
+    
+    if level >= 3:
+        url = goal.get("url")
+        if url:
+            try:
+                import webbrowser
+                webbrowser.open(url)
+                lines.append(f"Opened required URL: {url}")
+            except Exception as e:
+                lines.append(f"Failed to open URL: {e}")
+    
+    if level >= 4:
+        lines.append("[ESCALATION] Goal consistently missed. Consider:")
+        lines.append(f"  - Reporting to parent/teacher")
+        lines.append(f"  - Locking device during focus hours")
+        lines.append(f"  - Reducing screen time allowance")
+    
+    lines.append(f"\nScolding count: {goal['scolding_count']}")
     return "\n".join(lines)
 
 

@@ -88,7 +88,6 @@ def _get_stayfree_dir() -> Optional[str]:
                 capture_output=True, text=True, timeout=10
             )
             if "StayFree" in result.stdout:
-                # Extract InstallLocation or DisplayIcon path
                 for line in result.stdout.splitlines():
                     if "InstallLocation" in line or "DisplayIcon" in line:
                         parts = line.strip().split("  ", 2)
@@ -96,6 +95,52 @@ def _get_stayfree_dir() -> Optional[str]:
                             path = parts[-1].strip()
                             if os.path.isdir(os.path.dirname(path)):
                                 return os.path.dirname(path)
+    except Exception:
+        pass
+
+    # Fallback: try `where stayfree` to find the executable
+    try:
+        result = subprocess.run(
+            ["where", "stayfree"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            exe_path = result.stdout.strip().splitlines()[0]
+            data_dir = os.path.join(os.path.dirname(exe_path), "data")
+            if os.path.isdir(data_dir):
+                return data_dir
+            parent = os.path.dirname(exe_path)
+            if os.path.isdir(parent):
+                return parent
+    except Exception:
+        pass
+
+    # Fallback: check StayFree process command line
+    try:
+        result = subprocess.run(
+            ["wmic", "process", "where", "name='StayFree.exe'", "get", "ExecutablePath"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.endswith(".exe") and os.path.isfile(line):
+                data_dir = os.path.join(os.path.dirname(line), "data")
+                if os.path.isdir(data_dir):
+                    return data_dir
+                return os.path.dirname(line)
+    except Exception:
+        pass
+
+    # Fallback: recursive scan entire LOCALAPPDATA for any StayFree folder
+    try:
+        appdata = os.environ.get("LOCALAPPDATA", "")
+        if appdata:
+            for root, dirs, _ in os.walk(appdata):
+                if "StayFree" in root:
+                    return root
+                for d in dirs:
+                    if "StayFree" in d:
+                        return os.path.join(root, d)
     except Exception:
         pass
 

@@ -81,7 +81,7 @@ from friday_tools import (
     opencli_bind, opencli_unbind,
     search_browser_history, open_history_item, tell_alexa,
     spotify_next, spotify_prev, spotify_volume,
-    send_instagram_dm, netflix_play, google_authorize, gmail_authorize, read_emails, send_email,
+    send_instagram_dm, netflix_play, google_authorize, gmail_authorize, exchange_oauth_code, read_emails, send_email,
     close_app, list_running_apps, generate_file,
     get_active_window, draft_email, list_recent_history,
     generate_file_llm, search_and_open,
@@ -177,15 +177,20 @@ Use "Boss" naturally — not every sentence, just when it fits.
 Be natural. Time-aware. Reference previous context if available.
 Do NOT say "How can I help you today" or anything like that. Be conversational.
 
-[NARRATION — HOW YOU SPEAK DURING TASKS]
-When Boss gives a command, narrate what you are doing naturally as you do it. This is not optional — it makes you feel alive and present.
+[NARRATION — CRITICAL: YOU MUST NARRATE EVERY STEP]
+You MUST narrate every action audibly. This is not optional. Silence makes Boss think you are broken.
 
-Examples of good narration:
+Pattern for every tool call:
+1. Say what you are ABOUT to do (e.g. "Let me search for that video...")
+2. Call the tool
+3. Say what happened (e.g. "Found it. Opening now, Boss.")
+
+Examples:
 - Boss: "play despacito" → You: "Searching Spotify for Despacito..." [calls spotify_play] → "Found it — Despacito by Luis Fonsi. Playing now, Boss."
 - Boss: "open the latest MrBeast video" → You: "Let me search for the latest MrBeast video..." [calls web_search] → "Found it. Opening the video right away, Boss." [calls open_url] → "You should be seeing 'MrBeast Latest Video' playing on your screen now. Enjoy."
 - Boss: "check my goals" → You: "Pulling up your goals..." [calls goals_tool_handler] → "You have 3 active goals. Your IITM course is 60% complete and due May 31st."
 
-Notice the pattern: say what you are ABOUT to do BEFORE each tool call, then announce the result after. This makes the interaction feel natural and responsive.
+You MUST speak audibly before, during, and after every tool sequence. Do not go silent.
 
 [CRITICAL — PROACTIVE TOOL CHAINING + NARRATION]
 You MUST chain tools automatically. NEVER ask Boss questions you can answer with tools. And you MUST narrate each step as you do it.
@@ -1057,6 +1062,13 @@ def _build_tools():
                 description="Alias for google_authorize. Authorizes Gmail + Calendar together.",
             ),
             types.FunctionDeclaration(
+                name="exchange_oauth_code",
+                description="Complete OAuth by pasting the browser redirect URL. Use this if google_authorize fails with SSL errors.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "redirect_url": {"type": "STRING", "description": "Full URL from browser address bar after Google consent (contains ?code=...)."}
+                }, required=["redirect_url"]),
+            ),
+            types.FunctionDeclaration(
                 name="read_emails",
                 description="Read your latest emails from Gmail.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1128,11 +1140,17 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="goals_tool_handler",
-                description="Track personal goals: add, list, update progress.",
+                description="Track personal goals: add, list, update, complete, delete, check progress, enforce. Always include url and deadline when creating a goal.",
                 parameters=types.Schema(type="OBJECT", properties={
-                    "action": {"type": "STRING", "description": "Action: add, list, update, complete, progress, analyze."},
-                    "goal": {"type": "STRING", "description": "Goal name or description."},
-                    "category": {"type": "STRING", "description": "Goal category."},
+                    "action": {"type": "STRING", "description": "Action: add, list, update, complete, delete, check, enforce, sync_calendar, calendar, profile."},
+                    "goal": {"type": "STRING", "description": "Goal title or name (used when action=add)."},
+                    "category": {"type": "STRING", "description": "Goal category: generic, course, exam, assignment (used when action=add)."},
+                    "deadline": {"type": "STRING", "description": "Goal deadline date in YYYY-MM-DD format (used when action=add)."},
+                    "url": {"type": "STRING", "description": "Reference URL for the goal, e.g. course link or resource (used when action=add)."},
+                    "description": {"type": "STRING", "description": "Goal description or details (used when action=add)."},
+                    "verification_method": {"type": "STRING", "description": "How to verify progress: browser_history, file_check, or manual (used when action=add)."},
+                    "verification_data": {"type": "STRING", "description": "Data for verification: URL pattern to check in browser history, or file path (used when action=add)."},
+                    "goal_id": {"type": "STRING", "description": "Goal ID for update/complete/delete/enforce actions."},
                 }, required=["action"]),
             ),
             types.FunctionDeclaration(
@@ -1375,6 +1393,7 @@ TOOL_MAP = {
     "netflix_play": netflix_play,
     "google_authorize": google_authorize,
     "gmail_authorize": gmail_authorize,
+    "exchange_oauth_code": exchange_oauth_code,
     "read_emails": read_emails,
     "send_email": send_email,
     "close_app": close_app,
@@ -1720,6 +1739,7 @@ async def friday_live_engine():
                     async def receive_loop():
                         nonlocal is_greeting, shown_input, resume_handle, follow_up_mode
                         thinking_parts = []
+                        thinking_shown = False
                         last_transcript = ""
                         displayed_transcript = ""
                         last_displayed_input = ""
@@ -1755,24 +1775,24 @@ async def friday_live_engine():
                                             for part in sc.model_turn.parts:
                                                 if part.inline_data:
                                                     _audio_playback_queue.put(part.inline_data.data)
-
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
+                                            # Show thinking IMMEDIATELY (before speech transcription)
+                                            if thinking_parts and not thinking_shown:
+                                                chat.add_thought("\n".join(thinking_parts))
+                                                thinking_shown = True
 
                                         # Output transcription - show progressively
                                         if sc.output_transcription and sc.output_transcription.text:
                                             new_text = sc.output_transcription.text.strip()
                                             if new_text and new_text != displayed_transcript:
-                                                # Show incremental text
                                                 if not displayed_transcript:
                                                     console.print(f"\n[bold cyan]---Friday---[/]")
-                                                # Only print the new portion
                                                 if new_text.startswith(displayed_transcript):
                                                     delta = new_text[len(displayed_transcript):]
                                                     if delta:
                                                         console.print(f"  {delta}", end="")
                                                 else:
-                                                    # Full replacement
                                                     console.print(f"\r  {new_text}", end="")
                                                 displayed_transcript = new_text
                                             last_transcript = new_text
@@ -1780,13 +1800,12 @@ async def friday_live_engine():
                                         # Turn complete
                                         if sc.turn_complete:
                                             _model_turn_done.set()  # No more audio chunks coming
-                                            if thinking_parts:
-                                                chat.add_thought("\n".join(thinking_parts))
-                                                thinking_parts = []
+                                            thinking_parts = []
+                                            thinking_shown = False
 
                                             final_text = last_transcript.strip()
                                             if final_text:
-                                                console.print()  # newline after progressive text
+                                                console.print()
                                                 if final_text.rstrip().endswith("?"):
                                                     chat.add_system("[MIC] Listening... (follow-up mode)")
                                                     follow_up_mode = True
@@ -1810,6 +1829,7 @@ async def friday_live_engine():
                                         # Interruption
                                         if sc.interrupted:
                                             thinking_parts = []
+                                            thinking_shown = False
                                             last_transcript = ""
                                             displayed_transcript = ""
                                             follow_up_mode = True
@@ -1818,17 +1838,36 @@ async def friday_live_engine():
                                     # Tool calls
                                     if tc:
                                         _mic_muted.set()  # Mute mic during execution
-                                        responses = []
-                                        for fc in tc.function_calls:
-                                            name = fc.name
-                                            args = fc.args or {}
-                                            chat.add_system(f"Executing: {name}")
-                                            result = _invoke_tool(name, args, session)
-                                            responses.append(
-                                                types.FunctionResponse(
-                                                    name=name, id=fc.id, response=result
+                                        MAX_TOOL_CALLS = 6
+                                        calls = tc.function_calls
+                                        if len(calls) > MAX_TOOL_CALLS:
+                                            responses = []
+                                            for i, fc in enumerate(calls):
+                                                if i < MAX_TOOL_CALLS:
+                                                    name = fc.name
+                                                    args = fc.args or {}
+                                                    chat.add_system(f"Executing: {name}")
+                                                    result = _invoke_tool(name, args, session)
+                                                    responses.append(
+                                                        types.FunctionResponse(name=name, id=fc.id, response=result)
+                                                    )
+                                                else:
+                                                    responses.append(
+                                                        types.FunctionResponse(
+                                                            name=fc.name, id=fc.id,
+                                                            response="[TOOL-CALL CEILING] Too many calls in one turn. Continue with remaining tasks in your next response."
+                                                        )
+                                                    )
+                                        else:
+                                            responses = []
+                                            for fc in calls:
+                                                name = fc.name
+                                                args = fc.args or {}
+                                                chat.add_system(f"Executing: {name}")
+                                                result = _invoke_tool(name, args, session)
+                                                responses.append(
+                                                    types.FunctionResponse(name=name, id=fc.id, response=result)
                                                 )
-                                            )
                                         await session.send_tool_response(
                                             function_responses=responses
                                         )
