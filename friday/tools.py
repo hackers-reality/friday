@@ -1007,6 +1007,35 @@ def reasoning_tool_handler(action: str = "cot", problem: str = None, max_steps: 
         return f"[FAIL] Reasoning error: {e}"
 
 
+def clock_tool(action: str = "status", **kwargs) -> str:
+    """Windows Clock integration: alarms, timers, stopwatch, reminders, focus mode."""
+    try:
+        from friday.clock import (
+            clock_alarm, clock_timer, clock_stopwatch, clock_reminder,
+            clock_focus, clock_open, clock_status
+        )
+        if action == "status":
+            return clock_status()
+        elif action == "open":
+            return clock_open()
+        elif action == "alarm":
+            return clock_alarm(kwargs.get("sub", "list"), kwargs.get("time"), kwargs.get("label"), kwargs.get("id"))
+        elif action == "timer":
+            return clock_timer(kwargs.get("sub", "status"), kwargs.get("minutes"), kwargs.get("label"), kwargs.get("id"))
+        elif action == "stopwatch":
+            return clock_stopwatch(kwargs.get("sub", "status"))
+        elif action == "reminder":
+            return clock_reminder(kwargs.get("sub", "list"), kwargs.get("text"), kwargs.get("time"), kwargs.get("id"))
+        elif action == "focus":
+            return clock_focus(kwargs.get("minutes", 25))
+        else:
+            return f"[FAIL] Unknown clock action: {action}"
+    except ImportError:
+        return "[FAIL] friday.clock not available."
+    except Exception as e:
+        return f"[FAIL] Clock error: {e}"
+
+
 def startup_tool_handler(action: str = "run", **kwargs) -> str:
     """Handle startup tasks: run all init routines."""
     results = []
@@ -2239,6 +2268,7 @@ __all__ = [
     "situational_awareness", "goals_tool_handler", "calendar_tool_handler", "startup_tool_handler",
     "memory_import_tool_handler", "kyu_tool_handler",
     "research_tool_handler", "reasoning_tool_handler",
+    "clock_tool",
     "climb_codebase", "deep_research",
     "memory_store", "memory_retrieve", "stark_log",
     "vision_click",

@@ -89,6 +89,7 @@ from friday.tools import (
     generate_file_llm, search_and_open,
     goals_tool_handler, calendar_tool_handler, startup_tool_handler, memory_import_tool_handler,
     kyu_tool_handler, research_tool_handler, reasoning_tool_handler,
+    clock_tool,
     workflow_tool, plugin_tool, knowledge_graph_tool,
     github_list_files, github_read_file, github_write_file,
     github_create_branch, github_create_pr, github_self_modify, github_review_pr,
@@ -1124,6 +1125,19 @@ def _build_tools():
                 }, required=["action"]),
             ),
             types.FunctionDeclaration(
+                name="clock_tool",
+                description="Windows Clock: alarms, timers, stopwatches, reminders, focus mode. Actions: status, open, alarm, timer, stopwatch, reminder, focus. Use sub= for sub-actions (set, list, delete, start, stop, lap, reset).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, open, alarm, timer, stopwatch, reminder, focus."},
+                    "sub": {"type": "STRING", "description": "Sub-action: set, list, delete, start, stop, lap, reset, done."},
+                    "time": {"type": "STRING", "description": "Time in HH:MM 24h format (for alarm/reminder)."},
+                    "minutes": {"type": "INTEGER", "description": "Duration in minutes (for timer/focus)."},
+                    "label": {"type": "STRING", "description": "Label for alarm/timer."},
+                    "text": {"type": "STRING", "description": "Text for reminder."},
+                    "id": {"type": "STRING", "description": "ID for delete/stop actions."},
+                }, required=["action"]),
+            ),
+            types.FunctionDeclaration(
                 name="vector_memory_tool",
                 description="Semantic memory: store and search facts, preferences, and patterns using vector search.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1398,6 +1412,7 @@ TOOL_MAP = {
     "kyu_tool_handler": kyu_tool_handler,
     "research_tool_handler": research_tool_handler,
     "reasoning_tool_handler": reasoning_tool_handler,
+    "clock_tool": clock_tool,
     "message_channel_tool": message_channel_tool,
     "send_notification": send_notification,
     "get_pending_notifications": get_pending_notifications,
