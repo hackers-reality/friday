@@ -1132,6 +1132,7 @@ def _build_tools():
                     "sub": {"type": "STRING", "description": "Sub-action: set, list, delete, start, stop, lap, reset, done."},
                     "time": {"type": "STRING", "description": "Time in HH:MM 24h format (for alarm/reminder)."},
                     "minutes": {"type": "INTEGER", "description": "Duration in minutes (for timer/focus)."},
+                    "seconds": {"type": "INTEGER", "description": "Additional seconds (for timer — e.g. seconds=20 for a 20s timer)."},
                     "label": {"type": "STRING", "description": "Label for alarm/timer."},
                     "text": {"type": "STRING", "description": "Text for reminder."},
                     "id": {"type": "STRING", "description": "ID for delete/stop actions."},

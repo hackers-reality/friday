@@ -1021,7 +1021,7 @@ def clock_tool(action: str = "status", **kwargs) -> str:
         elif action == "alarm":
             return clock_alarm(kwargs.get("sub", "list"), kwargs.get("time"), kwargs.get("label"), kwargs.get("id"))
         elif action == "timer":
-            return clock_timer(kwargs.get("sub", "status"), kwargs.get("minutes"), kwargs.get("label"), kwargs.get("id"))
+            return clock_timer(kwargs.get("sub", "status"), kwargs.get("minutes"), kwargs.get("seconds"), kwargs.get("label"), kwargs.get("id"))
         elif action == "stopwatch":
             return clock_stopwatch(kwargs.get("sub", "status"))
         elif action == "reminder":

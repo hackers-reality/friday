@@ -118,21 +118,27 @@ def clock_alarm(action: str = "list", time_str: str = None, label: str = None, a
         return f"[FAIL] Unknown action: {action}"
 
 
-def clock_timer(action: str = "status", minutes: int = None, label: str = None, timer_id: str = None) -> str:
+def clock_timer(action: str = "status", minutes: int = None, seconds: int = None, label: str = None, timer_id: str = None) -> str:
     """Manage countdown timers. Actions: start, status, stop."""
     state = _load()
     if action == "start":
-        if not minutes or minutes < 1:
-            return "[FAIL] Duration in minutes required."
+        total_minutes = (minutes or 0) + (seconds or 0) / 60.0
+        if total_minutes < 1 / 60.0:  # less than 1 second
+            return "[FAIL] Duration required — specify minutes, seconds, or both."
         tid = f"timer_{int(time.time())}"
-        end_time = datetime.now() + timedelta(minutes=minutes)
+        end_time = datetime.now() + timedelta(minutes=total_minutes)
         state["timers"].append({
-            "id": tid, "minutes": minutes, "label": label or "Timer",
-            "end": end_time.isoformat(), "remaining_minutes": minutes
+            "id": tid, "minutes": total_minutes, "label": label or "Timer",
+            "end": end_time.isoformat(), "remaining_minutes": total_minutes
         })
         _save(state)
         _schedule_timer_end(tid, end_time, label)
-        return f"[OK] Timer set for {minutes} minutes{' - ' + label if label else ''}."
+        total_secs = int(total_minutes * 60)
+        if total_secs >= 60:
+            display = f"{total_secs // 60}m {total_secs % 60}s"
+        else:
+            display = f"{total_secs}s"
+        return f"[OK] Timer set for {display}{' - ' + label if label else ''}."
     elif action == "status":
         timers = state.get("timers", [])
         if not timers:
