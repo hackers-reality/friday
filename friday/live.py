@@ -57,7 +57,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from friday.tools import (
     alexa_command, alexa_poll, climb_codebase, deep_research, get_time,
@@ -86,6 +86,7 @@ from friday.tools import (
     get_active_window, draft_email, list_recent_history,
     generate_file_llm, search_and_open,
     goals_tool_handler, calendar_tool_handler, startup_tool_handler, memory_import_tool_handler,
+    kyu_tool_handler, research_tool_handler, reasoning_tool_handler,
     workflow_tool, plugin_tool, knowledge_graph_tool,
     github_list_files, github_read_file, github_write_file,
     github_create_branch, github_create_pr, github_self_modify, github_review_pr,
@@ -128,7 +129,7 @@ GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 PICOVOICE_ACCESS_KEY = os.environ["PICOVOICE_ACCESS_KEY"]
 FRIDAY_WEBHOOK_SECRET = os.environ["FRIDAY_WEBHOOK_SECRET"]
 
-PORCUPINE_MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "picovoice_model/Friday_en_windows_v4_0_0.ppn")
+PORCUPINE_MODEL_PATH = PICOVOICE_MODEL
 MODEL_ID = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview")
 MAX_RECONNECT_ATTEMPTS = 5
 
@@ -1160,6 +1161,36 @@ def _build_tools():
                 }, required=["action"]),
             ),
             types.FunctionDeclaration(
+                name="kyu_tool_handler",
+                description="Know Your User: manage your personality profile, run interview, learn preferences. Actions: status, interview, profile, adapt.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, interview, profile, adapt, learn."},
+                    "stage": {"type": "INTEGER", "description": "Interview stage (1-4). Used with action=interview."},
+                    "tool_name": {"type": "STRING", "description": "Tool name to learn from (action=learn only)."},
+                    "active_window": {"type": "STRING", "description": "Active window title (action=learn only)."},
+                    "hour": {"type": "INTEGER", "description": "Hour of day 0-23 (action=learn only)."},
+                }, required=["action"]),
+            ),
+            types.FunctionDeclaration(
+                name="research_tool_handler",
+                description="Autonomous research: analyze topics, evaluate sources, synthesize findings. Actions: analyze, synthesize, optimize.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: analyze, synthesize, optimize."},
+                    "topic": {"type": "STRING", "description": "Research topic or question."},
+                    "depth": {"type": "INTEGER", "description": "Research depth (1-5, default 3)."},
+                }, required=["action"]),
+            ),
+            types.FunctionDeclaration(
+                name="reasoning_tool_handler",
+                description="Advanced reasoning: Chain-of-Thought, Tree-of-Thought, ReAct. Actions: cot, tot, react, compare.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: cot (Chain-of-Thought), tot (Tree-of-Thought), react, compare."},
+                    "problem": {"type": "STRING", "description": "Problem or question to reason about."},
+                    "max_steps": {"type": "INTEGER", "description": "Maximum reasoning steps (default 10)."},
+                    "branching_factor": {"type": "INTEGER", "description": "Branching factor for Tree-of-Thought (default 3)."},
+                }, required=["action"]),
+            ),
+            types.FunctionDeclaration(
                 name="vector_memory_tool",
                 description="Semantic memory: store and search facts, preferences, and patterns using vector search.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1431,6 +1462,9 @@ TOOL_MAP = {
     "github_self_modify": github_self_modify,
     "github_review_pr": github_review_pr,
     "multi_agent_delegate": multi_agent_delegate,
+    "kyu_tool_handler": kyu_tool_handler,
+    "research_tool_handler": research_tool_handler,
+    "reasoning_tool_handler": reasoning_tool_handler,
     "message_channel_tool": message_channel_tool,
     "send_notification": send_notification,
     "get_pending_notifications": get_pending_notifications,
@@ -1556,6 +1590,22 @@ def _invoke_tool(func_name, args, session=None):
 
 # SESSION CONFIG
 def _build_session_config(tools, resume_handle=None):
+    # Build system instruction with KYU adaptation
+    try:
+        from friday.kyu import kyu_adapt
+        adapt = kyu_adapt()
+        kyu_section = f"""
+
+[KYU ADAPTATION]
+Communication: {adapt.get('verbosity', 'concise')}, {'humor enabled' if adapt.get('humor') else 'no humor'}
+Voice tone: {adapt.get('voice_tone', 'casual')}
+Emoji: {'allowed' if adapt.get('emoji') else 'none'}
+Patience: {adapt.get('patience', 5)}/10
+"""
+    except Exception:
+        kyu_section = ""
+    system_text = SYSTEM_INSTRUCTION + kyu_section
+
     return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
         tools=tools,
@@ -1572,7 +1622,7 @@ def _build_session_config(tools, resume_handle=None):
             )
         ),
         system_instruction=types.Content(
-            parts=[types.Part(text=SYSTEM_INSTRUCTION)]
+            parts=[types.Part(text=system_text)]
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),

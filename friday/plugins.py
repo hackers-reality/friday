@@ -55,8 +55,9 @@ class FridayPlugin:
 class PluginManager:
     """Manages Friday plugins."""
     
-    def __init__(self, plugin_dir: str = "friday_plugins"):
-        self.plugin_dir = Path(plugin_dir)
+    def __init__(self, plugin_dir: str = None):
+        from friday._paths import PROJECT_ROOT
+        self.plugin_dir = Path(plugin_dir or os.path.join(PROJECT_ROOT, "friday_plugins"))
         self.plugins: Dict[str, FridayPlugin] = {}
         self._ensure_plugin_dir()
     
@@ -77,13 +78,17 @@ class PluginManager:
         for py_file in self.plugin_dir.glob("*.py"):
             if py_file.name != "__init__.py":
                 plugins.append(py_file.stem)
-        
-        return plugins
     
     def load_plugin(self, plugin_name: str) -> bool:
         """Load a plugin by name."""
         try:
-            module = importlib.import_module(f"friday_plugins.{plugin_name}")
+            module_path = self.plugin_dir / f"{plugin_name}.py"
+            if not module_path.exists():
+                print(f"[Plugin] Not found: {plugin_name}")
+                return False
+            spec = importlib.util.spec_from_file_location(plugin_name, str(module_path))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
             
             # Find plugin classes
             for name, obj in inspect.getmembers(module, inspect.isclass):

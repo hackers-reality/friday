@@ -3,6 +3,7 @@ Friday Goal Memory System - Phase 4.1-4.6
 Goal tracking, user profile, calendar integration, enforcement.
 """
 from __future__ import annotations
+from friday._paths import PROJECT_ROOT as _ROOT, FRIDAY_MEMORY
 
 import os
 import json
@@ -14,7 +15,7 @@ from datetime import datetime, timedelta
 
 # ─── File Paths ────────────────────────────────────────────
 
-_MEMORY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory")
+_MEMORY_DIR = FRIDAY_MEMORY
 _GOALS_FILE = os.path.join(_MEMORY_DIR, "goals.json")
 _PROFILE_FILE = os.path.join(_MEMORY_DIR, "user_profile.json")
 
@@ -238,10 +239,10 @@ def get_calendar_service():
             "https://www.googleapis.com/auth/calendar.events",
         ]
         creds = None
-        credentials_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "credentials.json")
+        credentials_path = os.path.join(_ROOT, "credentials.json")
         
         # 1. Try unified .gmail_token.json first (has Gmail + Calendar scopes)
-        unified_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gmail_token.json")
+        unified_path = os.path.join(_ROOT, ".gmail_token.json")
         if os.path.exists(unified_path):
             try:
                 creds = Credentials.from_authorized_user_file(unified_path, SCOPES + [

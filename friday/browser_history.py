@@ -51,7 +51,7 @@ def _get_history_db_path(browser: str) -> Optional[str]:
 
 def _copy_history_db(src: str) -> str:
     """Copy the history DB to a temp file (since Chrome locks it)."""
-    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory")
+    from friday._paths import FRIDAY_MEMORY; temp_dir = FRIDAY_MEMORY
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, f"history_temp_{int(time.time())}.db")
     try:

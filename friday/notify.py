@@ -38,7 +38,7 @@ def _deliver_notification(message: str, urgency: str):
                 "Friday",
                 message[:200],
                 duration=5,
-                icon_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday.ico")
+                icon_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "friday.ico")
             )
         except ImportError:
             # Fallback to console

@@ -3,6 +3,7 @@ Friday Memory Import System - Import chat history from Claude, ChatGPT, Gemini.
 Audits all data to build a detailed user profile.
 """
 from __future__ import annotations
+from friday._paths import FRIDAY_MEMORY
 
 import os
 import re
@@ -12,7 +13,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
 
-_MEMORY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory")
+_MEMORY_DIR = FRIDAY_MEMORY
 _PROFILE_FILE = os.path.join(_MEMORY_DIR, "user_profile.json")
 _PROFILE_MD = os.path.join(_MEMORY_DIR, "user_profile.md")
 _RAW_IMPORTS_DIR = os.path.join(_MEMORY_DIR, "imported_chats")

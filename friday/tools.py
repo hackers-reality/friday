@@ -1,8 +1,10 @@
 """
 Friday Tools - All tool functions for Friday Live.
-Provides all functions needed by friday_live.py by wrapping modules.
+Provides all functions needed by friday.live by wrapping modules.
 """
 from __future__ import annotations
+from friday._paths import PROJECT_ROOT as _ROOT
+from friday._paths import FRIDAY_MEMORY, STARK_LOGS, SPOTIFY_CACHE
 
 import os
 import sys
@@ -19,7 +21,7 @@ _LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB log rotation
 
 def stark_log(entry: str) -> str:
     """Log to stark_logs.txt with rotation."""
-    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stark_logs.txt")
+    log_path = STARK_LOGS
     if os.path.exists(log_path) and os.path.getsize(log_path) > _LOG_MAX_BYTES:
         shutil.move(log_path, log_path.replace(".txt", "_archive.txt"))
     with open(log_path, "a", encoding="utf-8") as f:
@@ -446,7 +448,7 @@ def _get_spotify_client():
         redirect_uri = os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback")
         if not client_id or not client_secret:
             return None
-        cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".spotify_cache")
+        cache_path = SPOTIFY_CACHE
         sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
             client_id=client_id,
             client_secret=client_secret,
@@ -707,7 +709,7 @@ def web_search(query: str, max_results: int = 5) -> str:
 
         return f"[FAIL] No search results for '{query}'"
     except ImportError:
-        return "[FAIL] friday_web.py not available."
+        return "[FAIL] friday.web not available."
     except Exception as e:
         return f"[FAIL] Web search error: {e}"
 
@@ -906,7 +908,7 @@ def calendar_tool_handler(action: str = "list", days: int = 7) -> str:
         else:
             return f"[FAIL] Unknown calendar action: {action}"
     except ImportError:
-        return "[FAIL] goal_memory.py not available."
+        return "[FAIL] friday.goals not available."
     except Exception as e:
         return f"[FAIL] Calendar error: {e}"
 
@@ -928,12 +930,81 @@ def goals_tool_handler(action: str, **kwargs) -> str:
 def memory_import_tool_handler(action: str = "status", **kwargs) -> str:
     """Import chat history from Claude, ChatGPT, Gemini and audit user profile."""
     try:
-        from memory_import import memory_import_tool
+        from friday.memory_import import memory_import_tool
         return memory_import_tool(action, **kwargs)
     except ImportError:
-        return "[FAIL] memory_import.py not available."
+        return "[FAIL] friday.memory_import not available."
     except Exception as e:
         return f"[FAIL] Memory import error: {e}"
+
+
+def kyu_tool_handler(action: str = "status", **kwargs) -> str:
+    """Know Your User: profile setup, interview, learning, and adaptation."""
+    try:
+        from friday.kyu import kyu_status, kyu_interview, kyu_profile, kyu_learn, kyu_adapt
+        if action == "status":
+            return kyu_status()
+        elif action == "interview":
+            stage = kwargs.get("stage")
+            return kyu_interview(stage=int(stage) if stage else None)
+        elif action == "profile":
+            return kyu_profile()
+        elif action == "adapt":
+            return str(kyu_adapt())
+        elif action == "learn":
+            tool_name = kwargs.get("tool_name")
+            active_window = kwargs.get("active_window")
+            hour = kwargs.get("hour")
+            return kyu_learn(tool_name=tool_name, active_window=active_window, hour=int(hour) if hour else None)
+        else:
+            return f"[FAIL] Unknown KYU action: {action}"
+    except ImportError:
+        return "[FAIL] friday.kyu not available."
+    except Exception as e:
+        return f"[FAIL] KYU error: {e}"
+
+
+def research_tool_handler(action: str = "analyze", topic: str = None, depth: int = 3) -> str:
+    """Autonomous research: analyze topics, evaluate sources, synthesize findings."""
+    try:
+        from friday.research import AutonomousResearch
+        ar = AutonomousResearch()
+        if action == "analyze":
+            if not topic:
+                return "[FAIL] Topic required for analysis."
+            result = ar.analyze_topic(topic)
+            lines = [f"### Research Analysis: {topic}", ""]
+            lines.append(f"Complexity: {result['complexity_score']}/10")
+            lines.append(f"Suggested depth: {result['suggested_depth']}")
+            lines.append("Key concepts: " + ", ".join(result['key_concepts']))
+            lines.append("Search queries: " + ", ".join(result['search_queries']))
+            return "\n".join(lines)
+        elif action == "synthesize":
+            if not topic:
+                return "[FAIL] Topic required for synthesis."
+            return ar.synthesize_findings(topic)
+        elif action == "optimize":
+            if not topic:
+                return "[FAIL] Topic required for optimization."
+            result = ar.optimize_research(topic)
+            return str(result)
+        else:
+            return f"[FAIL] Unknown research action: {action}"
+    except ImportError:
+        return "[FAIL] friday.research not available."
+    except Exception as e:
+        return f"[FAIL] Research error: {e}"
+
+
+def reasoning_tool_handler(action: str = "cot", problem: str = None, max_steps: int = 10, branching_factor: int = 3) -> str:
+    """Advanced reasoning: Chain-of-Thought, Tree-of-Thought, or ReAct."""
+    try:
+        from friday.reasoning import reasoning_tool
+        return reasoning_tool(action=action, problem=problem, max_steps=max_steps, branching_factor=branching_factor)
+    except ImportError:
+        return "[FAIL] friday.reasoning not available."
+    except Exception as e:
+        return f"[FAIL] Reasoning error: {e}"
 
 
 def startup_tool_handler(action: str = "run", **kwargs) -> str:
@@ -1006,7 +1077,7 @@ def memory_store(key: str, value: str, category: str = "general") -> str:
         import json, os
         from pathlib import Path
 
-        memory_dir = Path(__file__).parent / "friday_memory"
+        memory_dir = Path(FRIDAY_MEMORY)
         memory_dir.mkdir(exist_ok=True)
         memory_file = memory_dir / "memory.json"
 
@@ -1036,7 +1107,7 @@ def memory_retrieve(query: str) -> str:
         import json, os
         from pathlib import Path
 
-        memory_file = Path(__file__).parent / "friday_memory" / "memory.json"
+        memory_file = Path(FRIDAY_MEMORY) / "memory.json"
         if not memory_file.exists():
             return "No memories stored yet."
 
@@ -1158,7 +1229,7 @@ def deep_research(topic: str, url: str = "", depth: int = 3) -> str:
             return report
         return f"[FAIL] No results found for '{topic}'"
     except ImportError:
-        return "[FAIL] friday_web.py not available."
+        return "[FAIL] friday.web not available."
     except Exception as e:
         return f"[FAIL] Deep research error: {e}"
 
@@ -1168,7 +1239,7 @@ def climb_codebase(query: str, path: str = "") -> str:
     try:
         import subprocess, os, glob
 
-        search_root = path if path else os.path.dirname(os.path.abspath(__file__))
+        search_root = path if path else _ROOT
 
         # Use ripgrep if available, fallback to findstr/grep
         try:
@@ -1435,7 +1506,7 @@ def tell_alexa(command: str) -> str:
     return "[FAIL] No smart home integration configured. Set ALEXA_WEBHOOK_URL or HOME_ASSISTANT_URL + HA_TOKEN"
 
 
-#  Stub functions for friday_live.py compatibility #
+#  Stub functions for friday.live compatibility #
 
 def alexa_command(command: str) -> str:
     """Send command to Alexa (alias for tell_alexa)."""
@@ -1501,9 +1572,9 @@ def queue_task(task_name: str, action: str, params: dict = None) -> str:
     """Queue a task for later execution."""
     try:
         import json
-        queue_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory")
+        queue_dir = FRIDAY_MEMORY
         os.makedirs(queue_dir, exist_ok=True)
-        queue_file = os.path.join(queue_dir, "task_queue.json")
+        queue_file = os.path.join(FRIDAY_MEMORY, "task_queue.json")
         tasks = []
         if os.path.exists(queue_file):
             with open(queue_file, "r") as f:
@@ -1527,7 +1598,7 @@ def queue_status() -> str:
     """List queued tasks."""
     try:
         import json
-        queue_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory", "task_queue.json")
+        queue_file = os.path.join(FRIDAY_MEMORY, "task_queue.json")
         if not os.path.exists(queue_file):
             return "No queued tasks."
         with open(queue_file, "r") as f:
@@ -1566,7 +1637,7 @@ def take_snapshot(name: str = None) -> str:
         import base64
         screenshot_bytes = capture_screen(resize_to=(1280, 720), quality=70)
         name = name or f"snapshot_{int(time.time())}"
-        snap_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory", "snapshots")
+        snap_dir = os.path.join(FRIDAY_MEMORY, "snapshots")
         os.makedirs(snap_dir, exist_ok=True)
         snap_path = os.path.join(snap_dir, f"{name}.jpg")
         with open(snap_path, "wb") as f:
@@ -1579,7 +1650,7 @@ def take_snapshot(name: str = None) -> str:
 def recall_snapshot(name: str) -> str:
     """Recall a previously saved snapshot."""
     try:
-        snap_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory", "snapshots")
+        snap_dir = os.path.join(FRIDAY_MEMORY, "snapshots")
         import glob
         files = glob.glob(os.path.join(snap_dir, f"{name}.*"))
         if not files:
@@ -1602,7 +1673,7 @@ def stayfree_status() -> str:
         from friday.stayfree import stayfree_status as _sf_status
         return _sf_status()
     except ImportError:
-        return "[FAIL] stayfree_bridge.py not available."
+        return "[FAIL] friday.stayfree not available."
     except Exception as e:
         return f"[FAIL] StayFree error: {e}"
 
@@ -1613,7 +1684,7 @@ def stayfree_today() -> str:
         from friday.stayfree import stayfree_today as _sf_today
         return _sf_today()
     except ImportError:
-        return "[FAIL] stayfree_bridge.py not available."
+        return "[FAIL] friday.stayfree not available."
     except Exception as e:
         return f"[FAIL] StayFree today error: {e}"
 
@@ -1624,7 +1695,7 @@ def stayfree_week() -> str:
         from friday.stayfree import stayfree_week as _sf_week
         return _sf_week()
     except ImportError:
-        return "[FAIL] stayfree_bridge.py not available."
+        return "[FAIL] friday.stayfree not available."
     except Exception as e:
         return f"[FAIL] StayFree week error: {e}"
 
@@ -1642,7 +1713,7 @@ def opencli_run(command: str) -> str:
         from friday.opencli import opencli_run
         return opencli_run(command)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI run error: {e}"
 
@@ -1653,7 +1724,7 @@ def opencli_list_adapters() -> str:
         from friday.opencli import opencli_list_adapters
         return opencli_list_adapters()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI list error: {e}"
 
@@ -1687,7 +1758,7 @@ def opencli_init_bridge() -> str:
             "  5. Make sure the OpenCLI extension is enabled"
         )
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI init error: {e}"
 
@@ -1698,7 +1769,7 @@ def opencli_navigate(url: str) -> str:
         from friday.opencli import opencli_navigate
         return opencli_navigate(url)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI navigate error: {e}"
 
@@ -1709,7 +1780,7 @@ def opencli_click(target: str) -> str:
         from friday.opencli import opencli_click
         return opencli_click(target)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI click error: {e}"
 
@@ -1720,7 +1791,7 @@ def opencli_type(target: str, text: str) -> str:
         from friday.opencli import opencli_type
         return opencli_type(target, text)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI type error: {e}"
 
@@ -1731,7 +1802,7 @@ def opencli_extract() -> str:
         from friday.opencli import opencli_extract
         return opencli_extract()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI extract error: {e}"
 
@@ -1742,7 +1813,7 @@ def opencli_screenshot(path: str = None) -> str:
         from friday.opencli import opencli_screenshot
         return opencli_screenshot(path)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI screenshot error: {e}"
 
@@ -1753,7 +1824,7 @@ def opencli_scroll(direction: str = "down") -> str:
         from friday.opencli import opencli_scroll
         return opencli_scroll(direction)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI scroll error: {e}"
 
@@ -1764,7 +1835,7 @@ def opencli_keys(key: str) -> str:
         from friday.opencli import opencli_keys
         return opencli_keys(key)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI key error: {e}"
 
@@ -1775,7 +1846,7 @@ def opencli_eval(js: str) -> str:
         from friday.opencli import opencli_eval
         return opencli_eval(js)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI eval error: {e}"
 
@@ -1786,7 +1857,7 @@ def opencli_state() -> str:
         from friday.opencli import opencli_state
         return opencli_state()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI state error: {e}"
 
@@ -1797,7 +1868,7 @@ def opencli_doctor() -> str:
         from friday.opencli import opencli_doctor
         return opencli_doctor()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI doctor error: {e}"
 
@@ -1808,7 +1879,7 @@ def opencli_tab_list() -> str:
         from friday.opencli import opencli_tab_list
         return opencli_tab_list()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Tab list error: {e}"
 
@@ -1819,7 +1890,7 @@ def opencli_tab_new(url: str = "") -> str:
         from friday.opencli import opencli_tab_new
         return opencli_tab_new(url)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Tab new error: {e}"
 
@@ -1830,7 +1901,7 @@ def opencli_tab_select(target_id: str) -> str:
         from friday.opencli import opencli_tab_select
         return opencli_tab_select(target_id)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Tab select error: {e}"
 
@@ -1841,7 +1912,7 @@ def opencli_tab_close(target_id: str = "") -> str:
         from friday.opencli import opencli_tab_close
         return opencli_tab_close(target_id)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Tab close error: {e}"
 
@@ -1852,7 +1923,7 @@ def opencli_close() -> str:
         from friday.opencli import opencli_close
         return opencli_close()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Close error: {e}"
 
@@ -1863,7 +1934,7 @@ def opencli_wait_selector(selector: str, timeout_ms: int = 10000) -> str:
         from friday.opencli import opencli_wait_selector
         return opencli_wait_selector(selector, timeout_ms)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Wait error: {e}"
 
@@ -1874,7 +1945,7 @@ def opencli_find(selector: str, limit: int = 10) -> str:
         from friday.opencli import opencli_find
         return opencli_find(selector, limit)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Find error: {e}"
 
@@ -1885,7 +1956,7 @@ def opencli_get_url() -> str:
         from friday.opencli import opencli_get_url
         return opencli_get_url()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Get URL error: {e}"
 
@@ -1896,7 +1967,7 @@ def opencli_get_title() -> str:
         from friday.opencli import opencli_get_title
         return opencli_get_title()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Get title error: {e}"
 
@@ -1907,7 +1978,7 @@ def opencli_network() -> str:
         from friday.opencli import opencli_network
         return opencli_network()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Network error: {e}"
 
@@ -1918,7 +1989,7 @@ def opencli_bind(domain: str = "") -> str:
         from friday.opencli import opencli_bind
         return opencli_bind(domain)
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Bind error: {e}"
 
@@ -1929,7 +2000,7 @@ def opencli_unbind() -> str:
         from friday.opencli import opencli_unbind
         return opencli_unbind()
     except ImportError:
-        return "[FAIL] opencli_integration.py not available."
+        return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Unbind error: {e}"
 
@@ -1942,7 +2013,7 @@ def workflow_tool(action: str = "list", name: str = None, description: str = Non
         from friday.workflow import workflow_tool as _wf_tool
         return _wf_tool(action=action, name=name, description=description, steps=steps)
     except ImportError:
-        return "[FAIL] workflow_automation.py not available."
+        return "[FAIL] friday.workflow not available."
     except Exception as e:
         return f"[FAIL] Workflow error: {e}"
 
@@ -2145,7 +2216,7 @@ def execute_tool(name: str, args: dict = None) -> str:
         return f"[FAIL] {name} error: {e}"
 
 
-#  Export list for friday_live.py #
+#  Export list for friday.live #
 
 __all__ = [
     "get_time", "system_info", "run_cmd", "safe_run_cmd",
@@ -2166,7 +2237,8 @@ __all__ = [
     "list_recent_history", "generate_file", "generate_file_llm",
     "search_and_open",
     "situational_awareness", "goals_tool_handler", "calendar_tool_handler", "startup_tool_handler",
-    "memory_import_tool_handler",
+    "memory_import_tool_handler", "kyu_tool_handler",
+    "research_tool_handler", "reasoning_tool_handler",
     "climb_codebase", "deep_research",
     "memory_store", "memory_retrieve", "stark_log",
     "vision_click",

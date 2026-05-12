@@ -57,7 +57,7 @@ class VectorMemory:
             chromadb, Settings = result
             
             # Create persistent client
-            db_path = os.path.join(os.path.dirname(__file__), "friday_memory", "chroma_db")
+            from friday._paths import FRIDAY_MEMORY; db_path = os.path.join(FRIDAY_MEMORY, "chroma_db")
             os.makedirs(db_path, exist_ok=True)
             
             self.client = chromadb.PersistentClient(

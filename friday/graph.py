@@ -36,11 +36,8 @@ class FridayState(TypedDict):
 
 # ─── Persistent Checkpoint Setup ──────────────────────────────────────────────
 
-_CHECKPOINT_DB = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "friday_memory",
-    "langgraph_checkpoints.db"
-)
+from friday._paths import FRIDAY_MEMORY
+_CHECKPOINT_DB = os.path.join(FRIDAY_MEMORY, "langgraph_checkpoints.db")
 
 def get_checkpointer():
     """Get or create SQLite-based checkpointer for persistent state."""

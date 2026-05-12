@@ -178,7 +178,7 @@ class ScreenWatcher:
         
         # State file for persisting current window
         self.state_file = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "sovereign_state.json"
         )
     

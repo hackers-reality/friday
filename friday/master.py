@@ -60,28 +60,28 @@ def test_browser(m):
     from friday.browser_history import get_browser_status
     return safe_str(get_browser_status())
 
-test_module("browser_history_tools", "browser_history_tools", test_browser)
+test_module("browser_history_tools", "friday.browser_history", test_browser)
 
 # File Generator
 def test_filegen(m):
     from friday.filegen import get_generator_status
     return safe_str(get_generator_status())
 
-test_module("file_generator", "file_generator", test_filegen)
+test_module("file_generator", "friday.filegen", test_filegen)
 
 # Goal Memory
 def test_goal(m):
     from friday.goals import get_profile_summary
     return safe_str(get_profile_summary())
 
-test_module("goal_memory", "goal_memory", test_goal)
+test_module("goal_memory", "friday.goals", test_goal)
 
 # Friday Tools
 def test_tools(m):
     from friday.tools import __all__
     return f"{len(__all__)} tools loaded"
 
-test_module("friday_tools", "friday_tools", test_tools)
+test_module("friday_tools", "friday.tools", test_tools)
 
 # Startup Integration
 def test_startup(m):
@@ -96,11 +96,11 @@ print("\n### PHASE 2: ADVANCED FEATURES ###\n")
 
 # Proactive Monitor
 def test_monitor(m):
-    from proactive_screen_monitor import ProactiveScreenMonitor
+    from friday.proactivity_monitor import ProactiveScreenMonitor
     m = ProactiveScreenMonitor(ai_enabled=False)
     return m.get_status()[:80]
 
-test_module("proactive_screen_monitor", "proactive_screen_monitor", test_monitor)
+test_module("proactive_screen_monitor", "friday.proactivity_monitor", test_monitor)
 
 # MCP Server
 def test_mcp(m):
@@ -108,14 +108,14 @@ def test_mcp(m):
     server = create_mcp_server()
     return "Server created" if server else "Server not available"
 
-test_module("friday_mcp_enhanced", "friday_mcp_enhanced", test_mcp)
+test_module("friday_mcp_enhanced", "friday.mcp_enhanced", test_mcp)
 
 # LangGraph Agent
 def test_langraph(m):
     from friday.langraph import get_langraph_status
     return safe_str(get_langraph_status())
 
-test_module("friday_langraph", "friday_langraph", test_langraph)
+test_module("friday_langraph", "friday.langraph", test_langraph)
 
 # Voice (check if available)
 def test_voice(m):

@@ -7,6 +7,7 @@ import os
 import json
 from datetime import datetime
 from typing import Callable, Dict, Any, List, Optional
+from friday._paths import FRIDAY_MEMORY
 
 # Hook registry
 _pre_hooks: List[Callable] = []
@@ -71,7 +72,7 @@ def run_error_hooks(name: str, args: dict, error: Exception, session=None) -> No
 
 # ─── Built-in hooks ────────────────────────────────────────#
 
-_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "friday_memory", "tool_log.jsonl")
+_LOG_PATH = os.path.join(FRIDAY_MEMORY, "tool_log.jsonl")
 _MAX_LOG_ENTRIES = 1000
 
 
@@ -182,3 +183,18 @@ register_post_hook(_kg_active_post_hook)
 register_pre_hook(_logging_pre_hook)
 register_post_hook(_logging_post_hook)
 register_error_hook(_logging_error_hook)
+
+
+# ─── Know Your User Post-Hook ────────────────────────────────────────────────
+
+def _kyu_post_hook(name: str, args: dict, result: str, session=None) -> None:
+    """Feed tool usage into KYU learning system."""
+    if not name or name == "kyu_tool_handler":
+        return
+    try:
+        from friday.kyu import kyu_learn
+        kyu_learn(tool_name=name, active_window=None, hour=None)
+    except Exception:
+        pass
+
+register_post_hook(_kyu_post_hook)

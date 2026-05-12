@@ -367,11 +367,11 @@ class WorkflowManager:
         try:
             from friday import tools
             self.executor.tool_registry = {
-                "web_search": friday_tools.web_search,
-                "run_cmd": friday_tools.run_cmd,
-                "read_file": friday_tools.read_file,
-                "write_file": friday_tools.write_file,
-                "open_app": friday_tools.open_app,
+                "web_search": tools.web_search,
+                "run_cmd": tools.run_cmd,
+                "read_file": tools.read_file,
+                "write_file": tools.write_file,
+                "open_app": tools.open_app,
             }
         except:
             pass

@@ -12,7 +12,7 @@ from typing import Optional, Any
 from dotenv import load_dotenv
 load_dotenv()
 
-_ROOT = os.path.dirname(os.path.abspath(__file__))
+from friday._paths import PROJECT_ROOT as _ROOT
 
 # Unified scopes — covers both Gmail and Calendar
 _SCOPES = [
