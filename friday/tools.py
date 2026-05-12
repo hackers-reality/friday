@@ -43,6 +43,13 @@ def system_info() -> str:
 
 def run_cmd(command: str) -> str:
     """Run shell command."""
+    # Safety: block commands that kill Python processes
+    blocked = ["taskkill", "kill python", "pkill python", "killall python",
+               "stop-process python", "Stop-Process", "exit", "shutdown", "restart"]
+    cmd_lower = command.lower()
+    for b in blocked:
+        if b in cmd_lower:
+            return f"[BLOCKED] Command '{command}' contains blocked pattern '{b}' — cannot self-terminate."
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
         return result.stdout or result.stderr
@@ -238,9 +245,16 @@ def drag(x: int, y: int, duration: float = 0.5) -> str:
 
 def hotkey(keys: str) -> str:
     """Press a keyboard hotkey combination using pyautogui."""
+    # Safety: block destructive combos that could kill the session
+    blocked_combos = ["ctrl+c", "ctrl+c", "ctrl+break", "alt+f4", "ctrl+alt+del",
+                      "ctrl+shift+esc", "alt+tab"]
+    keys_lower = keys.lower().strip()
+    for b in blocked_combos:
+        if keys_lower == b:
+            return f"[BLOCKED] Hotkey '{keys}' blocked — would terminate the session."
     try:
         import pyautogui
-        mods = keys.lower().split("+")
+        mods = keys_lower.split("+")
         if len(mods) > 1:
             pyautogui.hotkey(*mods)
         else:

@@ -208,7 +208,10 @@ Screen & Vision:
 - see_screen(question) — capture and analyze screen (REST fallback; native video feed is primary).
 - vision_click(target_description) — find element by description and click it.
 
-Browser Automation (OpenCLI — PREFERRED for all browser tasks):
+Browser Automation (OpenCLI — use ONLY when page interaction is needed):
+For simple URL opens, use open_url(url) instead — it's faster.
+Use OpenCLI when you need to click, type, scroll, extract content, or fill forms.
+OpenCLI also handles logged-in sites (Instagram, Twitter, Reddit) using existing browser sessions.
 - opencli_navigate(url) — navigate to URL via OpenCLI bridge
 - opencli_state() — get page URL, title, interactive elements
 - opencli_click(target) — click element by selector
@@ -230,7 +233,7 @@ Web & Research:
 - research_tool_handler(action, topic) — analyze, synthesize, optimize research topics
 - reasoning_tool_handler(action, problem) — Chain-of-Thought, Tree-of-Thought, ReAct reasoning
 - video_search(query) — find and open actual video URL
-- open_url(url) — open URL in browser
+- open_url(url) — open URL in browser. **PREFERRED for simple URL opens.** Do NOT use OpenCLI just to navigate to a URL. Use OpenCLI only when you need to interact with the page (click, type, scroll, fill forms).
 - multi_agent_delegate(action, task, agent, split_by) — delegate to 9 specialist sub-agents
 - message_channel_tool(action, channel, message) — send via Telegram/Discord/webhook
 - send_notification(message, urgency) — desktop toast notifications
