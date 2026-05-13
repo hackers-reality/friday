@@ -7,15 +7,11 @@ from friday._paths import PROJECT_ROOT as _ROOT
 from friday._paths import FRIDAY_MEMORY, STARK_LOGS, SPOTIFY_CACHE
 
 import os
-import sys
 import json
 import subprocess
 import shutil
 import glob
-import psutil
-import shutil
 from datetime import datetime
-from typing import Dict, Any, List, Optional
 
 _LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB log rotation
 
@@ -239,7 +235,7 @@ def drag(x: int, y: int, duration: float = 0.5) -> str:
 def hotkey(keys: str) -> str:
     """Press a keyboard hotkey combination using pyautogui."""
     # Safety: block destructive combos that could kill the session
-    blocked_combos = ["ctrl+c", "ctrl+c", "ctrl+break", "alt+f4", "ctrl+alt+del",
+    blocked_combos = ["ctrl+c", "ctrl+break", "alt+f4", "ctrl+alt+del",
                       "ctrl+shift+esc", "alt+tab"]
     keys_lower = keys.lower().strip()
     for b in blocked_combos:
@@ -2219,7 +2215,7 @@ def knowledge_graph_tool(action: str = "stats", node_id: str = None, target_id: 
                          relation: str = None, properties: str = None, text: str = None) -> str:
     """Query and manage the knowledge graph. Actions: stats, add_node, add_edge, get, neighbors, search, path, subgraph, extract."""
     try:
-        from knowledge_graph import knowledge_graph_tool as _kg_tool
+        from friday.knowledge_graph import knowledge_graph_tool as _kg_tool
         return _kg_tool(action=action, node_id=node_id, target_id=target_id,
                         relation=relation, properties=properties, text=text)
     except ImportError:
@@ -2457,7 +2453,7 @@ def clear_notifications(task_id: str = "") -> str:
 def vector_memory_tool(action: str = "stats", query: str = None, text: str = None, n_results: int = 5) -> str:
     """Semantic memory: store and search facts, preferences, and patterns using vector search."""
     try:
-        from vector_memory import vector_memory_tool as _vm_tool
+        from friday.vector_memory import vector_memory_tool as _vm_tool
         return _vm_tool(action=action, query=query, text=text, n_results=n_results)
     except ImportError:
         return "[FAIL] vector_memory.py not available."
@@ -2470,7 +2466,7 @@ def vector_memory_tool(action: str = "stats", query: str = None, text: str = Non
 def multi_agent_delegate(action: str = "list", task: str = None, agent: str = None) -> str:
     """Delegate tasks to specialist sub-agents. Actions: list (show agents), delegate (assign task)."""
     try:
-        from multi_agent import multi_agent_delegate as _ma_delegate
+        from friday.multi_agent import multi_agent_delegate as _ma_delegate
         return _ma_delegate(action=action, task=task, agent=agent)
     except ImportError:
         return "[FAIL] multi_agent.py not available."
@@ -2490,6 +2486,64 @@ def message_channel_tool(action: str = "status", channel: str = None, target: st
         return "[FAIL] message_channels.py not available."
     except Exception as e:
         return f"[FAIL] Message channel error: {e}"
+
+
+#  System Monitor Tools (from system_monitor.py) #
+
+def system_cpu() -> str:
+    """Get current CPU usage percentage."""
+    try:
+        from friday.system_monitor import get_cpu_usage
+        return f"CPU: {get_cpu_usage()}%"
+    except Exception as e:
+        return f"[FAIL] CPU error: {e}"
+
+def system_memory() -> str:
+    """Get current RAM usage stats."""
+    try:
+        from friday.system_monitor import get_memory_usage
+        mem = get_memory_usage()
+        if "error" in mem:
+            return f"[FAIL] {mem['error']}"
+        return f"Memory: {mem['used_gb']}GB / {mem['total_gb']}GB ({mem['percent']}%)"
+    except Exception as e:
+        return f"[FAIL] Memory error: {e}"
+
+def system_disk(path: str = "C:\\") -> str:
+    """Get disk usage for a drive path."""
+    try:
+        from friday.system_monitor import get_disk_usage
+        disk = get_disk_usage(path)
+        if "error" in disk:
+            return f"[FAIL] {disk['error']}"
+        return f"Disk {path}: {disk['used_gb']}GB / {disk['total_gb']}GB ({disk['percent']}% used, {disk['free_gb']}GB free)"
+    except Exception as e:
+        return f"[FAIL] Disk error: {e}"
+
+def system_network() -> str:
+    """Get network I/O stats since boot."""
+    try:
+        from friday.system_monitor import get_network_stats
+        net = get_network_stats()
+        if "error" in net:
+            return f"[FAIL] {net['error']}"
+        return f"Network: {net['bytes_sent_mb']}MB sent, {net['bytes_recv_mb']}MB received"
+    except Exception as e:
+        return f"[FAIL] Network error: {e}"
+
+def system_processes(sort_by: str = "memory", limit: int = 10) -> str:
+    """List top processes by CPU or memory usage."""
+    try:
+        from friday.system_monitor import get_process_list
+        procs = get_process_list(sort_by=sort_by, limit=limit)
+        if not procs:
+            return "No process data available."
+        lines = [f"{'PID':>6} {'NAME':<25} {'CPU%':>6} {'MEM(MB)':>8}"]
+        for p in procs:
+            lines.append(f"{p.get('pid', 0):>6} {p.get('name', '?'):<25} {p.get('cpu_percent', 0):>6.1f} {p.get('memory_mb', 0):>8.1f}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"[FAIL] Processes error: {e}"
 
 
 def execute_tool(name: str, args: dict = None) -> str:
@@ -2534,6 +2588,7 @@ __all__ = [
     "clock_tool",
     "climb_codebase", "deep_research",
     "memory_store", "memory_retrieve", "stark_log",
+    "system_cpu", "system_memory", "system_disk", "system_network", "system_processes",
     "vision_click",
     "alexa_command", "alexa_poll", "home_assistant_command",
     "multi_task", "queue_task", "queue_status", "queue_result",
@@ -2546,6 +2601,7 @@ __all__ = [
     "opencli_close", "opencli_wait_selector", "opencli_find",
     "opencli_get_url", "opencli_get_title", "opencli_network",
     "opencli_bind", "opencli_unbind",
+    "opencli_run", "opencli_list_adapters",
     "opencli_hover", "opencli_focus", "opencli_dblclick",
     "opencli_check", "opencli_uncheck", "opencli_drag",
     "vector_memory_tool",

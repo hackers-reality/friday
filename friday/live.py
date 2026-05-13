@@ -7,7 +7,7 @@ Gemini 3.1 Flash Live API with:
 - Follow-through mode after questions
 - Context window compression for unlimited sessions
 - Session resumption across WebSocket resets
-- 54 tools declared and functional
+- 140+ tools declared and functional
 - Leda voice, AUDIO-only modality
 """
 
@@ -82,6 +82,8 @@ from friday.tools import (
     opencli_get_url, opencli_get_title, opencli_network,
     opencli_bind, opencli_unbind,
     opencli_hover, opencli_focus, opencli_dblclick,
+    opencli_run, opencli_list_adapters,
+    system_cpu, system_memory, system_disk, system_network, system_processes,
     opencli_check, opencli_uncheck, opencli_drag,
     open_roblox_game, open_microsoft_store,
     github_create_repo, github_list_issues, github_create_issue, github_search_code,
@@ -609,6 +611,33 @@ def _build_tools():
                 description="Get host PC hardware and OS status."
             ),
             types.FunctionDeclaration(
+                name="system_cpu",
+                description="Get current CPU usage percentage."
+            ),
+            types.FunctionDeclaration(
+                name="system_memory",
+                description="Get current RAM usage stats (used/total/percent)."
+            ),
+            types.FunctionDeclaration(
+                name="system_disk",
+                description="Get disk usage for a drive path.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path": {"type": "STRING", "description": "Drive path to check (default C:\\)"}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="system_network",
+                description="Get network I/O stats since boot (bytes sent/received)."
+            ),
+            types.FunctionDeclaration(
+                name="system_processes",
+                description="List top processes by CPU or memory usage.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "sort_by": {"type": "STRING", "description": "Sort by 'cpu' or 'memory' (default memory)."},
+                    "limit": {"type": "INTEGER", "description": "Number of processes to show (default 10)."},
+                }),
+            ),
+            types.FunctionDeclaration(
                 name="alexa_command",
                 description="Send a command to the Alexa bridge or routine layer.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -963,6 +992,17 @@ def _build_tools():
             types.FunctionDeclaration(
                 name="opencli_unbind",
                 description="Unbind from the current Chrome tab."
+            ),
+            types.FunctionDeclaration(
+                name="opencli_run",
+                description="Run ANY OpenCLI command (site adapters, browser, desktop apps, CLI hub). Examples: 'hackernews top --limit 5', 'reddit hot --limit 5', 'browser open https://...', 'list'",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "command": {"type": "STRING", "description": "The full OpenCLI command string."}
+                }, required=["command"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_list_adapters",
+                description="List all available OpenCLI commands and built-in site adapters."
             ),
             types.FunctionDeclaration(
                 name="opencli_hover",
@@ -1412,6 +1452,13 @@ def _build_tools():
                     "device_code": {"type": "STRING", "description": "Optional device_code from github_authorize to poll. Leave empty to check saved token status."},
                 }),
             ),
+            types.FunctionDeclaration(
+                name="github_review_pr",
+                description="Deep AI review of a pull request: fetches diff, analyzes with Gemini, posts review comments.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "pr_number": {"type": "INTEGER", "description": "Pull request number to review."}
+                }, required=["pr_number"]),
+            ),
             # ======== MULTI-AGENT DELEGATION ========
             # ======== NOTIFICATIONS ========
             types.FunctionDeclaration(
@@ -1463,7 +1510,6 @@ def _build_tools():
     ]
 
 TOOL_MAP = {
-    "stark_log": stark_log,
     "stark_doctor": stark_doctor,
     "spotify_play": spotify_play,
     "spotify_pause": spotify_pause,
@@ -1479,6 +1525,11 @@ TOOL_MAP = {
     "memory_retrieve": memory_retrieve,
     "get_time": get_time,
     "system_info": system_info,
+    "system_cpu": system_cpu,
+    "system_memory": system_memory,
+    "system_disk": system_disk,
+    "system_network": system_network,
+    "system_processes": system_processes,
     "deep_research": deep_research,
     "alexa_command": alexa_command,
     "alexa_poll": alexa_poll,
@@ -1564,6 +1615,8 @@ TOOL_MAP = {
     "opencli_network": opencli_network,
     "opencli_bind": opencli_bind,
     "opencli_unbind": opencli_unbind,
+    "opencli_run": opencli_run,
+    "opencli_list_adapters": opencli_list_adapters,
     "opencli_hover": opencli_hover,
     "opencli_focus": opencli_focus,
     "opencli_dblclick": opencli_dblclick,

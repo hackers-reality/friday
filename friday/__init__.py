@@ -1,1 +1,1 @@
-# Friday AI — Sovereign Agent Package
+# Friday AI â€” Sovereign Agent Package
