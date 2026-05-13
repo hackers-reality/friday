@@ -146,7 +146,8 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | KYU personality adaptation | ✅ Working | 4-stage interview → preference learning → system prompt injection |
 | Dreaming / session analysis | ✅ NEW | `friday/dreaming.py` — analyzes past sessions while idle, extracts patterns, updates vector memory + knowledge graph |
 | Cron scheduler | ✅ NEW | `friday/scheduler.py` — schedule autonomous tasks: status checks, goal reviews, dream cycles, custom commands |
-| Seamless GitHub Device Flow auth | ✅ Fixed | Client secret no longer required — only client ID needed, auto-opens browser to github.com/login/device |
+| Seamless GitHub Device Flow auth | ✅ Fixed | Hardcoded GitHub App (friday-from-ironman) — zero config, just run and authorize. Auto-opens browser, permanent non-expiring token |
+| GitHub App integration | ✅ NEW | `Iv23liuQ5XPhsBjONt9B` — full permissions: read/write repos, PRs, issues, actions, workflows, deployments, pages, secrets, admin projects, codespaces, gists, profile |
 
 ### 🧠 Memory & User Understanding
 | Feature | Status | Details |
@@ -164,6 +165,19 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Feature | Status | Details |
 |---------|--------|---------|
 | Universal file generator | ✅ Working | `file_generator.py` — all formats |
+
+### 🐙 GitHub Integration
+| Feature | Status | Details |
+|---------|--------|---------|
+| Pre-configured GitHub App | ✅ Done | `friday-from-ironman` — Client ID hardcoded, zero config needed |
+| Device Flow authorization | ✅ Done | `github_authorize()` — auto-opens browser, just enter code and authorize |
+| Token auto-refresh | ✅ Done | For expiring tokens; permanent tokens (no expiry) also supported |
+| Repository operations | ✅ Working | Read/write files, create repos, list branches, commit history |
+| Pull request operations | ✅ Working | Create, merge, list, review (AI-powered with Gemini) |
+| Issue tracking | ✅ Working | Create, list, search, label management |
+| Code search | ✅ Working | Search across repos with GitHub code search API |
+| Self-modification | ✅ Working | Read → modify → commit — Friday can edit her own code |
+| Account permissions | ✅ Full | read/write: repos, actions, PRs, issues, workflows, deployments, pages, secrets, projects (admin), codespaces, gists, profile |
 | Code files | ✅ Working | .py, .js, .ts, .html, .css, .sh, .yaml |
 | Documents | 🔧 In Progress | .md, .txt, .docx, .pdf |
 | Config/server files | 🔧 In Progress | Dockerfile, nginx.conf, .env |
@@ -370,11 +384,8 @@ HOME_ASSISTANT_URL=http://homeassistant.local:8123
 HA_TOKEN=your_long_lived_access_tOKen
 
 # GitHub (optional) — enables code/PR tools
-# Option 1: Personal Access Token
-GITHUB_TOKEN=your_github_personal_access_tOKen
-# Option 2: OAuth App (Device Flow — recommended)
-GITHUB_CLIENT_ID=your_oauth_client_id
-GITHUB_CLIENT_SECRET=your_oauth_client_secret
+# NOTE: Client ID is HARDCODED — you don't need to add it to .env
+# Just run github_authorize() and authorize the app.
 GITHUB_REPO=owner/repo_name
 ```
 
