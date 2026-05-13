@@ -1069,6 +1069,54 @@ def reasoning_tool_handler(action: str = "cot", problem: str = None, max_steps: 
         return f"[FAIL] Reasoning error: {e}"
 
 
+def status_check(include: str = "all") -> str:
+    """Quick system status overview: goals, calendar, email, notifications, CPU, RAM, active window. Call this ONCE instead of 5 separate tools."""
+    parts = []
+    checks = [s.strip() for s in include.split(",")] if include != "all" else []
+    def _should(key):
+        return include == "all" or key in checks
+    try:
+        if _should("goals"):
+            from friday.goals import goals_tool_handler
+            parts.append("--- GOALS ---\n" + goals_tool_handler("list"))
+    except Exception:
+        parts.append("--- GOALS ---\n[UNAVAILABLE]")
+    try:
+        if _should("calendar"):
+            from friday.goals import fetch_calendar_events
+            parts.append("--- CALENDAR ---\n" + fetch_calendar_events(max_results=10, days_ahead=7))
+    except Exception:
+        parts.append("--- CALENDAR ---\n[UNAVAILABLE]")
+    try:
+        if _should("email"):
+            from friday.gmail import read_emails
+            parts.append("--- EMAIL ---\n" + read_emails(max_results=3))
+    except Exception:
+        parts.append("--- EMAIL ---\n[UNAVAILABLE]")
+    try:
+        if _should("notifications"):
+            from friday.notify import get_pending_notifications
+            parts.append("--- NOTIFICATIONS ---\n" + get_pending_notifications())
+    except Exception:
+        parts.append("--- NOTIFICATIONS ---\n[UNAVAILABLE]")
+    try:
+        if _should("system"):
+            from friday.system_monitor import get_cpu_usage, get_memory_usage
+            cpu = get_cpu_usage()
+            mem = get_memory_usage()
+            parts.append(f"--- SYSTEM ---\nCPU: {cpu}% | RAM: {mem.get('used_gb', '?')}GB/{mem.get('total_gb', '?')}GB ({mem.get('percent', '?')}%)")
+    except Exception:
+        parts.append("--- SYSTEM ---\n[UNAVAILABLE]")
+    try:
+        if _should("window"):
+            from friday.screen_watcher import get_active_window_info
+            info = get_active_window_info()
+            parts.append(f"--- ACTIVE WINDOW ---\n{info.get('title', 'Unknown')} ({info.get('process_name', 'Unknown')})")
+    except Exception:
+        parts.append("--- ACTIVE WINDOW ---\n[UNAVAILABLE]")
+    return "\n\n".join(parts)
+
+
 def clock_tool(action: str = "status", **kwargs) -> str:
     """Windows Clock integration: alarms, timers, stopwatch, reminders, focus mode."""
     try:
@@ -2585,7 +2633,7 @@ __all__ = [
     "situational_awareness", "goals_tool_handler", "calendar_tool_handler", "startup_tool_handler",
     "memory_import_tool_handler", "kyu_tool_handler",
     "research_tool_handler", "reasoning_tool_handler",
-    "clock_tool",
+    "status_check", "clock_tool",
     "climb_codebase", "deep_research",
     "memory_store", "memory_retrieve", "stark_log",
     "system_cpu", "system_memory", "system_disk", "system_network", "system_processes",

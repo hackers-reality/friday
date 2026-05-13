@@ -97,7 +97,7 @@ from friday.tools import (
     generate_file_llm, search_and_open,
     goals_tool_handler, calendar_tool_handler, startup_tool_handler, memory_import_tool_handler,
     kyu_tool_handler, research_tool_handler, reasoning_tool_handler,
-    clock_tool,
+    clock_tool, status_check,
     workflow_tool, plugin_tool, knowledge_graph_tool,
     github_list_files, github_read_file, github_write_file,
     github_create_branch, github_create_pr, github_self_modify, github_review_pr,
@@ -322,17 +322,17 @@ OpenCLI Site Adapters:
 - opencli_run("twitter trending --limit 5") — Twitter/X
 - opencli_list_adapters() — discover all site adapters
 
-[PROACTIVE CHECKS — DO NOT CONSTANTLY CHECK THE TIME]
-When you have initiative (idle, starting up, between tasks):
-1. Check email for important/starred messages from key contacts
-2. Check calendar for upcoming events today
-3. Check goals/OKR progress and due dates
-4. Check notifications queue
-5. Check system state (battery, updates, etc.)
+[PROACTIVE CHECKS — USE status_check() NOT 5 SEPARATE TOOLS]
+When you have initiative (startup, idle), call status_check("all") ONCE
+instead of calling 5+ separate tools. It aggregates goals, calendar, email,
+notifications, system stats, and active window into a single response.
 
-DO NOT call get_time() repeatedly. The time display is already visible. If you need
-a time reference for context, check ONCE — then move on to actually useful tasks.
-Your job is to proactively serve, not to be a clock.
+CRITICAL: Never call goals_tool_handler + calendar_tool_handler + read_emails +
+get_pending_notifications + system_cpu in parallel. Use status_check() instead.
+This prevents tool-call overload.
+
+For clock/timer/alarm: use clock_tool, NOT open_app.
+For system stats: use status_check() or system_cpu/system_memory, NOT separate tools.
 
 [BASIC INFO]
 - Boss name: Arnav
@@ -515,7 +515,7 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="open_app",
-                description="Open any application or website by name.",
+                description="Open an application by name (e.g. 'chrome', 'spotify', 'notepad'). Does NOT open Windows Clock, set timers, or alarms — use clock_tool for that.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "name": {"type": "STRING", "description": "App or site name."}
                 }, required=["name"]),
@@ -1275,6 +1275,13 @@ def _build_tools():
                 }, required=["action"]),
             ),
             types.FunctionDeclaration(
+                name="status_check",
+                description="Quick system status: goals, calendar, email, notifications, CPU, RAM, active window. Call this ONCE instead of 5 separate tools.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "include": {"type": "STRING", "description": "What to check: 'all' for everything, or comma-separated: goals,calendar,email,notifications,system,window"},
+                }),
+            ),
+            types.FunctionDeclaration(
                 name="vector_memory_tool",
                 description="Semantic memory: store and search facts, preferences, and patterns using vector search.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1650,6 +1657,7 @@ TOOL_MAP = {
     "research_tool_handler": research_tool_handler,
     "reasoning_tool_handler": reasoning_tool_handler,
     "clock_tool": clock_tool,
+    "status_check": status_check,
     "message_channel_tool": message_channel_tool,
     "send_notification": send_notification,
     "get_pending_notifications": get_pending_notifications,
