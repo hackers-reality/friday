@@ -559,14 +559,14 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="open_roblox_game",
-                description="Search the web for a Roblox game by name (fuzzy match), find its place ID, then open via roblox:// URI. Never opens a browser — always launches the game directly.",
+                description="Search Roblox API for a game by name (fuzzy match), find its place ID, then open via roblox:// URI. Handles misspellings. Never opens a browser.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "game_name": {"type": "STRING", "description": "Name of the Roblox game to open."}
                 }, required=["game_name"]),
             ),
             types.FunctionDeclaration(
                 name="open_microsoft_store",
-                description="Open Microsoft Store via ms-windows-store:// URI. Search for apps or open a specific product.",
+                description="Open Microsoft Store via ms-windows-store:// URI. Search for apps or open a specific product. Never opens a browser.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "query": {"type": "STRING", "description": "Search query for apps."},
                     "product_id": {"type": "STRING", "description": "Product ID to open directly."}

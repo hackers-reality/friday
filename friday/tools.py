@@ -448,11 +448,12 @@ def open_url(url: str) -> str:
 
 
 def open_roblox_game(game_name: str) -> str:
-    """Search web for a Roblox game by name (fuzzy), find its place ID, then open via roblox:// URI. Never opens a search results page."""
-    import urllib.parse, re, subprocess, difflib
+    """Search Roblox API for a game by name (fuzzy match), find its place ID, then open via roblox:// URI. Never opens a browser."""
+    import urllib.parse, re, subprocess, difflib, requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
 
     def _launch(place_id: str, name: str) -> str:
-        """Launch roblox:// URI using Start-Process (reliable for URI schemes)."""
         try:
             subprocess.run(["powershell", "-NoProfile", "Start-Process", f"roblox://placeID={place_id}"], timeout=15)
             return f"[OK] Launched '{name}' (ID: {place_id}) via Roblox"
@@ -463,72 +464,82 @@ def open_roblox_game(game_name: str) -> str:
             except Exception as e:
                 return f"[FAIL] Could not launch Roblox: {e}"
 
-    def _fetch_games(query: str) -> list:
-        """Search for Roblox games and return list of (name, place_id) tuples."""
-        results = []
+    def _search_api(keyword: str, limit: int = 20) -> list:
+        """Query the Roblox games API and return list of (name, place_id)."""
+        session = requests.Session()
+        retries = Retry(total=2, backoff_factor=0.5)
+        session.mount("https://", HTTPAdapter(max_retries=retries))
         try:
-            from friday.web import WebScraper
-            scraper = WebScraper()
-            resp = scraper.search_engine(query)
-            if resp.get("success") and resp.get("results"):
-                for item in resp["results"]:
-                    url = item.get("url", "")
-                    snippet = item.get("snippet", "")
-                    title = item.get("title", "")
-                    pid = None
-                    m = re.search(r"roblox\.com/games/(\d+)", url) or re.search(r"roblox\.com/games/(\d+)", snippet)
-                    if m:
-                        pid = m.group(1)
-                    if pid:
-                        # Extract game name from title or URL path
-                        gname = title or ""
-                        if not gname and "/" in url:
-                            gname = url.rstrip("/").split("/")[-1].replace("-", " ")
-                        results.append((gname, pid))
-        except Exception:
-            pass
-        return results
-
-    # Strategy 1: Search directly with "roblox place id"
-    candidates = _fetch_games(f"{game_name} roblox place id")
-    if not candidates:
-        candidates = _fetch_games(f"roblox game {game_name} id")
-    if not candidates:
-        candidates = _fetch_games(f"site:roblox.com {game_name}")
-
-    if not candidates:
-        # Try the Roblox API search as last resort
-        try:
-            import requests
-            r = requests.get(f"https://games.roblox.com/v1/games/search?keyword={urllib.parse.quote(game_name)}&limit=10", timeout=10)
+            r = session.get(
+                f"https://games.roblox.com/v1/games/search?keyword={urllib.parse.quote(keyword)}&limit={limit}",
+                timeout=8,
+            )
             if r.status_code == 200:
-                data = r.json()
-                for g in data.get("data", []):
-                    candidates.append((g.get("name", ""), str(g.get("placeId", ""))))
+                return [(g.get("name", ""), str(g.get("placeId", ""))) for g in r.json().get("data", []) if g.get("placeId")]
         except Exception:
             pass
+        return []
+
+    # Generate progressive keyword variants for fuzzy matching
+    keywords = [game_name]
+    # If there's a clear typo, try common corrections
+    lowered = game_name.lower().strip()
+    # Remove common stop words
+    for stop in ["the", "a", "an", "on", "in", "of", "for"]:
+        if lowered.startswith(stop + " ") or lowered.endswith(" " + stop):
+            keywords.append(lowered.replace(stop, "").strip())
+    # Try removing vowels for consonant-skeleton matching (handles swapped vowels)
+    import unicodedata
+    no_vowels = "".join(c for c in lowered if c not in "aeiou ")
+    if no_vowels and len(no_vowels) > 2:
+        keywords.append(no_vowels)
+    # Add a generic roblox query
+    keywords.append(f"{game_name} roblox")
+
+    candidates = []
+    seen_ids = set()
+    for kw in keywords:
+        results = _search_api(kw)
+        for name, pid in results:
+            if pid not in seen_ids:
+                seen_ids.add(pid)
+                candidates.append((name, pid))
+        if len(candidates) >= 5:
+            break
 
     if not candidates:
-        return f"[FAIL] Could not find a Roblox game matching '{game_name}'. Try a more specific name."
-
-    # Fuzzy match: pick best name match
-    game_lower = game_name.lower()
-    best_score = 0
-    best = candidates[0]
-    for gname, pid in candidates:
-        score = max(
-            difflib.SequenceMatcher(None, game_lower, gname.lower()).ratio(),
-            difflib.SequenceMatcher(None, game_lower, gname.lower().replace("-", " ").replace("_", " ")).ratio(),
+        return (
+            f"[FAIL] Could not find a Roblox game matching '{game_name}'.\n"
+            f"Try: open_roblox_game('a more specific name')"
         )
-        if score > best_score:
-            best_score = score
-            best = (gname, pid)
 
-    gname, pid = best
-    if best_score < 0.3:
-        return f"[FAIL] No close match for '{game_name}'. Did you mean: {', '.join(f'{n}' for n, _ in candidates[:3])}?"
+    # Fuzzy match against all candidates
+    game_lower = lowered
+    scored = []
+    for gname, pid in candidates:
+        g_lower = gname.lower()
+        score = max(
+            difflib.SequenceMatcher(None, game_lower, g_lower).ratio(),
+            difflib.SequenceMatcher(None, game_lower, g_lower.replace("-", " ").replace("_", " ")).ratio(),
+        )
+        # Bonus if one name contains the other
+        if game_lower in g_lower or g_lower in game_lower:
+            score += 0.15
+        scored.append((score, gname, pid))
 
-    return _launch(pid, gname)
+    scored.sort(key=lambda x: -x[0])
+    best_score, best_name, best_pid = scored[0]
+
+    # If the best match is decent enough OR it's clearly the same game (contains match)
+    if best_score >= 0.35 or (game_lower in best_name.lower() or best_name.lower() in game_lower):
+        return _launch(best_pid, best_name)
+
+    # Show suggestions
+    suggestions = [f"{n} (ID: {p})" for s, n, p in scored[:5] if s > 0.2]
+    if suggestions:
+        return f"[FAIL] No close match for '{game_name}'. Did you mean:\n" + "\n".join(f"  - {s}" for s in suggestions)
+
+    return f"[FAIL] Could not find a Roblox game matching '{game_name}'."
 
 
 def open_microsoft_store(query: str = "", product_id: str = "") -> str:
