@@ -104,6 +104,7 @@ from friday.tools import (
     multi_agent_delegate, message_channel_tool,
     vector_memory_tool,
     send_notification, get_pending_notifications, clear_notifications,
+    dream_tool, scheduler_tool,
 )
 
 # vector_memory_tool now re-exported through friday_tools
@@ -213,7 +214,8 @@ You MUST speak audibly before, during, and after every tool sequence. Do not go 
 
 [TOOL REFERENCE]
 Screen & Vision:
-- see_screen(question) — capture and analyze screen (REST fallback; native video feed is primary).
+- **Automatic**: I stream your screen (~1 FPS, 720p) to the Live API at all times. You can see what's on screen without calling any tool. Just describe what you see.
+- see_screen(question) — REST fallback for higher-res detailed analysis of a specific question about the screen. Use when you need more detail than the live feed provides.
 - vision_click(target_description) — find element by description and click it.
 
 Browser Automation (OpenCLI — use ONLY when page interaction is needed):
@@ -384,10 +386,11 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
         format=pyaudio.paInt16, channels=1, rate=sample_rate,
         output=True, frames_per_buffer=4800
     )
+    stream.start_stream()
     had_audio = False
     empty_cycles = 0
     jitter_buffer = []
-    UNDERFLOW_GUARD = 5  # chunks to pre-fill before starting playback
+    UNDERFLOW_GUARD = 12  # chunks to pre-fill (~2.4s at 200ms/chunk) for smooth playback
     try:
         while not _audio_playback_stop.is_set():
             while len(jitter_buffer) < UNDERFLOW_GUARD and not _audio_playback_stop.is_set():
@@ -405,7 +408,7 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
                 if not had_audio:
                     had_audio = True
                     _mic_muted.set()
-                stream.write(chunk, exception_on_underflow=False)
+                stream.write(chunk, exception_on_underflow=True)
                 global _is_ducked, last_audio_time
                 if not _is_ducked:
                     _is_ducked = True
@@ -415,7 +418,7 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
             except (_thread_queue.Empty, IndexError):
                 if had_audio:
                     empty_cycles += 1
-                    if empty_cycles >= 4 and _model_turn_done.is_set():
+                    if empty_cycles >= 6 and _model_turn_done.is_set():
                         had_audio = False
                         empty_cycles = 0
                         jitter_buffer.clear()
@@ -1513,6 +1516,28 @@ def _build_tools():
                     "limit": {"type": "INTEGER", "description": "Number of messages to fetch (for receive, default 10)."},
                 }, required=["action"]),
             ),
+            # ======== DREAMING SYSTEM ========
+            types.FunctionDeclaration(
+                name="dream_tool",
+                description="Dreaming system: analyze past sessions while idle to extract patterns and learn. Actions: status (show state), cycle (run one cycle), start/stop (toggle background dreaming), insights (show learned patterns).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, cycle, start, stop, insights."},
+                }, required=["action"]),
+            ),
+            # ======== SCHEDULER ========
+            types.FunctionDeclaration(
+                name="scheduler_tool",
+                description="Schedule autonomous tasks: status checks, goal reviews, system checks, dream cycles. Actions: list, add, remove, pause, resume, start, stop. Example: add name='daily check' schedule='daily' action_type='status_check'",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, add, remove, pause, resume, start, stop."},
+                    "name": {"type": "STRING", "description": "Task name (for add/remove)."},
+                    "schedule": {"type": "STRING", "description": "Interval: daily, hourly, every 30 minutes, etc. (for add)."},
+                    "action_type": {"type": "STRING", "description": "Action: status_check, goals_review, system_check, dream_cycle, custom (for add)."},
+                    "params": {"type": "STRING", "description": "JSON params for the action (optional, for add)."},
+                    "command": {"type": "STRING", "description": "Shell command (for action_type=custom)."},
+                    "id": {"type": "STRING", "description": "Task ID (for remove/pause/resume)."},
+                }, required=["action"]),
+            ),
         ])
     ]
 
@@ -1662,6 +1687,8 @@ TOOL_MAP = {
     "send_notification": send_notification,
     "get_pending_notifications": get_pending_notifications,
     "clear_notifications": clear_notifications,
+    "dream_tool": dream_tool,
+    "scheduler_tool": scheduler_tool,
 }
 
 
@@ -1854,8 +1881,9 @@ async def background_monitor(session):
 
 # LIVE VIDEO STREAMER - sends screen captures via Live API video channel
 async def live_video_streamer(session):
-    """Stream screen captures as video frames to Gemini Live API (~0.33 FPS).
+    """Stream screen captures as video frames to Gemini Live API (~1 FPS).
     Official pattern: separate background task, send_realtime_input(video=Blob).
+    The model sees these automatically — no see_screen() call needed for basic awareness.
     """
     try:
         while True:
@@ -1869,7 +1897,7 @@ async def live_video_streamer(session):
                     )
             except Exception:
                 pass
-            await asyncio.sleep(3)
+            await asyncio.sleep(1)
     except asyncio.CancelledError:
         pass
     except Exception:
@@ -1877,14 +1905,14 @@ async def live_video_streamer(session):
 
 
 def _capture_screen_frame() -> bytes | None:
-    """Capture a single screen frame as JPEG bytes."""
+    """Capture a single screen frame as JPEG bytes (720p for better vision)."""
     try:
         from PIL import ImageGrab
         import io
         img = ImageGrab.grab()
-        img.thumbnail((640, 480), Image.LANCZOS)
+        img.thumbnail((1280, 720), Image.LANCZOS)
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=60)
+        img.save(buf, format="JPEG", quality=70)
         return buf.getvalue()
     except Exception:
         return None
@@ -1950,6 +1978,20 @@ async def friday_live_engine():
         from friday.tools import opencli_init_bridge
         opencli_init_bridge()
         console.print("[dim]OpenCLI bridge ready[/]")
+    except Exception:
+        pass
+
+    try:
+        from friday.dreaming import start_dreaming_if_idle
+        start_dreaming_if_idle()
+        console.print("[dim]Dreaming system started[/]")
+    except Exception:
+        pass
+
+    try:
+        from friday.scheduler import scheduler_tool
+        scheduler_tool("start")
+        console.print("[dim]Scheduler started[/]")
     except Exception:
         pass
 

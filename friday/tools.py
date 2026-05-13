@@ -2658,6 +2658,30 @@ def system_processes(sort_by: str = "memory", limit: int = 10) -> str:
         return f"[FAIL] Processes error: {e}"
 
 
+#  Dreaming Tool #
+def dream_tool(action: str = "status") -> str:
+    """Dreaming system: analyze past sessions while idle. Actions: status, cycle, start, stop, insights."""
+    try:
+        from friday.dreaming import dream_tool as _dt
+        return _dt(action=action)
+    except ImportError:
+        return "[FAIL] dreaming.py not available."
+    except Exception as e:
+        return f"[FAIL] Dream error: {e}"
+
+
+#  Scheduler Tool #
+def scheduler_tool(action: str = "list", **kwargs) -> str:
+    """Schedule autonomous tasks. Actions: list, add, remove, pause, resume, start, stop."""
+    try:
+        from friday.scheduler import scheduler_tool as _st
+        return _st(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] scheduler.py not available."
+    except Exception as e:
+        return f"[FAIL] Scheduler error: {e}"
+
+
 def execute_tool(name: str, args: dict = None) -> str:
     """Execute a tool by name with given args. Used by friday_langgraph.py."""
     import inspect
@@ -2725,6 +2749,7 @@ __all__ = [
     "github_authorize", "github_exchange_code",
     "multi_agent_delegate", "message_channel_tool",
     "send_notification", "get_pending_notifications", "clear_notifications",
+    "dream_tool", "scheduler_tool",
 ]
 
 if __name__ == "__main__":

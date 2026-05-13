@@ -1,10 +1,10 @@
-"""Friday Notification System with Urgency Detection."""
+"""Friday Notification System with Windows Desktop Toasts."""
 
 from __future__ import annotations
 import threading
 from datetime import datetime
 from typing import Optional
-
+import subprocess
 import os
 
 _notif_queue = []
@@ -12,39 +12,46 @@ _notif_lock = threading.Lock()
 
 
 def send_notification(message: str, urgency: str = "normal", task_id: str = "") -> str:
-    """Send notification with urgency detection."""
+    """Send a Windows desktop toast notification."""
+    _deliver_notification(message, urgency)
     with _notif_lock:
         _notif_queue.append({
             "message": message,
             "urgency": urgency,
             "task_id": task_id,
             "timestamp": datetime.now().isoformat(),
-            "delivered": False
+            "delivered": True
         })
-    
-    # Immediate delivery for urgent
-    if urgency == "urgent":
-        _deliver_notification(message, urgency)
-        return f"Urgent notification sent: {message[:50]}..."
-    return f"Notification queued: {message[:50]}..."
+    return f"[OK] Notification sent: {message[:50]}..."
 
 
 def _deliver_notification(message: str, urgency: str):
-    """Deliver notification via available channels."""
+    """Deliver Windows toast via PowerShell or plyer fallback."""
+    safe_msg = message[:200].replace('"', '`"').replace("'", "''")
     try:
-        try:
-            from win10toast import ToastNotifier
-            ToastNotifier().show_toast(
-                "Friday",
-                message[:200],
-                duration=5,
-                icon_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "friday.ico")
-            )
-        except ImportError:
-            # Fallback to console
-            print(f"[NOTIFICATION - {urgency.upper()}] {message}")
+        ps_script = f'''
+$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$textNodes = $template.GetElementsByTagName("text")
+$textNodes.Item(0).AppendChild($template.CreateTextNode("Friday")) > $null
+$textNodes.Item(1).AppendChild($template.CreateTextNode("{safe_msg}")) > $null
+$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Friday").Show($toast)
+'''
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            capture_output=True, timeout=5
+        )
+        return
     except Exception:
         pass
+    try:
+        from plyer import notification
+        notification.notify(title="Friday", message=safe_msg, timeout=6)
+        return
+    except Exception:
+        pass
+    print(f"[NOTIFICATION - {urgency.upper()}] {message}")
 
 
 def get_pending_notifications(urgency_filter: str = "") -> str:

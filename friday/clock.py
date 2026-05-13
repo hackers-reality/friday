@@ -35,16 +35,18 @@ def _save(state: dict) -> None:
 
 
 def _notify(title: str, message: str):
-    """Send a desktop notification."""
+    """Send a desktop notification via plyer."""
     try:
-        from friday.notify import send_notification as nt
-        nt(title, message, urgency="high")
+        from plyer import notification
+        notification.notify(title=f"Friday - {title}", message=message, timeout=10)
+        return
     except Exception:
-        try:
-            from plyer import notification
-            notification.notify(title=title, message=message, timeout=8)
-        except Exception:
-            pass
+        pass
+    try:
+        from friday.notify import send_notification
+        send_notification(f"[{title}] {message}", urgency="urgent")
+    except Exception:
+        pass
 
 
 def _schedule_alarm(alarm_id: str, alarm_time: datetime, label: str):
@@ -134,7 +136,9 @@ def clock_timer(action: str = "status", minutes: int = None, seconds: int = None
         _save(state)
         _schedule_timer_end(tid, end_time, label)
         total_secs = int(total_minutes * 60)
-        if total_secs >= 60:
+        if total_secs >= 3600:
+            display = f"{total_secs // 3600}h {(total_secs % 3600) // 60}m"
+        elif total_secs >= 60:
             display = f"{total_secs // 60}m {total_secs % 60}s"
         else:
             display = f"{total_secs}s"

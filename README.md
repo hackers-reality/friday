@@ -11,7 +11,7 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/hackers-reality/friday)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)]()
-[![Version](https://img.shields.io/badge/Version-1.3.0-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases/tag/v1.3.0)
+[![Version](https://img.shields.io/badge/Version-1.4.0-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases/tag/v1.4.0)
 
 ---
 
@@ -77,11 +77,12 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Porcupine wake word | ✅ Working | "Hey Friday" detection via `voice_wake.py` |
 | Multi-TTS engine support | 🔧 In Progress | ElevenLabs, Google TTS, pyttsx3 |
 | Typing effect output | ✅ Working | Terminal typing effect for responses |
+| Audio crackling fix | ✅ Fixed | Jitter buffer increased to 12 chunks (~2.4s), smoother drain, no discontinuity |
 
 ### 👁️ Vision & Screen Awareness
 | Feature | Status | Details |
 |---------|--------|---------|
-| Real-time screen capture | ✅ Working | `friday_vision.py` via PIL/mss |
+| Live API native video feed | ✅ Working | Automatic ~1 FPS, 720p streaming — model sees screen without calling any tool |
 | Active window detection | ✅ Working | `screen_watcher.py` via pywinctl |
 | Gemini Vision analysis | ✅ Working | Screen-to-description pipeline |
 | Vision-grounded clicking | ✅ Working | `vision_click()` — finds elements by description |
@@ -126,6 +127,7 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 📬 Communication & Messaging
 | Feature | Status | Details |
 |---------|--------|---------|
+| Desktop toast notifications | ✅ Fixed | PowerShell `Windows.UI.Notifications` + plyer fallback — all messages deliver now |
 | Gmail read/send | ✅ Working | `friday_gmail.py` via Gmail API |
 | Instagram DM | ✅ Working | `instagram_messenger.py` via OpenCLI |
 | Alexa smart home | ✅ Working | `alexa_webhoOK_server.py` |
@@ -142,6 +144,9 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Self-modifying code | 🔧 In Progress | `friday/github.py` — GitHub API-based self-modification |
 | Multi-agent delegation (9 roles) | ✅ Working | Same roster as Jarvis — research, coding, reasoning, etc. |
 | KYU personality adaptation | ✅ Working | 4-stage interview → preference learning → system prompt injection |
+| Dreaming / session analysis | ✅ NEW | `friday/dreaming.py` — analyzes past sessions while idle, extracts patterns, updates vector memory + knowledge graph |
+| Cron scheduler | ✅ NEW | `friday/scheduler.py` — schedule autonomous tasks: status checks, goal reviews, dream cycles, custom commands |
+| Seamless GitHub Device Flow auth | ✅ Fixed | Client secret no longer required — only client ID needed, auto-opens browser to github.com/login/device |
 
 ### 🧠 Memory & User Understanding
 | Feature | Status | Details |
@@ -503,7 +508,9 @@ Friday responds to natural language. No rigid syntax required.
 | `friday/research.py` | Autonomous web research + report generation |
 | `friday/reasoning.py` | Multi-step reasoning engine |
 | `friday/hooks.py` | Pre/post/error tool hooks (knowledge graph, logging) |
-| `friday/notify.py` | Desktop toast notifications |
+| `friday/notify.py` | Desktop toast notifications (PowerShell + plyer) |
+| `friday/dreaming.py` | Dreaming system — session analysis while idle |
+| `friday/scheduler.py` | Cron scheduler for autonomous tasks |
 | `friday/vector_memory.py` | ChromaDB semantic memory |
 | `friday/_paths.py` | Centralized path resolution |
 | `friday/workflow.py` | RPA workflow engine |
@@ -567,6 +574,16 @@ Friday responds to natural language. No rigid syntax required.
 - [x] 1008 GoAway reconnection fixed (removed `pa.terminate()`)
 - [x] Centralized path resolution (`friday/_paths.py`)
 
+### v1.4 — Self-Improvement & Seamless Auth 🧠
+- [x] Desktop notifications fixed (PowerShell toast + plyer fallback, no more silent failures)
+- [x] Vision improved (1 FPS 720p automatic streaming, model sees screen without calling tools)
+- [x] Audio crackling fixed (increased jitter buffer to 12 chunks, smoother drain)
+- [x] Clock glitchiness fixed (notifications dependency resolved, display cleaned up)
+- [x] Dreaming system — analyzes past sessions while idle, extracts patterns, updates memory + knowledge graph
+- [x] Cron scheduler — schedule autonomous tasks (status checks, goal reviews, dream cycles, custom)
+- [x] GitHub Device Flow simplified — only client ID needed (no secret), auto-opens browser
+- [x] GitHub OAuth setup wizard — step-by-step guidance for creating the OAuth app
+
 ### v2.0 — Desktop App 🌟
 - [ ] Native Windows app (PyQt6 or Tauri)
 - [ ] Dark neon dashboard UI
@@ -616,7 +633,7 @@ git push origin feature/your-feature-name
 | See_screen Gemini API 429 (rate limit) | Workaround | Falls back to Gemini 1.5 Flash automatically |
 | SDK bug: `send_realtime_input` raises `ValueError` with >1 arg | Known | Only passes one argument at a time |
 | SyncMutex lock_async log noise | Cosmetic | Non-fatal, safe to ignore |
-| Audio crackling on long sessions | Fixed | 4800 frames_per_buffer + jitter buffer |
+| Audio crackling on long sessions | Fixed | Larger jitter buffer (12 chunks), smoother drain, exception_on_underflow=True |
 
 ---
 

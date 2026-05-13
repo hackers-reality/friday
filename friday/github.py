@@ -399,17 +399,19 @@ def github_commit_history(path: str = "", limit: int = 10) -> str:
 
 
 def _get_oauth_creds() -> tuple:
-    """Get GitHub OAuth client_id and client_secret from env or .env."""
+    """Get GitHub OAuth client_id and client_secret from env or .env.
+    Device Flow only needs client_id — client_secret is optional.
+    """
     cid = os.getenv("GITHUB_CLIENT_ID")
-    cs = os.getenv("GITHUB_CLIENT_SECRET")
-    if cid and cs:
+    cs = os.getenv("GITHUB_CLIENT_SECRET", "")
+    if cid:
         return cid, cs
     try:
         from dotenv import load_dotenv
         load_dotenv()
         cid = os.getenv("GITHUB_CLIENT_ID")
-        cs = os.getenv("GITHUB_CLIENT_SECRET")
-        if cid and cs:
+        cs = os.getenv("GITHUB_CLIENT_SECRET", "")
+        if cid:
             return cid, cs
     except Exception:
         pass
@@ -417,23 +419,17 @@ def _get_oauth_creds() -> tuple:
 
 
 def github_authorize() -> str:
-    """Start GitHub Device Flow. Gives you a code to enter at github.com/login/device. Blocks until authorized or timeout."""
+    """Start GitHub Device Flow. Gives you a code to enter at github.com/login/device. Blocks until authorized or timeout.
+    Device Flow does NOT need a client secret — only a client ID is required.
+    The client ID can be obtained by creating a free OAuth App on GitHub (no callback URL needed).
+    """
     cid, cs = _get_oauth_creds()
-    if not cid or not cs:
-        return (
-            "[FAIL] GitHub OAuth not configured.\n\n"
-            "To set up GitHub OAuth:\n"
-            "  1. Go to https://github.com/settings/developers\n"
-            "  2. Click 'New OAuth App'\n"
-            "  3. Set Authorization callback URL to: http://localhost (any URL works)\n"
-            "  4. Register and copy Client ID and Client Secret\n"
-            "  5. Add to your .env file:\n"
-            "     GITHUB_CLIENT_ID=your_client_id\n"
-            "     GITHUB_CLIENT_SECRET=your_client_secret"
-        )
-    import requests, time, json
+    if not cid:
+        return _github_setup_wizard()
 
-    # Step 1: Request device code
+    import requests, time, json, webbrowser
+
+    # Step 1: Request device code (no client_secret needed for Device Flow)
     try:
         resp = requests.post(
             "https://github.com/login/device/code",
@@ -459,6 +455,12 @@ def github_authorize() -> str:
         f"  2. Enter code: {user_code}\n\n"
         f"I'm waiting for you to authorize... (timeout: 5 minutes)"
     )
+
+    # Auto-open the verification URL in the browser
+    try:
+        webbrowser.open(verification_uri)
+    except Exception:
+        pass
 
     # Step 2: Poll for access token
     start = time.time()
@@ -495,7 +497,7 @@ def github_authorize() -> str:
             global github
             github.token = token
             github.headers["Authorization"] = f"token {token}"
-            return f"[OK] GitHub authorized! Token saved. Scopes: {result.get('scope', 'N/A')}"
+            return f"[OK] GitHub authorized! Token saved. Scopes: {result.get('scope', 'N/A')}. I can now access repos, issues, PRs, and more."
 
         error = result.get("error", "")
         if error == "authorization_pending":
@@ -511,6 +513,29 @@ def github_authorize() -> str:
             return f"[FAIL] Polling error: {error}"
 
     return f"[FAIL] Timeout waiting for authorization (5 minutes). Run github_authorize() to try again."
+
+
+def _github_setup_wizard() -> str:
+    """Guides the user through creating a GitHub OAuth App for Device Flow."""
+    import webbrowser
+    setup_url = "https://github.com/settings/developers"
+    return (
+        "[SETUP] GitHub OAuth App needed — Device Flow setup\n\n"
+        "I need a GitHub OAuth App to connect. This is a ONE-TIME setup:\n\n"
+        "Step 1: Open this link:\n"
+        f"  {setup_url}\n\n"
+        "Step 2: Click 'New OAuth App'\n\n"
+        "Step 3: Fill in:\n"
+        "  • Application name: Friday (or anything you like)\n"
+        "  • Homepage URL: https://github.com/hackers-reality/friday\n"
+        "  • Authorization callback URL: http://localhost (Device Flow doesn't need this, but it's required)\n\n"
+        "Step 4: Check 'Enable Device Flow' at the bottom\n\n"
+        "Step 5: Click 'Register application'\n\n"
+        "Step 6: Copy the 'Client ID' and add it to your .env file:\n"
+        "  GITHUB_CLIENT_ID=your_client_id_here\n\n"
+        "NOTE: Device Flow does NOT need a Client Secret. Only the Client ID is required.\n\n"
+        "Once you've added it to .env, run github_authorize() again and I'll handle the rest."
+    )
 
 
 def github_exchange_code(device_code: str = "") -> str:
@@ -530,8 +555,8 @@ def github_exchange_code(device_code: str = "") -> str:
         return "[INFO] No saved token. Run github_authorize() to start authorization."
 
     cid, cs = _get_oauth_creds()
-    if not cid or not cs:
-        return "[FAIL] GitHub OAuth not configured."
+    if not cid:
+        return "[FAIL] GitHub OAuth not configured. Run github_authorize() to set up."
 
     import requests, time
     start = time.time()
