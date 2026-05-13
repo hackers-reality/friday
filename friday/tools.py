@@ -2525,6 +2525,17 @@ def github_exchange_code(device_code: str = "") -> str:
         return f"[FAIL] GitHub code exchange error: {e}"
 
 
+def github_refresh_token() -> str:
+    """Manually refresh the GitHub App token. Only works for GitHub Apps (client_id starts with Iv1.)."""
+    try:
+        from friday.github import github_refresh_token as _gh_ref
+        return _gh_ref()
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub refresh error: {e}"
+
+
 #  Notification Tools #
 
 def send_notification(message: str, urgency: str = "normal", task_id: str = "") -> str:

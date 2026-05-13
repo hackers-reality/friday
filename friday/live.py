@@ -88,7 +88,7 @@ from friday.tools import (
     open_roblox_game, open_microsoft_store,
     github_create_repo, github_list_issues, github_create_issue, github_search_code,
     github_merge_pr, github_repo_info, github_list_branches, github_commit_history,
-    github_authorize, github_exchange_code,
+    github_authorize, github_exchange_code, github_refresh_token,
     search_browser_history, open_history_item, tell_alexa,
     spotify_next, spotify_prev, spotify_volume,
     send_instagram_dm, netflix_play, google_authorize, gmail_authorize, exchange_oauth_code, read_emails, send_email,
@@ -1463,6 +1463,10 @@ def _build_tools():
                 }),
             ),
             types.FunctionDeclaration(
+                name="github_refresh_token",
+                description="Manually refresh the GitHub App token. Only for GitHub Apps with expiring tokens."
+            ),
+            types.FunctionDeclaration(
                 name="github_review_pr",
                 description="Deep AI review of a pull request: fetches diff, analyzes with Gemini, posts review comments.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1677,6 +1681,7 @@ TOOL_MAP = {
     "github_commit_history": github_commit_history,
     "github_authorize": github_authorize,
     "github_exchange_code": github_exchange_code,
+    "github_refresh_token": github_refresh_token,
     "multi_agent_delegate": multi_agent_delegate,
     "kyu_tool_handler": kyu_tool_handler,
     "research_tool_handler": research_tool_handler,

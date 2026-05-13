@@ -5,35 +5,123 @@ import json
 import base64
 from typing import Optional, Dict, Any, List
 
-class GitHubIntegration:
-    """Integrate with GitHub for code management and self-modification."""
+_GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "Iv23liuQ5XPhsBjONt9B")
+_GITHUB_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".github_token.json")
+_IS_GITHUB_APP = _GITHUB_CLIENT_ID.startswith(("Iv1.", "lv1.")) if _GITHUB_CLIENT_ID else False
 
-    def _load_token(self) -> str:
+
+def _is_github_app(client_id: str) -> bool:
+    """Detect if a client ID belongs to a GitHub App (starts with Iv1. or lv1.)."""
+    return client_id.startswith(("Iv1.", "lv1."))
+
+
+def _load_saved_token() -> Optional[dict]:
+    """Load saved token data from .github_token.json."""
+    if os.path.exists(_GITHUB_TOKEN_FILE):
+        try:
+            with open(_GITHUB_TOKEN_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
+
+
+def _save_token_data(data: dict):
+    """Save full token data including access_token, refresh_token, expiry."""
+    os.makedirs(os.path.dirname(_GITHUB_TOKEN_FILE), exist_ok=True)
+    with open(_GITHUB_TOKEN_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def _refresh_github_app_token():
+    """Refresh a GitHub App user token using its refresh_token."""
+    saved = _load_saved_token()
+    if not saved or not saved.get("refresh_token"):
+        return None
+    import requests, time
+    try:
+        resp = requests.post(
+            "https://github.com/login/oauth/access_token",
+            data={
+                "client_id": _GITHUB_CLIENT_ID,
+                "grant_type": "refresh_token",
+                "refresh_token": saved["refresh_token"],
+            },
+            headers={"Accept": "application/json"},
+            timeout=15,
+        )
+        result = resp.json()
+    except Exception:
+        return None
+    if "access_token" in result:
+        full = {
+            "access_token": result["access_token"],
+            "token_type": result.get("token_type", "bearer"),
+            "expires_in": result.get("expires_in", 28800),
+            "refresh_token": result.get("refresh_token", saved.get("refresh_token")),
+            "refresh_token_expires_in": result.get("refresh_token_expires_in", 15811200),
+            "scope": result.get("scope", ""),
+            "created_at": time.time(),
+        }
+        _save_token_data(full)
+        return full["access_token"]
+    return None
+
+
+def _get_active_token() -> str:
+    """Get the active GitHub token from env PAT or saved OAuth/GitHub App token. Auto-refreshes if expiring."""
+    token = os.getenv("GITHUB_TOKEN")
+    if token:
+        return token
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
         token = os.getenv("GITHUB_TOKEN")
         if token:
             return token
-        try:
-            from dotenv import load_dotenv
-            load_dotenv()
-            token = os.getenv("GITHUB_TOKEN")
-            if token:
-                return token
-        except Exception:
-            pass
-        return ""
+    except Exception:
+        pass
+    saved = _load_saved_token()
+    if saved and saved.get("access_token"):
+        if saved.get("refresh_token") and saved.get("expires_in"):
+            import time
+            created = saved.get("created_at", 0)
+            expires_in = saved["expires_in"]
+            if time.time() - created > expires_in - 60:
+                refreshed = _refresh_github_app_token()
+                if refreshed:
+                    return refreshed
+        return saved["access_token"]
+    return ""
+
+
+class GitHubIntegration:
+    """Integrate with GitHub for code management and self-modification."""
 
     def __init__(self):
-        self.token = self._load_token()
+        self.token = _get_active_token()
         self.repo = os.getenv("GITHUB_REPO", "hackers-reality/friday")
         self.branch = os.getenv("GITHUB_BRANCH", "main")
         self.api_base = "https://api.github.com"
-        self.headers = {
-            "Authorization": f"token {self.token}" if self.token else "",
-            "Accept": "application/vnd.github.v3+json"
-        }
+        self._update_headers()
     
+    def _update_headers(self):
+        """Set auth header — Bearer for GitHub App tokens, token for PATs."""
+        if not self.token:
+            self.headers = {"Accept": "application/vnd.github.v3+json"}
+        elif _IS_GITHUB_APP or self.token.startswith("ghu_"):
+            self.headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+        else:
+            self.headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+
     def _request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> Dict:
-        """Make a GitHub API request."""
+        """Make a GitHub API request with auto-refresh for GitHub App tokens."""
         import requests
         url = f"{self.api_base}{endpoint}"
         try:
@@ -41,6 +129,16 @@ class GitHubIntegration:
                 resp = requests.request(method, url, headers=self.headers, json=data, timeout=10)
             else:
                 resp = requests.request(method, url, headers=self.headers, timeout=10)
+            # If 401 and we have a GitHub App, try refreshing token
+            if resp.status_code == 401 and _IS_GITHUB_APP:
+                refreshed = _refresh_github_app_token()
+                if refreshed:
+                    self.token = refreshed
+                    self._update_headers()
+                    if data:
+                        resp = requests.request(method, url, headers=self.headers, json=data, timeout=10)
+                    else:
+                        resp = requests.request(method, url, headers=self.headers, timeout=10)
             resp.raise_for_status()
             return resp.json() if resp.content else {}
         except Exception as e:
@@ -399,7 +497,7 @@ def github_commit_history(path: str = "", limit: int = 10) -> str:
 
 
 def _get_oauth_creds() -> tuple:
-    """Get GitHub OAuth client_id and client_secret from env or .env.
+    """Get GitHub OAuth/GitHub App client_id and client_secret from env.
     Device Flow only needs client_id — client_secret is optional.
     """
     cid = os.getenv("GITHUB_CLIENT_ID")
@@ -420,20 +518,24 @@ def _get_oauth_creds() -> tuple:
 
 def github_authorize() -> str:
     """Start GitHub Device Flow. Gives you a code to enter at github.com/login/device. Blocks until authorized or timeout.
-    Device Flow does NOT need a client secret — only a client ID is required.
-    The client ID can be obtained by creating a free OAuth App on GitHub (no callback URL needed).
+    Supports BOTH GitHub Apps (client_id starts with Iv1.) and OAuth Apps.
+    Device Flow does NOT need a client secret — only the Client ID is required.
     """
     cid, cs = _get_oauth_creds()
     if not cid:
         return _github_setup_wizard()
 
     import requests, time, json, webbrowser
+    is_gh_app = _is_github_app(cid)
 
-    # Step 1: Request device code (no client_secret needed for Device Flow)
+    # Step 1: Request device code
+    device_payload = {"client_id": cid}
+    if not is_gh_app:
+        device_payload["scope"] = "repo workflow admin:org"
     try:
         resp = requests.post(
             "https://github.com/login/device/code",
-            data={"client_id": cid, "scope": "repo workflow admin:org"},
+            data=device_payload,
             headers={"Accept": "application/json"},
             timeout=15,
         )
@@ -449,14 +551,14 @@ def github_authorize() -> str:
     verification_uri = data.get("verification_uri", "https://github.com/login/device")
     interval = data.get("interval", 5)
 
+    app_type = "GitHub App" if is_gh_app else "OAuth App"
     msg = (
-        f"[OK] GitHub Device Flow started.\n\n"
+        f"[OK] GitHub Device Flow started ({app_type}).\n\n"
         f"  1. Go to: {verification_uri}\n"
         f"  2. Enter code: {user_code}\n\n"
         f"I'm waiting for you to authorize... (timeout: 5 minutes)"
     )
 
-    # Auto-open the verification URL in the browser
     try:
         webbrowser.open(verification_uri)
     except Exception:
@@ -464,7 +566,7 @@ def github_authorize() -> str:
 
     # Step 2: Poll for access token
     start = time.time()
-    timeout = 300  # 5 minutes
+    timeout = 300
     while time.time() - start < timeout:
         time.sleep(interval)
         try:
@@ -484,20 +586,25 @@ def github_authorize() -> str:
 
         if "access_token" in result:
             token = result["access_token"]
-            token_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".github_token.json")
-            with open(token_path, "w") as f:
-                json.dump(
-                    {
-                        "access_token": token,
-                        "token_type": result.get("token_type", "bearer"),
-                        "scope": result.get("scope", ""),
-                    },
-                    f,
-                )
+            saved = {
+                "access_token": token,
+                "token_type": result.get("token_type", "bearer"),
+                "scope": result.get("scope", ""),
+                "created_at": time.time(),
+            }
+            if is_gh_app and "expires_in" in result and result["expires_in"]:
+                saved["expires_in"] = result["expires_in"]
+                saved["refresh_token"] = result.get("refresh_token", "")
+                saved["refresh_token_expires_in"] = result.get("refresh_token_expires_in", 15811200)
+            _save_token_data(saved)
+
             global github
             github.token = token
-            github.headers["Authorization"] = f"token {token}"
-            return f"[OK] GitHub authorized! Token saved. Scopes: {result.get('scope', 'N/A')}. I can now access repos, issues, PRs, and more."
+            github._update_headers()
+            extra = ""
+            if is_gh_app:
+                extra = " (token expiry disabled — permanent token)"
+            return f"[OK] GitHub authorized! Token saved.{extra}"
 
         error = result.get("error", "")
         if error == "authorization_pending":
@@ -516,49 +623,41 @@ def github_authorize() -> str:
 
 
 def _github_setup_wizard() -> str:
-    """Guides the user through creating a GitHub OAuth App for Device Flow."""
+    """Guides the user through GitHub authorization. Client ID is already hardcoded."""
     import webbrowser
-    setup_url = "https://github.com/settings/developers"
     return (
-        "[SETUP] GitHub OAuth App needed — Device Flow setup\n\n"
-        "I need a GitHub OAuth App to connect. This is a ONE-TIME setup:\n\n"
-        "Step 1: Open this link:\n"
-        f"  {setup_url}\n\n"
-        "Step 2: Click 'New OAuth App'\n\n"
-        "Step 3: Fill in:\n"
-        "  • Application name: Friday (or anything you like)\n"
-        "  • Homepage URL: https://github.com/hackers-reality/friday\n"
-        "  • Authorization callback URL: http://localhost (Device Flow doesn't need this, but it's required)\n\n"
-        "Step 4: Check 'Enable Device Flow' at the bottom\n\n"
-        "Step 5: Click 'Register application'\n\n"
-        "Step 6: Copy the 'Client ID' and add it to your .env file:\n"
-        "  GITHUB_CLIENT_ID=your_client_id_here\n\n"
-        "NOTE: Device Flow does NOT need a Client Secret. Only the Client ID is required.\n\n"
-        "Once you've added it to .env, run github_authorize() again and I'll handle the rest."
+        "[SETUP] GitHub Auth — Ready\n\n"
+        "GitHub App 'friday-from-ironman' is pre-configured (Client ID already hardcoded).\n"
+        "Just run github_authorize() — it will:\n"
+        "  1. Auto-open https://github.com/login/device\n"
+        "  2. Show you a code to enter\n"
+        "  3. You authorize the app\n"
+        "  4. Done — permanent token saved\n\n"
+        "Permissions: Read/write to repos, PRs, issues, actions, workflows, codespaces,\n"
+        "  deployments, pages, secrets, admin to projects, and more."
     )
 
 
 def github_exchange_code(device_code: str = "") -> str:
-    """Manually poll for a token using a device_code from a previous authorize call. If empty, checks for an existing saved token."""
+    """Poll for token using device_code, or check token status. For GitHub Apps, also shows expiry."""
     if not device_code:
-        # Check for existing token
-        token_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".github_token.json")
-        if os.path.exists(token_path):
-            try:
-                with open(token_path) as f:
-                    data = json.load(f)
-                if "access_token" in data:
-                    return f"[OK] Token exists. Scopes: {data.get('scope', 'N/A')}"
-            except Exception:
-                pass
-            return "[INFO] Token file exists but is invalid. Run github_authorize() to re-authorize."
-        return "[INFO] No saved token. Run github_authorize() to start authorization."
+        saved = _load_saved_token()
+        if saved and saved.get("access_token"):
+            if saved.get("refresh_token"):
+                import time
+                created = saved.get("created_at", 0)
+                expires_in = saved.get("expires_in", 28800)
+                remaining = max(0, int(expires_in - (time.time() - created)))
+                return f"[OK] GitHub App token active. Expires in {remaining}s. Refresh available."
+            return f"[OK] Token exists."
+        return "[INFO] No saved token. Run github_authorize() to start."
 
     cid, cs = _get_oauth_creds()
     if not cid:
-        return "[FAIL] GitHub OAuth not configured. Run github_authorize() to set up."
+        return "[FAIL] GitHub not configured. Run github_authorize() to set up."
 
     import requests, time
+    is_gh_app = _is_github_app(cid)
     start = time.time()
     timeout = 300
     interval = 5
@@ -581,20 +680,22 @@ def github_exchange_code(device_code: str = "") -> str:
 
         if "access_token" in result:
             token = result["access_token"]
-            token_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".github_token.json")
-            with open(token_path, "w") as f:
-                json.dump(
-                    {
-                        "access_token": token,
-                        "token_type": result.get("token_type", "bearer"),
-                        "scope": result.get("scope", ""),
-                    },
-                    f,
-                )
+            saved = {
+                "access_token": token,
+                "token_type": result.get("token_type", "bearer"),
+                "scope": result.get("scope", ""),
+                "created_at": time.time(),
+            }
+            if is_gh_app and "expires_in" in result and result["expires_in"]:
+                saved["expires_in"] = result["expires_in"]
+                saved["refresh_token"] = result.get("refresh_token", "")
+                saved["refresh_token_expires_in"] = result.get("refresh_token_expires_in", 15811200)
+            _save_token_data(saved)
+
             global github
             github.token = token
-            github.headers["Authorization"] = f"token {token}"
-            return f"[OK] GitHub authorized! Token saved. Scopes: {result.get('scope', 'N/A')}"
+            github._update_headers()
+            return f"[OK] GitHub authorized! Token saved."
 
         error = result.get("error", "")
         if error == "authorization_pending":
@@ -610,3 +711,21 @@ def github_exchange_code(device_code: str = "") -> str:
             return f"[FAIL] Polling error: {error}"
 
     return "[FAIL] Timeout."
+
+
+def github_refresh_token() -> str:
+    """Manually refresh the GitHub App token. Only works for GitHub Apps (client ID starts with Iv1.)."""
+    if not _IS_GITHUB_APP:
+        return "[FAIL] Not a GitHub App. Only GitHub Apps support token refresh."
+    refreshed = _refresh_github_app_token()
+    if refreshed:
+        global github
+        github.token = refreshed
+        github._update_headers()
+        saved = _load_saved_token()
+        remaining = "unknown"
+        if saved:
+            import time
+            remaining = str(max(0, int((saved.get("created_at", 0) + saved.get("expires_in", 28800)) - time.time())))
+        return f"[OK] Token refreshed. Next expiry in {remaining}s."
+    return "[FAIL] Token refresh failed. Re-authorize with github_authorize()."
