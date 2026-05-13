@@ -448,58 +448,111 @@ def open_url(url: str) -> str:
 
 
 def open_roblox_game(game_name: str) -> str:
-    """Search for a Roblox game by name and open it via roblox:// URI."""
-    try:
-        import urllib.parse, json, subprocess
-        query = urllib.parse.quote(f"{game_name} roblox place")
-        # Use web_search to find the game
-        from friday.web import WebScraper
-        scraper = WebScraper()
-        result = scraper.search_engine(f"{game_name} roblox place id")
-        if not result.get("success") or not result.get("results"):
-            # Fallback: just open search page
-            subprocess.run(f'start "" "https://www.roblox.com/games/?Keyword={query}"', shell=True)
-            return f"[OK] Opened Roblox search for '{game_name}'"
-        for item in result["results"][:5]:
-            url = item.get("url", "")
-            # Roblox game URLs: https://www.roblox.com/games/4483381587/...
-            import re
-            match = re.search(r"roblox\.com/games/(\d+)", url)
-            if match:
-                place_id = match.group(1)
-                roblox_uri = f"roblox://placeID={place_id}"
-                subprocess.run(f'start "" "{roblox_uri}"', shell=True)
-                return f"[OK] Opening Roblox game '{game_name}' (ID: {place_id})"
-            match = re.search(r"roblox\.com/games/(\d+)", item.get("snippet", ""))
-            if match:
-                place_id = match.group(1)
-                roblox_uri = f"roblox://placeID={place_id}"
-                subprocess.run(f'start "" "{roblox_uri}"', shell=True)
-                return f"[OK] Opening Roblox game '{game_name}' (ID: {place_id})"
-        # No game ID found — open search
-        subprocess.run(f'start "" "https://www.roblox.com/games/?Keyword={query}"', shell=True)
-        return f"[OK] Opened Roblox search for '{game_name}'"
-    except ImportError:
-        return "[FAIL] Required module not available."
-    except Exception as e:
-        return f"[FAIL] Roblox error: {e}"
+    """Search web for a Roblox game by name (fuzzy), find its place ID, then open via roblox:// URI. Never opens a search results page."""
+    import urllib.parse, re, subprocess, difflib
+
+    def _launch(place_id: str, name: str) -> str:
+        """Launch roblox:// URI using Start-Process (reliable for URI schemes)."""
+        try:
+            subprocess.run(["powershell", "-NoProfile", "Start-Process", f"roblox://placeID={place_id}"], timeout=15)
+            return f"[OK] Launched '{name}' (ID: {place_id}) via Roblox"
+        except Exception:
+            try:
+                subprocess.run(f'start "" "roblox://placeID={place_id}"', shell=True, timeout=10)
+                return f"[OK] Launched '{name}' (ID: {place_id}) via Roblox"
+            except Exception as e:
+                return f"[FAIL] Could not launch Roblox: {e}"
+
+    def _fetch_games(query: str) -> list:
+        """Search for Roblox games and return list of (name, place_id) tuples."""
+        results = []
+        try:
+            from friday.web import WebScraper
+            scraper = WebScraper()
+            resp = scraper.search_engine(query)
+            if resp.get("success") and resp.get("results"):
+                for item in resp["results"]:
+                    url = item.get("url", "")
+                    snippet = item.get("snippet", "")
+                    title = item.get("title", "")
+                    pid = None
+                    m = re.search(r"roblox\.com/games/(\d+)", url) or re.search(r"roblox\.com/games/(\d+)", snippet)
+                    if m:
+                        pid = m.group(1)
+                    if pid:
+                        # Extract game name from title or URL path
+                        gname = title or ""
+                        if not gname and "/" in url:
+                            gname = url.rstrip("/").split("/")[-1].replace("-", " ")
+                        results.append((gname, pid))
+        except Exception:
+            pass
+        return results
+
+    # Strategy 1: Search directly with "roblox place id"
+    candidates = _fetch_games(f"{game_name} roblox place id")
+    if not candidates:
+        candidates = _fetch_games(f"roblox game {game_name} id")
+    if not candidates:
+        candidates = _fetch_games(f"site:roblox.com {game_name}")
+
+    if not candidates:
+        # Try the Roblox API search as last resort
+        try:
+            import requests
+            r = requests.get(f"https://games.roblox.com/v1/games/search?keyword={urllib.parse.quote(game_name)}&limit=10", timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                for g in data.get("data", []):
+                    candidates.append((g.get("name", ""), str(g.get("placeId", ""))))
+        except Exception:
+            pass
+
+    if not candidates:
+        return f"[FAIL] Could not find a Roblox game matching '{game_name}'. Try a more specific name."
+
+    # Fuzzy match: pick best name match
+    game_lower = game_name.lower()
+    best_score = 0
+    best = candidates[0]
+    for gname, pid in candidates:
+        score = max(
+            difflib.SequenceMatcher(None, game_lower, gname.lower()).ratio(),
+            difflib.SequenceMatcher(None, game_lower, gname.lower().replace("-", " ").replace("_", " ")).ratio(),
+        )
+        if score > best_score:
+            best_score = score
+            best = (gname, pid)
+
+    gname, pid = best
+    if best_score < 0.3:
+        return f"[FAIL] No close match for '{game_name}'. Did you mean: {', '.join(f'{n}' for n, _ in candidates[:3])}?"
+
+    return _launch(pid, gname)
 
 
 def open_microsoft_store(query: str = "", product_id: str = "") -> str:
-    """Open Microsoft Store via ms-windows-store:// URI. Search or open a specific product."""
+    """Open Microsoft Store via ms-windows-store:// URI. Search or open a specific product. Never opens a browser."""
     try:
         import subprocess, urllib.parse
+
+        def _launch(uri: str) -> None:
+            try:
+                subprocess.run(["powershell", "-NoProfile", "Start-Process", uri], timeout=15)
+            except Exception:
+                subprocess.run(f'start "" "{uri}"', shell=True, timeout=10)
+
         if product_id:
             uri = f"ms-windows-store://pdp/?productid={product_id}"
-            subprocess.run(f'start "" "{uri}"', shell=True)
+            _launch(uri)
             return f"[OK] Opening Microsoft Store product {product_id}"
         elif query:
             q = urllib.parse.quote(query)
             uri = f"ms-windows-store://search/?query={q}"
-            subprocess.run(f'start "" "{uri}"', shell=True)
+            _launch(uri)
             return f"[OK] Opening Microsoft Store search for '{query}'"
         else:
-            subprocess.run('start "" "ms-windows-store://home"', shell=True)
+            _launch("ms-windows-store://home")
             return "[OK] Opening Microsoft Store"
     except Exception as e:
         return f"[FAIL] Microsoft Store error: {e}"

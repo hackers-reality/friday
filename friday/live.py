@@ -559,7 +559,7 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="open_roblox_game",
-                description="Search for a Roblox game by name and open it via roblox:// URI.",
+                description="Search the web for a Roblox game by name (fuzzy match), find its place ID, then open via roblox:// URI. Never opens a browser — always launches the game directly.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "game_name": {"type": "STRING", "description": "Name of the Roblox game to open."}
                 }, required=["game_name"]),
