@@ -133,7 +133,7 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Other LLMs (Claude, GPT, Groq, Ollama) | 🔧 Coming Soon | Use Gemini API key for now |
 | Multi-LLM switching | 📋 Planned | `llm_manager.py` — coming soon |
 | LangGraph orchestration | 🔧 In Progress | `friday_langgraph.py` (syntax fixed) |
-| ✅ Working | ✅ Working | Real-time web research + reports |
+| Deep research analysis | ✅ Working | Real-time web research + reports |
 | Self-modifying code | 🔧 In Progress | `self_modification.py` |
 
 ### 🧠 Memory & User Understanding
