@@ -198,3 +198,58 @@ def _kyu_post_hook(name: str, args: dict, result: str, session=None) -> None:
         pass
 
 register_post_hook(_kyu_post_hook)
+
+
+# ─── Predictive Pattern Recording ───
+
+def _predictive_post_hook(name: str, args: dict, result: str, session=None) -> None:
+    if not name or name.startswith("system_") or name == "get_time":
+        return
+    try:
+        from friday.predictive import record_activity
+        record_activity(tool_name=name)
+    except Exception:
+        pass
+
+
+register_post_hook(_predictive_post_hook)
+
+
+# ─── Auto-Skill Creation Hook (inspired by Hermes Agent GEPA) ───
+
+_tool_sequence_buffer = []  # tracks last N tool calls for skill creation
+_SEQUENCE_THRESHOLD = 3  # minimum tools in sequence to consider for skill
+
+
+def _auto_skill_post_hook(name: str, args: dict, result: str, session=None) -> None:
+    """After successful tool sequences, auto-create skills."""
+    global _tool_sequence_buffer
+    if not result or result.startswith("[FAIL]"):
+        _tool_sequence_buffer.clear()
+        return
+    noisy = {"click", "move_mouse", "scroll", "press_key", "hotkey", "type_text",
+             "opencli_scroll", "opencli_keys", "opencli_screenshot",
+             "system_cpu", "system_memory", "system_disk", "system_network",
+             "get_active_window", "status_check", "list_running_apps",
+             "clock_tool", "get_time"}
+    if name in noisy:
+        return
+    _tool_sequence_buffer.append({"tool": name, "args": str(list(args.keys())), "time": datetime.now().isoformat()})
+    if len(_tool_sequence_buffer) >= _SEQUENCE_THRESHOLD:
+        try:
+            tools_str = " → ".join(t["tool"] for t in _tool_sequence_buffer[-_SEQUENCE_THRESHOLD:])
+            from friday.skills import skills_tool, match_skill
+            existing = match_skill(tools_str)
+            if not existing:
+                skills_tool("auto_create",
+                    name=f"Workflow: {tools_str[:50]}",
+                    steps=tools_str,
+                    trigger=tools_str,
+                    tags=f"auto, workflow, {_tool_sequence_buffer[-1]['tool']}",
+                )
+        except Exception:
+            pass
+        _tool_sequence_buffer.clear()
+
+
+register_post_hook(_auto_skill_post_hook)

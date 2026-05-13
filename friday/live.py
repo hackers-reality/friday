@@ -104,7 +104,7 @@ from friday.tools import (
     multi_agent_delegate, message_channel_tool,
     vector_memory_tool,
     send_notification, get_pending_notifications, clear_notifications,
-    dream_tool, scheduler_tool, skills_tool,
+    dream_tool, scheduler_tool, skills_tool, predictive_tool,
 )
 
 # vector_memory_tool now re-exported through friday_tools
@@ -277,6 +277,10 @@ Goals & Memory:
 - memory_retrieve(query) — recall memories
 - memory_import_tool_handler(action, file_path) — import chat history
 - knowledge_graph_tool(action, node_id) — entity-relation knowledge graph
+- skills_tool(action, name, steps) — self-improving skills: save/load/search workflows like Hermes Agent
+- predictive_tool(action) — learns your usage patterns, predicts what you need next
+- dream_tool(action) — dreaming system: analyzes past sessions while idle
+- scheduler_tool(action, name, schedule) — cron scheduler for autonomous tasks
 
 KYU (Know Your User):
 - kyu_tool_handler(action) — manage personality profile (status, interview, profile, adapt)
@@ -293,6 +297,8 @@ Media:
 Workflows & Plugins:
 - workflow_tool(action, name, steps) — create/run multi-step workflows
 - plugin_tool(action, plugin_name) — load/call plugin modules
+- github_authorize() — start Device Flow auth (hardcoded GitHub App, just authorize at github.com/login/device)
+- github_refresh_token() — manually refresh GitHub App token (only needed if expiry enabled)
 - github_list_files, github_read_file, github_write_file — GitHub repo access
 - github_create_branch, github_create_pr, github_self_modify, github_review_pr
 
@@ -1556,6 +1562,16 @@ def _build_tools():
                     "id": {"type": "STRING", "description": "Skill ID (for delete)."},
                 }, required=["action"]),
             ),
+            # ======== PREDICTIVE ANALYSIS ========
+            types.FunctionDeclaration(
+                name="predictive_tool",
+                description="Predictive analysis: learns your usage patterns and anticipates needs. Actions: predict (what you typically do now), patterns (learning stats), stats (peak hours).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: predict, patterns, stats."},
+                    "hour": {"type": "INTEGER", "description": "Hour to predict for (0-23, optional, defaults to now)."},
+                    "day": {"type": "STRING", "description": "Day to predict for (monday-sunday, optional)."},
+                }, required=["action"]),
+            ),
         ])
     ]
 
@@ -1709,6 +1725,7 @@ TOOL_MAP = {
     "dream_tool": dream_tool,
     "scheduler_tool": scheduler_tool,
     "skills_tool": skills_tool,
+    "predictive_tool": predictive_tool,
 }
 
 

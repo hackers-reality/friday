@@ -2705,6 +2705,18 @@ def skills_tool(action: str = "list", **kwargs) -> str:
         return f"[FAIL] Skills error: {e}"
 
 
+#  Predictive Tool #
+def predictive_tool(action: str = "predict", **kwargs) -> str:
+    """Predictive analysis: learn usage patterns and anticipate needs. Actions: predict, patterns, stats."""
+    try:
+        from friday.predictive import predictive_tool as _pt
+        return _pt(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] predictive.py not available."
+    except Exception as e:
+        return f"[FAIL] Predictive error: {e}"
+
+
 def execute_tool(name: str, args: dict = None) -> str:
     """Execute a tool by name with given args. Used by friday_langgraph.py."""
     import inspect
@@ -2772,7 +2784,7 @@ __all__ = [
     "github_authorize", "github_exchange_code",
     "multi_agent_delegate", "message_channel_tool",
     "send_notification", "get_pending_notifications", "clear_notifications",
-    "dream_tool", "scheduler_tool", "skills_tool",
+    "dream_tool", "scheduler_tool", "skills_tool", "predictive_tool",
 ]
 
 if __name__ == "__main__":
