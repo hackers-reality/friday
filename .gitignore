@@ -118,5 +118,4 @@ scratch/
 .spotify_cache
 
 .gmail_token.json
-
-.gmail_token.json
+.github_token.json

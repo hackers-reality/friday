@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 
 
 def _get_stayfree_dir() -> Optional[str]:
-    """Locate the StayFree data directory. Checks 20+ possible locations + Windows Registry."""
+    """Locate the StayFree data directory. Checks 20+ possible locations + Windows Registry + running processes."""
     appdata = os.environ.get("LOCALAPPDATA", "")
     appdata_roaming = os.environ.get("APPDATA", "")
     userprofile = os.environ.get("USERPROFILE", "")
@@ -50,19 +50,33 @@ def _get_stayfree_dir() -> Optional[str]:
             os.path.join(programdata, "StayFree"),
         ]
 
-    # Chrome extension storage (LevelDB / indexeddb)
+    # Chrome / Edge / Brave extension storage
+    browsers = [
+        ("Google", "Chrome"),
+        ("Microsoft", "Edge"),
+        ("BraveSoftware", "Brave-Browser"),
+    ]
+    ext_ids = [
+        "ccebnhfcmbpgkdapgkmbpgcpeblebili",  # StayFree original
+        "ghhjkichblmhhlkjdldnlpiiifekikcp",  # StayFree alternative
+        "laefbpnoejggpddomdfbejeghnhagonp",  # StayFree v2
+        "mhgknjpnpcoeggcdmmogmndjlildgepd",  # StayFree focus
+    ]
     if appdata:
-        candidates += [
-            os.path.join(appdata, "Google", "Chrome", "User Data", "Default", "Local Extension Settings", "ccebnhfcmbpgkdapgkmbpgcpeblebili"),
-            os.path.join(appdata, "Google", "Chrome", "User Data", "Default", "Storage", "ext", "ccebnhfcmbpgkdapgkmbpgcpeblebili"),
-            os.path.join(appdata, "Google", "Chrome", "User Data", "Default", "IndexedDB", "chrome-extension_ccebnhfcmbpgkdapgkmbpgcpeblebili"),
-        ]
+        for vendor, browser in browsers:
+            for ext_id in ext_ids:
+                candidates += [
+                    os.path.join(appdata, vendor, browser, "User Data", "Default", "Local Extension Settings", ext_id),
+                    os.path.join(appdata, vendor, browser, "User Data", "Default", "Storage", "ext", ext_id),
+                    os.path.join(appdata, vendor, browser, "User Data", "Default", "IndexedDB", f"chrome-extension_{ext_id}"),
+                ]
 
     # Microsoft Store apps (per-user AppData)
     if userprofile:
         candidates += [
             os.path.join(userprofile, "AppData", "Local", "Packages", "StayFree"),
             os.path.join(userprofile, "AppData", "Local", "Packages", "StayFreeApp"),
+            os.path.join(userprofile, "AppData", "Local", "Packages", "StayFreeApp_*"),
         ]
 
     # Direct root paths
@@ -155,12 +169,22 @@ def _find_json_files(dirpath: str, pattern: str = "*.json") -> list:
 def stayfree_status() -> str:
     """Check if StayFree data is accessible."""
     sf_dir = _get_stayfree_dir()
-    if not sf_dir:
-        return "[FAIL] StayFree data directory not found. Install StayFree first."
-    files = _find_json_files(sf_dir)
-    if not files:
-        return f"[OK] StayFree directory found at {sf_dir} but no data files yet."
-    return f"[OK] StayFree data directory: {sf_dir} ({len(files)} data files)"
+    if sf_dir:
+        files = _find_json_files(sf_dir)
+        if files:
+            return f"[OK] StayFree data directory: {sf_dir} ({len(files)} data files)"
+        return f"[OK] StayFree directory found at {sf_dir} (waiting for data files)"
+    # Check if StayFree process is running
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq StayFree.exe", "/NH"],
+            capture_output=True, text=True, timeout=5
+        )
+        if "StayFree.exe" in result.stdout:
+            return "[OK] StayFree process is running (no data directory found)"
+    except Exception:
+        pass
+    return "[FAIL] StayFree not found. Install from https://stayfreeapps.com"
 
 
 def stayfree_today() -> str:

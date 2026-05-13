@@ -43,13 +43,6 @@ def system_info() -> str:
 
 def run_cmd(command: str) -> str:
     """Run shell command."""
-    # Safety: block commands that kill Python processes
-    blocked = ["taskkill", "kill python", "pkill python", "killall python",
-               "stop-process python", "Stop-Process", "exit", "shutdown", "restart"]
-    cmd_lower = command.lower()
-    for b in blocked:
-        if b in cmd_lower:
-            return f"[BLOCKED] Command '{command}' contains blocked pattern '{b}' — cannot self-terminate."
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
         return result.stdout or result.stderr
@@ -449,6 +442,65 @@ def open_url(url: str) -> str:
         return f"Opened URL: {url}"
     except Exception as e:
         return f"Error: {e}"
+
+
+def open_roblox_game(game_name: str) -> str:
+    """Search for a Roblox game by name and open it via roblox:// URI."""
+    try:
+        import urllib.parse, json, subprocess
+        query = urllib.parse.quote(f"{game_name} roblox place")
+        # Use web_search to find the game
+        from friday.web import WebScraper
+        scraper = WebScraper()
+        result = scraper.search_engine(f"{game_name} roblox place id")
+        if not result.get("success") or not result.get("results"):
+            # Fallback: just open search page
+            subprocess.run(f'start "" "https://www.roblox.com/games/?Keyword={query}"', shell=True)
+            return f"[OK] Opened Roblox search for '{game_name}'"
+        for item in result["results"][:5]:
+            url = item.get("url", "")
+            # Roblox game URLs: https://www.roblox.com/games/4483381587/...
+            import re
+            match = re.search(r"roblox\.com/games/(\d+)", url)
+            if match:
+                place_id = match.group(1)
+                roblox_uri = f"roblox://placeID={place_id}"
+                subprocess.run(f'start "" "{roblox_uri}"', shell=True)
+                return f"[OK] Opening Roblox game '{game_name}' (ID: {place_id})"
+            match = re.search(r"roblox\.com/games/(\d+)", item.get("snippet", ""))
+            if match:
+                place_id = match.group(1)
+                roblox_uri = f"roblox://placeID={place_id}"
+                subprocess.run(f'start "" "{roblox_uri}"', shell=True)
+                return f"[OK] Opening Roblox game '{game_name}' (ID: {place_id})"
+        # No game ID found — open search
+        subprocess.run(f'start "" "https://www.roblox.com/games/?Keyword={query}"', shell=True)
+        return f"[OK] Opened Roblox search for '{game_name}'"
+    except ImportError:
+        return "[FAIL] Required module not available."
+    except Exception as e:
+        return f"[FAIL] Roblox error: {e}"
+
+
+def open_microsoft_store(query: str = "", product_id: str = "") -> str:
+    """Open Microsoft Store via ms-windows-store:// URI. Search or open a specific product."""
+    try:
+        import subprocess, urllib.parse
+        if product_id:
+            uri = f"ms-windows-store://pdp/?productid={product_id}"
+            subprocess.run(f'start "" "{uri}"', shell=True)
+            return f"[OK] Opening Microsoft Store product {product_id}"
+        elif query:
+            q = urllib.parse.quote(query)
+            uri = f"ms-windows-store://search/?query={q}"
+            subprocess.run(f'start "" "{uri}"', shell=True)
+            return f"[OK] Opening Microsoft Store search for '{query}'"
+        else:
+            subprocess.run('start "" "ms-windows-store://home"', shell=True)
+            return "[OK] Opening Microsoft Store"
+    except Exception as e:
+        return f"[FAIL] Microsoft Store error: {e}"
+
 
 #  Spotify API Integration (via spotipy) #
 
@@ -1773,35 +1825,56 @@ def opencli_list_adapters() -> str:
 
 
 def opencli_init_bridge() -> str:
-    """Initialize the OpenCLI browser bridge and install Chrome extension."""
+    """Initialize the OpenCLI browser bridge and check Chrome extension."""
     try:
-        from friday.opencli import opencli_init
-        import subprocess, os
+        import subprocess, json
 
-        result = opencli_init()
-        if "[FAIL]" not in result:
-            return result
-
-        # Init failed — try installing the browser extension first
+        # Check daemon status
         try:
-            inst = subprocess.run(["opencli", "browser", "install"], capture_output=True, text=True, timeout=30)
-            if inst.returncode == 0:
-                result2 = opencli_init()
-                if "[FAIL]" not in result2:
-                    return result2 + " (Chrome extension installed)"
+            result = subprocess.run(
+                ["opencli", "daemon", "status", "--json"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    status = json.loads(result.stdout.strip())
+                    if status.get("state") == "ready" and status.get("profiles"):
+                        profiles = status["profiles"]
+                        n = len(profiles) if isinstance(profiles, list) else 1
+                        return f"OpenCLI bridge connected ({n} profile{'s' if n != 1 else ''})"
+                except json.JSONDecodeError:
+                    pass
+                # Fallback: check text output
+                out = result.stdout.strip()
+                if "Extension: connected" in out and "Profiles:" in out:
+                    return "OpenCLI bridge connected"
+        except FileNotFoundError:
+            return "[FAIL] opencli not installed. Run: npm install -g @jackwener/opencli"
+        except Exception:
+            pass
+
+        # Try starting the daemon
+        try:
+            subprocess.run(["opencli", "daemon", "restart"], capture_output=True, text=True, timeout=15)
+            result = subprocess.run(
+                ["opencli", "daemon", "status"],
+                capture_output=True, text=True, timeout=10
+            )
+            if "Extension: connected" in result.stdout:
+                return "OpenCLI bridge connected (daemon restarted)"
         except Exception:
             pass
 
         return (
-            "[FAIL] OpenCLI bridge not connected. To set up:\n"
-            "  1. Open Chrome and go to chrome://extensions\n"
-            "  2. Enable Developer mode (top right)\n"
-            "  3. Run: opencli browser install\n"
-            "  4. Run: opencli browser init\n"
-            "  5. Make sure the OpenCLI extension is enabled"
+            "[FAIL] OpenCLI bridge not connected. Setup instructions:\n"
+            "  1. Install the extension from: https://github.com/jackwener/opencli/releases\n"
+            "  2. Open Chrome → chrome://extensions → Developer Mode → Load unpacked\n"
+            "  3. Select the downloaded extension folder\n"
+            "  4. Make sure Chrome is running with the extension enabled\n"
+            "  5. Run: opencli daemon restart"
         )
     except ImportError:
-        return "[FAIL] friday.opencli not available."
+        return "[FAIL] opencli not available."
     except Exception as e:
         return f"[FAIL] OpenCLI init error: {e}"
 
@@ -2048,6 +2121,72 @@ def opencli_unbind() -> str:
         return f"[FAIL] Unbind error: {e}"
 
 
+def opencli_hover(target: str) -> str:
+    """Hover over a browser element."""
+    try:
+        from friday.opencli import opencli_hover
+        return opencli_hover(target)
+    except ImportError:
+        return "[FAIL] friday.opencli not available."
+    except Exception as e:
+        return f"[FAIL] Hover error: {e}"
+
+
+def opencli_focus(target: str) -> str:
+    """Focus a browser element."""
+    try:
+        from friday.opencli import opencli_focus
+        return opencli_focus(target)
+    except ImportError:
+        return "[FAIL] friday.opencli not available."
+    except Exception as e:
+        return f"[FAIL] Focus error: {e}"
+
+
+def opencli_dblclick(target: str) -> str:
+    """Double-click a browser element."""
+    try:
+        from friday.opencli import opencli_dblclick
+        return opencli_dblclick(target)
+    except ImportError:
+        return "[FAIL] friday.opencli not available."
+    except Exception as e:
+        return f"[FAIL] Dblclick error: {e}"
+
+
+def opencli_check(target: str) -> str:
+    """Check a checkbox/radio element."""
+    try:
+        from friday.opencli import opencli_check
+        return opencli_check(target)
+    except ImportError:
+        return "[FAIL] friday.opencli not available."
+    except Exception as e:
+        return f"[FAIL] Check error: {e}"
+
+
+def opencli_uncheck(target: str) -> str:
+    """Uncheck a checkbox/radio element."""
+    try:
+        from friday.opencli import opencli_uncheck
+        return opencli_uncheck(target)
+    except ImportError:
+        return "[FAIL] friday.opencli not available."
+    except Exception as e:
+        return f"[FAIL] Uncheck error: {e}"
+
+
+def opencli_drag(source: str, target: str) -> str:
+    """Drag one element to another."""
+    try:
+        from friday.opencli import opencli_drag
+        return opencli_drag(source, target)
+    except ImportError:
+        return "[FAIL] friday.opencli not available."
+    except Exception as e:
+        return f"[FAIL] Drag error: {e}"
+
+
 #  Workflow Automation Tool #
 
 def workflow_tool(action: str = "list", name: str = None, description: str = None, steps: str = None) -> str:
@@ -2168,6 +2307,116 @@ def github_review_pr(pr_number: int) -> str:
         return f"[FAIL] GitHub review error: {e}"
 
 
+def github_create_repo(name: str, description: str = "", private: bool = False) -> str:
+    """Create a new GitHub repository."""
+    try:
+        from friday.github import github_create_repo
+        return github_create_repo(name, description, private)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub create repo error: {e}"
+
+
+def github_list_issues(state: str = "open", labels: str = "") -> str:
+    """List issues in the GitHub repository."""
+    try:
+        from friday.github import github_list_issues
+        return github_list_issues(state, labels)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub list issues error: {e}"
+
+
+def github_create_issue(title: str, body: str = "", labels: str = "") -> str:
+    """Create a GitHub issue."""
+    try:
+        from friday.github import github_create_issue
+        return github_create_issue(title, body, labels)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub create issue error: {e}"
+
+
+def github_search_code(query: str, repo: str = "") -> str:
+    """Search code across GitHub repositories."""
+    try:
+        from friday.github import github_search_code
+        return github_search_code(query, repo)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub search code error: {e}"
+
+
+def github_merge_pr(pr_number: int, commit_title: str = "") -> str:
+    """Merge a GitHub pull request."""
+    try:
+        from friday.github import github_merge_pr
+        return github_merge_pr(pr_number, commit_title)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub merge PR error: {e}"
+
+
+def github_repo_info() -> str:
+    """Get GitHub repository information."""
+    try:
+        from friday.github import github_repo_info
+        return github_repo_info()
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub repo info error: {e}"
+
+
+def github_list_branches() -> str:
+    """List all branches in the GitHub repository."""
+    try:
+        from friday.github import github_list_branches
+        return github_list_branches()
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub list branches error: {e}"
+
+
+def github_commit_history(path: str = "", limit: int = 10) -> str:
+    """Get commit history for the GitHub repository."""
+    try:
+        from friday.github import github_commit_history
+        return github_commit_history(path, limit)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub commit history error: {e}"
+
+
+def github_authorize() -> str:
+    """Open GitHub OAuth authorization page in browser for Friday to access your repos."""
+    try:
+        from friday.github import github_authorize as _gh_auth
+        return _gh_auth()
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub authorize error: {e}"
+
+
+def github_exchange_code(device_code: str = "") -> str:
+    """Check GitHub auth status or manually poll with a device_code from a previous authorize call."""
+    try:
+        from friday.github import github_exchange_code as _gh_ex
+        return _gh_ex(device_code)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub code exchange error: {e}"
+
+
 #  Notification Tools #
 
 def send_notification(message: str, urgency: str = "normal", task_id: str = "") -> str:
@@ -2269,7 +2518,7 @@ __all__ = [
     "get_active_window",
     "click", "double_click", "right_click", "move_mouse", "drag",
     "hotkey", "press_key", "scroll",
-    "open_app", "close_app", "list_running_apps", "open_url",
+    "open_app", "close_app", "list_running_apps",     "open_url", "open_roblox_game", "open_microsoft_store",
     "spotify_play", "spotify_pause", "spotify_next", "spotify_prev", "spotify_volume", "spotify_current",
     "netflix_play",
     "google_authorize", "gmail_authorize", "exchange_oauth_code", "read_emails", "send_email", "draft_email",
@@ -2297,10 +2546,15 @@ __all__ = [
     "opencli_close", "opencli_wait_selector", "opencli_find",
     "opencli_get_url", "opencli_get_title", "opencli_network",
     "opencli_bind", "opencli_unbind",
+    "opencli_hover", "opencli_focus", "opencli_dblclick",
+    "opencli_check", "opencli_uncheck", "opencli_drag",
     "vector_memory_tool",
     "workflow_tool", "plugin_tool", "knowledge_graph_tool",
     "github_list_files", "github_read_file", "github_write_file",
     "github_create_branch", "github_create_pr", "github_self_modify", "github_review_pr",
+    "github_create_repo", "github_list_issues", "github_create_issue", "github_search_code",
+    "github_merge_pr", "github_repo_info", "github_list_branches", "github_commit_history",
+    "github_authorize", "github_exchange_code",
     "multi_agent_delegate", "message_channel_tool",
     "send_notification", "get_pending_notifications", "clear_notifications",
 ]

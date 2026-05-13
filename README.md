@@ -11,7 +11,7 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/hackers-reality/friday)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)]()
-[![Version](https://img.shields.io/badge/Version-1.2.0-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases/tag/v1.2.0)
+[![Version](https://img.shields.io/badge/Version-1.3.0-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases/tag/v1.3.0)
 
 ---
 
@@ -92,31 +92,36 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 🖥️ Desktop Automation & Control
 | Feature | Status | Details |
 |---------|--------|---------|
-| Mouse & keyboard control | ✅ Working | pyautogui-based via `friday_tools.py` |
-| App launching & closing | ✅ Working | `open_app()`, `close_app()` |
-| Spotify control | ✅ Working (Web API + keyboard fallback) | Full Spotify API (Client ID + Secret) — search, play, queue, volume |
+| Mouse & keyboard control | ✅ Working | pyautogui-based via `friday/tools.py` |
+| App launching & closing | ✅ Working | `open_app()`, `close_app()` — system discovery chain |
+| Spotify control | ✅ Working (Web API + keyboard fallback) | Full Spotify API — search, play, queue, volume |
 | Netflix/streaming control | 🔧 In Progress | Vision-based navigation |
-| File system access | ✅ Working | With authority checks |
-| RPA workflows | ✅ Working | `friday_automation.py` |
-| Game launching | 🔧 In Progress | e.g., "Play Bloxfruits on Roblox" |
+| File system access | ✅ Working | With `run_cmd` + system access |
+| Roblox launcher | ✅ Working | Web search place ID → `roblox://` URI |
+| Microsoft Store launcher | ✅ Working | `ms-windows-store://` URI |
+| Windows Clock (alarms, timers, stopwatch, reminders, focus) | ✅ Working | Persistent clock state, background thread scheduling, native notifications |
 
 ### 🌐 Browser Integration
 | Feature | Status | Details |
 |---------|--------|---------|
-| Cross-browser history search | ✅ Working | Chrome, Brave, Edge, Opera SQLite |
+| Cross-browser history search | ✅ Working | Chrome, Brave, Edge, Opera SQLite (3650 days, 10000 limit) |
 | History-based recall & open | ✅ Working | "Open that Jarvis repo I was looking at" |
-| OpenCLI browser automation | ✅ Working | CDP-based + `@jackwener/opencli` |
-| Browser navigation by voice | ✅ Working | Opens URLs, searches |
+| OpenCLI browser automation | ✅ Working | v1.7.18, `--session default`, persistent headless Chrome session |
+| OpenCLI bind approach | ✅ Working | Opens URL via Chrome then `bind` — avoids automation window hang |
+| Browser navigation by voice | ✅ Working | Opens URLs, searches, page interaction |
 
 ### 🎯 Goals & Productivity Enforcement
 | Feature | Status | Details |
 |---------|--------|---------|
-| Goal tracking & persistence | ✅ Working | `goal_memory.py` + `friday_memory/goals.json` |
-| Course/deadline tracking | ✅ Working | Monitors browser history for progress |
+| Goal tracking & persistence | ✅ Working | `friday/goals.py` + `friday_memory/goals.json` |
+| Course/deadline tracking | ✅ Working | URL, deadline, description, verification method |
+| OKR scoring engine | ✅ Working | `progress*0.5 + streak*0.3 + time_factor*0.2` |
+| Morning plan + evening review | ✅ Working | Auto-advances streaks, flags gaps |
 | Google Calendar integration | ✅ Working | List events + sync to goals via `calendar_tool_handler` |
-| Escalating intervention system | ✅ Working | Scolding counts + enforcement actions |
+| Escalating intervention (4 levels) | ✅ Working | L1:warn → L2:close → L3:URL+lock → L4:escalate |
 | Tab closing enforcement | ✅ Working | Closes distracting tabs, reopens course URL |
-| StayFree integration | ✅ Working | Reads local usage data, triggers blocks |
+| StayFree integration | ✅ Working | Reads local usage data (4 extension IDs, Edge/Brave/Chrome), process fallback |
+| Knowledge graph auto-extraction | ✅ Working | Post-tool hook extracts entities + relationships |
 
 ### 📬 Communication & Messaging
 | Feature | Status | Details |
@@ -129,22 +134,25 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 🤖 AI & LLM
 | Feature | Status | Details |
 |---------|--------|---------|
-| Gemini Live (primary) | ✅ Working | Cloud-hosted, real-time audio (only LLM supported right now) |
-| Other LLMs (Claude, GPT, Groq, Ollama) | 🔧 Coming Soon | Use Gemini API key for now |
-| Multi-LLM switching | 📋 Planned | `llm_manager.py` — coming soon |
-| LangGraph orchestration | 🔧 In Progress | `friday_langgraph.py` (syntax fixed) |
-| Deep research analysis | ✅ Working | Real-time web research + reports |
-| Self-modifying code | 🔧 In Progress | `self_modification.py` |
+| Gemini Live (primary) | ✅ Working | Cloud-hosted, real-time audio + native video feed |
+| Multi-LLM switching | 📋 Deferred | Incompatible with Live WebSocket — postponed |
+| LangGraph orchestration | 🔧 In Progress | `friday/reasoning.py` — reasoning engine promoted from archive |
+| Research tool | ✅ Working | `friday/research.py` — real-time web research + reports |
+| Reasoning engine | ✅ Working | `friday/reasoning.py` — multi-step reasoning |
+| Self-modifying code | 🔧 In Progress | `friday/github.py` — GitHub API-based self-modification |
+| Multi-agent delegation (9 roles) | ✅ Working | Same roster as Jarvis — research, coding, reasoning, etc. |
+| KYU personality adaptation | ✅ Working | 4-stage interview → preference learning → system prompt injection |
 
 ### 🧠 Memory & User Understanding
 | Feature | Status | Details |
 |---------|--------|---------|
 | Cross-chatbot history import | ✅ Working | Import chats from Claude, ChatGPT, Gemini — Friday reads and learns from them |
 | Preference extraction | ✅ Working | Parses imported conversations to build a user profile: likes, dislikes, habits, tone |
-| Personality adaptation | ✅ Working | Friday adjusts how she speaks based on your learned profile — no cold starts |
-| Persistent memory vault | 🔧 In Progress | `vector_memory.py` — stores facts, preferences, patterns across sessions |
-| Semantic memory search | 🔧 In Progress | Pulls relevant past context before every response |
-| Knowledge vault | 🔧 In Progress | Combined LLM knowledge + everything Friday has learned about you |
+| KYU personality adaptation | ✅ Working | 4-stage interview → preference learning → `kyu_adapt()` → system prompt |
+| Persistent memory vault | ✅ Working | `friday/vector_memory.py` — ChromaDB-based semantic memory |
+| Knowledge graph | ✅ Working | `friday/knowledge_graph.py` — auto-extracts entities after every tool call |
+| Semantic memory search | ✅ Working | Pulls relevant past context before every response |
+| Memory import tool handler | ✅ Working | Processes chat exports into user profile + knowledge graph |
 
 
 ### 📄 File Generation
@@ -176,73 +184,88 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ## Architecture
 
 ```
-D:\F.R.I.D.A.Y\
+E:\F.R.I.D.A.Y\
 │
-├── friday_live.py          ← PRIMARY ENTRY POINT
-│   ├── Gemini Live session (native audio)
-│   ├── keepalive_task() — prevents GOAWAY timeout
-│   ├── background_monitor() — screen watcher loop
-│   └── execute_tool() — routes voice commands to tools
+├── friday.py               ← PRIMARY ENTRY POINT (with 5x auto-restart loop)
 │
-├── friday_tools.py         ← TOOL EXECUTION ENGINE
-│   ├── Desktop automation (mouse, keyboard, apps)
-│   ├── Browser control (OpenCLI + CDP)
-│   ├── File operations
-│   ├── Spotify, Netflix, email, Instagram
-│   └── vision_click() — Gemini Vision-grounded clicking
+├── friday/                 ← CORE PACKAGE (all modules)
+│   ├── live.py             ← Main engine: Gemini Live session, 120+ tool declarations, TOOL_MAP
+│   │   ├── Gemini Live audio/video (native WebSocket)
+│   │   ├── keepalive_task() — prevents GOAWAY timeout
+│   │   ├── _build_session_config() — system prompt with FRIDAY identity
+│   │   └── Audio playback (jitter buffer, 4800 frames_per_buffer)
+│   │
+│   ├── tools.py            ← 120+ tool implementations (bridge to all modules)
+│   │   ├── Desktop automation (mouse, keyboard, apps)
+│   │   ├── Browser control (OpenCLI bind approach)
+│   │   ├── File operations (generate, search, open)
+│   │   ├── Spotify, Netflix, email, Instagram, Roblox, MS Store
+│   │   └── GitHub (9+ operations), Clock, Goals, KYU, Research
+│   │
+│   ├── opencli.py          ← OpenCLI v1.7.18 wrapper (session-based browser automation)
+│   │   ├── browser: navigate (bind), click, type, fill, extract, screenshot, scroll
+│   │   ├── tabs: list, new, select, close
+│   │   ├── site adapters: hackernews, reddit, twitter, 100+ more
+│   │   └── bind/unbind to existing Chrome tab
+│   │
+│   ├── github.py           ← GitHub API + OAuth Device Flow
+│   │   ├── 20+ operations (read/write files, branches, PRs, issues, search, repos)
+│   │   ├── Device Flow OAuth (no redirect server needed)
+│   │   └── PR review with Gemini AI
+│   │
+│   ├── goals.py            ← Goal/OKR system
+│   │   ├── OKR scoring: progress*0.5 + streak*0.3 + time_factor*0.2
+│   │   ├── 4-level progressive enforcement (L1-L4)
+│   │   └── Morning plan + evening review
+│   │
+│   ├── clock.py            ← Windows Clock (alarms, timers, stopwatch, reminders, focus)
+│   │
+│   ├── stayfree.py         ← StayFree screen time (4 extension IDs, Edge/Brave, process fallback)
+│   │
+│   ├── gmail.py            ← Gmail + Calendar (unified OAuth via google_authorize)
+│   │
+│   ├── web.py              ← Browser history search (3650 days, 10000 limit)
+│   │
+│   ├── kyu.py              ← KYU personality adaptation (4-stage interview)
+│   │
+│   ├── knowledge_graph.py  ← Auto-extracts entities + relationships post-tool
+│   │
+│   ├── multi_agent.py      ← 9-role multi-agent delegation
+│   │
+│   ├── research.py         ← Autonomous web research
+│   │
+│   ├── reasoning.py        ← Multi-step reasoning engine
+│   │
+│   ├── hooks.py            ← Pre/post/error tool hooks (KG extraction, logging)
+│   │
+│   ├── notify.py           ← Desktop toast notifications
+│   │
+│   ├── vector_memory.py    ← ChromaDB semantic memory
+│   │
+│   ├── _paths.py           ← Centralized path resolution
+│   │
+│   └── workflow.py         ← Workflow engine
+│       └── plugin.py       ← Plugin system
 │
-├── friday_vision.py        ← VISION PIPELINE
-│   ├── Screen capture (mss + PIL)
-│   ├── Gemini Vision analysis
-│   ├── vision_find_element() — locates UI elements
-│   ├── vision_describe_screen() — proactive commentary
-│   └── OCR, QR, face detection
+├── archive/                ← 23 experiment modules (available for promotion)
 │
-├── friday_automation.py    ← RPA & BROWSER AUTOMATION
-│   ├── BrowserAutomation (Selenium/Playwright)
-│   ├── FileAutomation (batch ops, organizer)
-│   ├── SystemAutomation (commands, scheduler)
-│   └── RPA workflow engine
-│
-├── opencli_integration.py  ← BROWSER CONTROL
-│   ├── Real @jackwener/opencli binary calls
-│   ├── Instagram DM via OpenCLI
-│   └── CDP fallback
-│
-├── goal_memory.py          ← GOAL & PRODUCTIVITY SYSTEM
-│   ├── Persistent goal storage (friday_memory/goals.json)
-│   ├── Browser history cross-reference
-│   ├── Escalating scolding (levels 0-3)
-│   └── Tab enforcement
-│
-├── browser_history_tools.py ← HISTORY SEARCH
-│   ├── Chrome, Brave, Edge, Opera SQLite reading
-│   ├── Fuzzy search across all browsers
-│   └── find_repo_in_history()
-│
-├── llm_manager.py          ← MULTI-LLM SWITCHER
-│   ├── Gemini, Claude, GPT, Groq, Ollama
-│   └── Auto-detects available keys
-│
-├── proactive_screen_monitor.py ← BACKGROUND WATCHER
-│   ├── Screenshot every 30s
-│   ├── Gemini Vision analysis
-│   └── Unsolicited commentary engine
-│
-├── stayfree_bridge.py      ← STAYFREE INTEGRATION
-│   ├── Reads local StayFree data files
-│   ├── Chrome extension storage bridge
-│   └── Goal enforcement + site blocking
-│
-├── friday_langgraph.py     ← AGENT ORCHESTRATION
-│   └── LangGraph-based multi-step reasoning
-│
-├── friday_memory/          ← PERSISTENT MEMORY
+├── friday_memory/          ← RUNTIME DATA (gitignored)
 │   ├── goals.json
-│   ├── memory.json
-│   └── research_history/
+│   ├── clock_state.json
+│   ├── kyu_profile.json
+│   ├── knowledge_graph.json
+│   ├── chroma_db/
+│   ├── workflow/
+│   └── .gitkeep
 │
-└── friday_reports/         ← GENERATED REPORTS
+├── friday.py               ← Root launcher
+├── friday.cmd              ← Windows Command Prompt launcher
+├── friday.ps1              ← PowerShell launcher
+│
+├── .env                    ← API keys (gitignored)
+├── credentials.json        ← Google OAuth client (gitignored)
+├── .gmail_token.json       ← Gmail+Calendar token (gitignored)
+└── .github_token.json      ← GitHub OAuth token (gitignored)
 ```
 
 ---
@@ -342,7 +365,11 @@ HOME_ASSISTANT_URL=http://homeassistant.local:8123
 HA_TOKEN=your_long_lived_access_tOKen
 
 # GitHub (optional) — enables code/PR tools
+# Option 1: Personal Access Token
 GITHUB_TOKEN=your_github_personal_access_tOKen
+# Option 2: OAuth App (Device Flow — recommended)
+GITHUB_CLIENT_ID=your_oauth_client_id
+GITHUB_CLIENT_SECRET=your_oauth_client_secret
 GITHUB_REPO=owner/repo_name
 ```
 
@@ -460,29 +487,27 @@ Friday responds to natural language. No rigid syntax required.
 
 | File | Purpose |
 |------|---------|
-| `friday_live.py` | Primary entry point. Gemini Live session, keepalive, tool routing |
-| `friday_tools.py` | All tool implementations — desktop, browser, files, media |
-| `friday_vision.py` | Vision pipeline — capture, Gemini analysis, click targeting |
-| `friday_automation.py` | RPA engine, Selenium/Playwright browser automation |
-| `opencli_integration.py` | OpenCLI binary wrapper for browser control |
-| `browser_history_tools.py` | Cross-browser SQLite history reader |
-| `goal_memory.py` | Goal tracking, persistence, enforcement |
-| `proactive_screen_monitor.py` | Background screen watcher + commentary |
-| `stayfree_bridge.py` | StayFree screen time data reader |
-| `llm_manager.py` | Multi-LLM provider switcher |
-| `friday_langgraph.py` | LangGraph agent orchestration |
-| `friday_gmail.py` | Gmail read/draft/send |
-| `instagram_messenger.py` | Instagram DM via OpenCLI |
-| `alexa_webhoOK_server.py` | Alexa integration webhoOK |
-| `file_generator.py` | Universal file generation via LLM |
-| `startup_integration.py` | Windows Task Scheduler startup registration |
-| `self_modification.py` | Self-editing toolkit |
-| `vector_memory.py` | Semantic memory with vector search |
-| `friday_scheduler.py` | Recurring task scheduler |
-| `desktop_app.py` | Dashboard UI (in progress) |
-| `friday_config.py` | Configuration management |
-| `friday_security.py` | Security scanning tools |
-| `screen_watcher.py` | Active window detection |
+| `friday.py` | Root entry point. Gemini Live session launch with 5x auto-restart |
+| `friday/live.py` | Main engine. 120+ tool declarations, TOOL_MAP, audio playback, system prompt |
+| `friday/tools.py` | 120+ tool bridge functions — desktop, browser, files, GitHub, clock, goals, etc. |
+| `friday/opencli.py` | OpenCLI v1.7.18 wrapper — session-based browser automation + site adapters |
+| `friday/github.py` | GitHub API (20+ ops) + Device Flow OAuth + AI PR review |
+| `friday/goals.py` | Goal tracking, OKR scoring, 4-level progressive enforcement |
+| `friday/clock.py` | Windows Clock — alarms, timers, stopwatch, reminders, focus mode |
+| `friday/stayfree.py` | StayFree screen time detection (multi-browser, multi-extension) |
+| `friday/gmail.py` | Gmail read/draft/send + Calendar + unified Google OAuth |
+| `friday/web.py` | Cross-browser SQLite history search |
+| `friday/kyu.py` | KYU personality adaptation — 4-stage interview + preference learning |
+| `friday/knowledge_graph.py` | Auto-extracts entities + relationships after every tool call |
+| `friday/multi_agent.py` | 9-role multi-agent delegation system |
+| `friday/research.py` | Autonomous web research + report generation |
+| `friday/reasoning.py` | Multi-step reasoning engine |
+| `friday/hooks.py` | Pre/post/error tool hooks (knowledge graph, logging) |
+| `friday/notify.py` | Desktop toast notifications |
+| `friday/vector_memory.py` | ChromaDB semantic memory |
+| `friday/_paths.py` | Centralized path resolution |
+| `friday/workflow.py` | RPA workflow engine |
+| `friday/plugin.py` | Plugin system |
 
 ---
 
@@ -516,11 +541,33 @@ Friday responds to natural language. No rigid syntax required.
 - [x] Google Calendar integration
 - [x] Windows startup (Task Scheduler)
 - [x] Semantic memory (vector search with ChromaDB)
-- [x] Self-modification system (safety-validated code editing)
+- [x] Self-modification system (GitHub API-based code editing)
 - [x] LangGraph orchestration (graph-based agent routing)
-- [ ] Multi-LLM switching (skipped — Gemini Live is the primary interface)
+- [ ] Multi-LLM switching (deferred — incompatible with Live WebSocket)
 
-### v2.0 — Desktop App 🚀
+### v1.3 — Full Autonomy 🚀
+- [x] Package reorganization (`friday/` package, `archive/` cleanup)
+- [x] 120+ tools (up from 60)
+- [x] OKR scoring engine (`progress*0.5 + streak*0.3 + time_factor*0.2`)
+- [x] 4-level progressive goal enforcement (L1 warn → L4 escalate)
+- [x] Morning plan + evening review auto-advancement
+- [x] StayFree extended detection (4 extension IDs, Edge/Brave paths, process fallback)
+- [x] Windows Clock integration (alarms, timers, stopwatches, reminders, focus mode)
+- [x] GitHub OAuth Device Flow (no redirect server, polling-based)
+- [x] GitHub 20+ API operations (create repo, issues, PR merge, search, branches, etc.)
+- [x] Roblox + Microsoft Store URI launchers
+- [x] OpenCLI v1.7.18 + bind approach (fixes `browser open` hang)
+- [x] KYU personality adaptation (4-stage interview → preference learning)
+- [x] 9-role multi-agent delegation (same as Jarvis roster)
+- [x] Knowledge graph auto-extraction (post-tool hook)
+- [x] Research + Reasoning engines promoted from archive
+- [x] FRIDAY identity system prompt (she/her, witty, full autonomy)
+- [x] Tool-call ceiling removed (all calls execute)
+- [x] Audio crackling fixed (4800 frames_per_buffer, jitter buffer)
+- [x] 1008 GoAway reconnection fixed (removed `pa.terminate()`)
+- [x] Centralized path resolution (`friday/_paths.py`)
+
+### v2.0 — Desktop App 🌟
 - [ ] Native Windows app (PyQt6 or Tauri)
 - [ ] Dark neon dashboard UI
 - [ ] Settings panel with key vault
@@ -560,14 +607,16 @@ git push origin feature/your-feature-name
 
 | Issue | Status | Workaround |
 |-------|--------|------------|
-| Gemini GOAWAY timeout on long idle | Fixed | keepalive_task() sends ping every 45s |
+| Gemini GOAWAY timeout on long idle | Fixed | keepalive_task() pings every 45s |
+| Gemini 1008 GoAway on long tool sequences | Mitigated | Tool-ceiling removed; user accepts risk |
 | Chrome SQLite locked when browser open | Fixed | Copy to temp before reading |
 | pyautogui coordinates break on resolution change | In Progress | Use vision_click() instead |
-| friday_langgraph.py syntax errors | Fixed | Trailing quotes removed |
-| OpenCLI not installed (autocli.exe mistake) | Fixed | `npm install -g @jackwener/opencli` |
+| OpenCLI `browser open <url>` hangs on Windows | Fixed | Now opens via `webbrowser` + `bind` instead |
 | Spotify "No active device" error | In Progress | Open Spotify app first, then retry |
 | See_screen Gemini API 429 (rate limit) | Workaround | Falls back to Gemini 1.5 Flash automatically |
-| close_app fails if process name has wrong extension | Fixed | Now tries both with/without .exe suffix |
+| SDK bug: `send_realtime_input` raises `ValueError` with >1 arg | Known | Only passes one argument at a time |
+| SyncMutex lock_async log noise | Cosmetic | Non-fatal, safe to ignore |
+| Audio crackling on long sessions | Fixed | 4800 frames_per_buffer + jitter buffer |
 
 ---
 

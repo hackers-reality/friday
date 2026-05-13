@@ -119,9 +119,9 @@ def clock_alarm(action: str = "list", time_str: str = None, label: str = None, a
 
 
 def clock_timer(action: str = "status", minutes: int = None, seconds: int = None, label: str = None, timer_id: str = None) -> str:
-    """Manage countdown timers. Actions: start, status, stop."""
+    """Manage countdown timers. Actions: start/set, status, stop."""
     state = _load()
-    if action == "start":
+    if action in ("start", "set"):
         total_minutes = (minutes or 0) + (seconds or 0) / 60.0
         if total_minutes < 1 / 60.0:  # less than 1 second
             return "[FAIL] Duration required — specify minutes, seconds, or both."

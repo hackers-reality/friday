@@ -81,6 +81,12 @@ from friday.tools import (
     opencli_close, opencli_wait_selector, opencli_find,
     opencli_get_url, opencli_get_title, opencli_network,
     opencli_bind, opencli_unbind,
+    opencli_hover, opencli_focus, opencli_dblclick,
+    opencli_check, opencli_uncheck, opencli_drag,
+    open_roblox_game, open_microsoft_store,
+    github_create_repo, github_list_issues, github_create_issue, github_search_code,
+    github_merge_pr, github_repo_info, github_list_branches, github_commit_history,
+    github_authorize, github_exchange_code,
     search_browser_history, open_history_item, tell_alexa,
     spotify_next, spotify_prev, spotify_volume,
     send_instagram_dm, netflix_play, google_authorize, gmail_authorize, exchange_oauth_code, read_emails, send_email,
@@ -314,6 +320,22 @@ OpenCLI Site Adapters:
 - opencli_run("twitter trending --limit 5") — Twitter/X
 - opencli_list_adapters() — discover all site adapters
 
+[PROACTIVE CHECKS — DO NOT CONSTANTLY CHECK THE TIME]
+When you have initiative (idle, starting up, between tasks):
+1. Check email for important/starred messages from key contacts
+2. Check calendar for upcoming events today
+3. Check goals/OKR progress and due dates
+4. Check notifications queue
+5. Check system state (battery, updates, etc.)
+
+DO NOT call get_time() repeatedly. The time display is already visible. If you need
+a time reference for context, check ONCE — then move on to actually useful tasks.
+Your job is to proactively serve, not to be a clock.
+
+[BASIC INFO]
+- Boss name: Arnav
+- Boss email: phulariarnav@gmail.com
+
 [BREVITY]
 Short responses. One or two sentences for spoken text.
 Boss does not want essays. Get to the point.
@@ -362,35 +384,44 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
     )
     had_audio = False
     empty_cycles = 0
+    jitter_buffer = []
+    UNDERFLOW_GUARD = 5  # chunks to pre-fill before starting playback
     try:
         while not _audio_playback_stop.is_set():
+            while len(jitter_buffer) < UNDERFLOW_GUARD and not _audio_playback_stop.is_set():
+                try:
+                    chunk = _audio_playback_queue.get(timeout=0.2)
+                    if chunk is None:
+                        break
+                    jitter_buffer.append(chunk)
+                except _thread_queue.Empty:
+                    break
             try:
-                chunk = _audio_playback_queue.get(timeout=0.5)
+                chunk = jitter_buffer.pop(0) if jitter_buffer else _audio_playback_queue.get(timeout=0.2)
                 if chunk is None:
                     break
                 if not had_audio:
                     had_audio = True
                     _mic_muted.set()
-                stream.write(chunk)
+                stream.write(chunk, exception_on_underflow=False)
                 global _is_ducked, last_audio_time
                 if not _is_ducked:
                     _is_ducked = True
                     set_audio_ducking(True)
                 last_audio_time = time.time()
                 empty_cycles = 0
-            except _thread_queue.Empty:
-                # Queue empty — check if we can unmute
+            except (_thread_queue.Empty, IndexError):
                 if had_audio:
                     empty_cycles += 1
-                    # Unmute after 3 consecutive empty polls (1.5s silence)
-                    # AND only if model turn is done (no more chunks coming)
-                    if empty_cycles >= 3 and _model_turn_done.is_set():
+                    if empty_cycles >= 4 and _model_turn_done.is_set():
                         had_audio = False
                         empty_cycles = 0
+                        jitter_buffer.clear()
                         _mic_muted.clear()
                         set_audio_ducking(False)
                 continue
     finally:
+        jitter_buffer.clear()
         _mic_muted.clear()
         _model_turn_done.clear()
         stream.stop_stream()
@@ -519,10 +550,25 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="open_url",
-                description="Open a URL in the browser.",
+                description="Open a URL in the browser or launch a URI scheme (roblox://, ms-windows-store://).",
                 parameters=types.Schema(type="OBJECT", properties={
                     "url": {"type": "STRING", "description": "URL to open."}
                 }, required=["url"]),
+            ),
+            types.FunctionDeclaration(
+                name="open_roblox_game",
+                description="Search for a Roblox game by name and open it via roblox:// URI.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "game_name": {"type": "STRING", "description": "Name of the Roblox game to open."}
+                }, required=["game_name"]),
+            ),
+            types.FunctionDeclaration(
+                name="open_microsoft_store",
+                description="Open Microsoft Store via ms-windows-store:// URI. Search for apps or open a specific product.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "query": {"type": "STRING", "description": "Search query for apps."},
+                    "product_id": {"type": "STRING", "description": "Product ID to open directly."}
+                }),
             ),
             types.FunctionDeclaration(
                 name="run_cmd",
@@ -919,6 +965,49 @@ def _build_tools():
                 description="Unbind from the current Chrome tab."
             ),
             types.FunctionDeclaration(
+                name="opencli_hover",
+                description="Hover over a browser element.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Element selector to hover."}
+                }, required=["target"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_focus",
+                description="Focus a browser element.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Element selector to focus."}
+                }, required=["target"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_dblclick",
+                description="Double-click a browser element.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Element selector to double-click."}
+                }, required=["target"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_check",
+                description="Check a checkbox/radio browser element.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Checkbox/radio selector to check."}
+                }, required=["target"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_uncheck",
+                description="Uncheck a checkbox/radio browser element.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Checkbox/radio selector to uncheck."}
+                }, required=["target"]),
+            ),
+            types.FunctionDeclaration(
+                name="opencli_drag",
+                description="Drag one browser element to another.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "source": {"type": "STRING", "description": "Source element selector to drag."},
+                    "target": {"type": "STRING", "description": "Target element selector to drop on."}
+                }, required=["source", "target"]),
+            ),
+            types.FunctionDeclaration(
                 name="vision_click",
                 description="Find and click an element on screen by describing it (e.g. 'the submit button', 'the play icon'). Uses Gemini Vision to locate it and clicks the coordinates.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1129,7 +1218,11 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="clock_tool",
-                description="Windows Clock: alarms, timers, stopwatches, reminders, focus mode. Actions: status, open, alarm, timer, stopwatch, reminder, focus. Use sub= for sub-actions (set, list, delete, start, stop, lap, reset).",
+                description="Windows Clock: alarms, timers, stopwatches, reminders, focus mode. "
+                            "Actions: status (show all), open (launch Clock app), alarm (sub=set/list/delete), "
+                            "timer (sub=start/set/status/stop), stopwatch (sub=start/stop/lap/reset), "
+                            "reminder (sub=set/list/delete), focus (sub=start/stop). "
+                            "Example: timer sub=start seconds=20 for a 20s timer.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "action": {"type": "STRING", "description": "Action: status, open, alarm, timer, stopwatch, reminder, focus."},
                     "sub": {"type": "STRING", "description": "Sub-action: set, list, delete, start, stop, lap, reset, done."},
@@ -1249,6 +1342,75 @@ def _build_tools():
                     "new_content": {"type": "STRING", "description": "New file content."},
                     "commit_msg": {"type": "STRING", "description": "Commit message (default: 'Self-modification by Friday')."},
                 }, required=["file_path", "new_content"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_create_repo",
+                description="Create a new GitHub repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "name": {"type": "STRING", "description": "Repository name."},
+                    "description": {"type": "STRING", "description": "Repository description."},
+                    "private": {"type": "BOOLEAN", "description": "Whether the repo is private (default false)."},
+                }, required=["name"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_list_issues",
+                description="List issues in the GitHub repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "state": {"type": "STRING", "description": "Issue state: open, closed, all (default open)."},
+                    "labels": {"type": "STRING", "description": "Comma-separated labels to filter by."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="github_create_issue",
+                description="Create a GitHub issue.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "title": {"type": "STRING", "description": "Issue title."},
+                    "body": {"type": "STRING", "description": "Issue body/description."},
+                    "labels": {"type": "STRING", "description": "Comma-separated labels."},
+                }, required=["title"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_search_code",
+                description="Search code across GitHub repositories.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "query": {"type": "STRING", "description": "Search query."},
+                    "repo": {"type": "STRING", "description": "Optional: restrict to a specific repo (owner/repo)."},
+                }, required=["query"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_merge_pr",
+                description="Merge a GitHub pull request.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "pr_number": {"type": "INTEGER", "description": "Pull request number to merge."},
+                    "commit_title": {"type": "STRING", "description": "Optional commit title for the merge."},
+                }, required=["pr_number"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_repo_info",
+                description="Get information about the GitHub repository."
+            ),
+            types.FunctionDeclaration(
+                name="github_list_branches",
+                description="List all branches in the GitHub repository."
+            ),
+            types.FunctionDeclaration(
+                name="github_commit_history",
+                description="Get commit history for the GitHub repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path": {"type": "STRING", "description": "Optional: file path to get history for a specific file."},
+                    "limit": {"type": "INTEGER", "description": "Number of commits to return (default 10)."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="github_authorize",
+                description="Start GitHub Device Flow authorization. Gives the user a code to enter at github.com/login/device. Blocks up to 5 minutes until they authorize."
+            ),
+            types.FunctionDeclaration(
+                name="github_exchange_code",
+                description="Check GitHub auth status or manually poll with a device_code.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "device_code": {"type": "STRING", "description": "Optional device_code from github_authorize to poll. Leave empty to check saved token status."},
+                }),
             ),
             # ======== MULTI-AGENT DELEGATION ========
             # ======== NOTIFICATIONS ========
@@ -1402,6 +1564,14 @@ TOOL_MAP = {
     "opencli_network": opencli_network,
     "opencli_bind": opencli_bind,
     "opencli_unbind": opencli_unbind,
+    "opencli_hover": opencli_hover,
+    "opencli_focus": opencli_focus,
+    "opencli_dblclick": opencli_dblclick,
+    "opencli_check": opencli_check,
+    "opencli_uncheck": opencli_uncheck,
+    "opencli_drag": opencli_drag,
+    "open_roblox_game": open_roblox_game,
+    "open_microsoft_store": open_microsoft_store,
     "workflow_tool": workflow_tool,
     "plugin_tool": plugin_tool,
     "knowledge_graph_tool": knowledge_graph_tool,
@@ -1412,6 +1582,16 @@ TOOL_MAP = {
     "github_create_pr": github_create_pr,
     "github_self_modify": github_self_modify,
     "github_review_pr": github_review_pr,
+    "github_create_repo": github_create_repo,
+    "github_list_issues": github_list_issues,
+    "github_create_issue": github_create_issue,
+    "github_search_code": github_search_code,
+    "github_merge_pr": github_merge_pr,
+    "github_repo_info": github_repo_info,
+    "github_list_branches": github_list_branches,
+    "github_commit_history": github_commit_history,
+    "github_authorize": github_authorize,
+    "github_exchange_code": github_exchange_code,
     "multi_agent_delegate": multi_agent_delegate,
     "kyu_tool_handler": kyu_tool_handler,
     "research_tool_handler": research_tool_handler,
@@ -1957,7 +2137,6 @@ async def friday_live_engine():
                                 await asyncio.wait_for(asyncio.shield(t), timeout=2.0)
                             except (asyncio.CancelledError, asyncio.TimeoutError):
                                 pass
-                        pa.terminate()
 
             except KeyboardInterrupt:
                 console.print("\n[bold cyan]Neural link severed. Goodbye, Boss.[/]")
