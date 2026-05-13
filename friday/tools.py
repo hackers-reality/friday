@@ -277,11 +277,19 @@ def scroll(amount: int) -> str:
         return f"[FAIL] Scroll error: {e}"
 
 def open_app(name: str) -> str:
-    """Open ANY application by name using system discovery. No hardcoded paths."""
-    import subprocess
-    import os
+    """Open ANY application or URI scheme by name. No hardcoded paths."""
+    import subprocess, os
 
     name = name.strip().strip('"').strip("'")
+
+    # Strategy 0: URI scheme (contains : like ms-clock:, mailto:, roblox://)
+    # Use Start-Process which handles URI schemes correctly
+    if ":" in name and not name.startswith(("C:\\", "D:\\", os.path.expanduser("~"))):
+        try:
+            subprocess.run(["powershell", "-NoProfile", "Start-Process", name], timeout=10)
+            return f"[OK] Opening URI: {name}"
+        except Exception:
+            pass
 
     # Strategy 1: Try `start` with the name directly (Windows resolves through PATH and App Paths)
     try:
@@ -313,13 +321,12 @@ def open_app(name: str) -> str:
         except Exception:
             pass
 
-    # Strategy 4: Try `start` with shell URI schemes (ms-settings:, mailto:, etc.)
-    if ":" not in name:
-        try:
-            subprocess.run(f"start \"\" \"{name}\"", shell=True, timeout=10)
-            return f"[OK] Opening: {name}"
-        except Exception:
-            pass
+    # Strategy 4: Try `start` as final fallback
+    try:
+        subprocess.run(f"start \"\" \"{name}\"", shell=True, timeout=10)
+        return f"[OK] Opening: {name}"
+    except Exception:
+        pass
 
     return f"[FAIL] Could not find '{name}'. Make sure it's installed and in your PATH."
 
