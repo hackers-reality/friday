@@ -449,9 +449,7 @@ def open_url(url: str) -> str:
 
 def open_roblox_game(game_name: str) -> str:
     """Search Roblox API for a game by name (fuzzy match), find its place ID, then open via roblox:// URI. Never opens a browser."""
-    import urllib.parse, re, subprocess, difflib, requests
-    from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
+    import urllib.parse, uuid, subprocess, difflib, requests
 
     def _launch(place_id: str, name: str) -> str:
         try:
@@ -464,78 +462,73 @@ def open_roblox_game(game_name: str) -> str:
             except Exception as e:
                 return f"[FAIL] Could not launch Roblox: {e}"
 
-    def _search_api(keyword: str, limit: int = 20) -> list:
-        """Query the Roblox games API and return list of (name, place_id)."""
+    def _search_api(keyword: str) -> list:
+        """Query apis.roblox.com/search-api/omni-search and return (name, rootPlaceId) tuples."""
         session = requests.Session()
-        retries = Retry(total=2, backoff_factor=0.5)
-        session.mount("https://", HTTPAdapter(max_retries=retries))
+        sid = str(uuid.uuid4())
         try:
             r = session.get(
-                f"https://games.roblox.com/v1/games/search?keyword={urllib.parse.quote(keyword)}&limit={limit}",
-                timeout=8,
+                f"https://apis.roblox.com/search-api/omni-search?searchQuery={urllib.parse.quote(keyword)}&sessionId={sid}&pageType=all",
+                timeout=10,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
             )
             if r.status_code == 200:
-                return [(g.get("name", ""), str(g.get("placeId", ""))) for g in r.json().get("data", []) if g.get("placeId")]
+                results = []
+                for group in r.json().get("searchResults", []):
+                    for item in group.get("contents", []):
+                        pid = item.get("rootPlaceId") or item.get("placeId")
+                        name = item.get("name", "")
+                        if pid and name:
+                            results.append((name, str(pid)))
+                return results
         except Exception:
             pass
         return []
 
-    # Generate progressive keyword variants for fuzzy matching
-    keywords = [game_name]
-    # If there's a clear typo, try common corrections
+    # Generate keyword variants for fuzzy matching
     lowered = game_name.lower().strip()
-    # Remove common stop words
+    keywords = [game_name]
+    # Remove stop words
     for stop in ["the", "a", "an", "on", "in", "of", "for"]:
         if lowered.startswith(stop + " ") or lowered.endswith(" " + stop):
             keywords.append(lowered.replace(stop, "").strip())
-    # Try removing vowels for consonant-skeleton matching (handles swapped vowels)
-    import unicodedata
-    no_vowels = "".join(c for c in lowered if c not in "aeiou ")
-    if no_vowels and len(no_vowels) > 2:
-        keywords.append(no_vowels)
-    # Add a generic roblox query
-    keywords.append(f"{game_name} roblox")
+    # Vowel-free skeleton (handles swapped vowels like 'blox' vs 'blocks')
+    skel = "".join(c for c in lowered if c not in "aeiou ")
+    if skel and len(skel) > 2:
+        keywords.append(skel)
 
     candidates = []
-    seen_ids = set()
+    seen = set()
     for kw in keywords:
-        results = _search_api(kw)
-        for name, pid in results:
-            if pid not in seen_ids:
-                seen_ids.add(pid)
+        for name, pid in _search_api(kw):
+            if pid not in seen:
+                seen.add(pid)
                 candidates.append((name, pid))
         if len(candidates) >= 5:
             break
 
     if not candidates:
-        return (
-            f"[FAIL] Could not find a Roblox game matching '{game_name}'.\n"
-            f"Try: open_roblox_game('a more specific name')"
-        )
+        return f"[FAIL] Could not find a Roblox game matching '{game_name}'. Try a more specific name."
 
-    # Fuzzy match against all candidates
-    game_lower = lowered
+    # Fuzzy score each candidate
     scored = []
     for gname, pid in candidates:
         g_lower = gname.lower()
-        score = max(
-            difflib.SequenceMatcher(None, game_lower, g_lower).ratio(),
-            difflib.SequenceMatcher(None, game_lower, g_lower.replace("-", " ").replace("_", " ")).ratio(),
+        s = max(
+            difflib.SequenceMatcher(None, lowered, g_lower).ratio(),
+            difflib.SequenceMatcher(None, lowered, g_lower.replace("-", " ").replace("_", " ")).ratio(),
         )
-        # Bonus if one name contains the other
-        if game_lower in g_lower or g_lower in game_lower:
-            score += 0.15
-        scored.append((score, gname, pid))
+        if lowered in g_lower or g_lower in lowered:
+            s += 0.15
+        scored.append((s, gname, pid))
 
     scored.sort(key=lambda x: -x[0])
-    best_score, best_name, best_pid = scored[0]
+    best_s, best_n, best_p = scored[0]
 
-    # If the best match is decent enough OR it's clearly the same game (contains match)
-    if best_score >= 0.35 or (game_lower in best_name.lower() or best_name.lower() in game_lower):
-        return _launch(best_pid, best_name)
+    if best_s >= 0.35 or (lowered in best_n.lower() or best_n.lower() in lowered):
+        return _launch(best_p, best_n)
 
-    # Show suggestions
-    suggestions = [f"{n} (ID: {p})" for s, n, p in scored[:5] if s > 0.2]
+    suggestions = [f"{n}" for s, n, _ in scored[:5] if s > 0.2]
     if suggestions:
         return f"[FAIL] No close match for '{game_name}'. Did you mean:\n" + "\n".join(f"  - {s}" for s in suggestions)
 
