@@ -2693,6 +2693,18 @@ def scheduler_tool(action: str = "list", **kwargs) -> str:
         return f"[FAIL] Scheduler error: {e}"
 
 
+#  Skills Tool #
+def skills_tool(action: str = "list", **kwargs) -> str:
+    """Self-improving skills system: save, search, and reuse successful workflows. Actions: list, add, search, delete, stats, auto_create."""
+    try:
+        from friday.skills import skills_tool as _st
+        return _st(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] skills.py not available."
+    except Exception as e:
+        return f"[FAIL] Skills error: {e}"
+
+
 def execute_tool(name: str, args: dict = None) -> str:
     """Execute a tool by name with given args. Used by friday_langgraph.py."""
     import inspect
@@ -2760,7 +2772,7 @@ __all__ = [
     "github_authorize", "github_exchange_code",
     "multi_agent_delegate", "message_channel_tool",
     "send_notification", "get_pending_notifications", "clear_notifications",
-    "dream_tool", "scheduler_tool",
+    "dream_tool", "scheduler_tool", "skills_tool",
 ]
 
 if __name__ == "__main__":

@@ -104,7 +104,7 @@ from friday.tools import (
     multi_agent_delegate, message_channel_tool,
     vector_memory_tool,
     send_notification, get_pending_notifications, clear_notifications,
-    dream_tool, scheduler_tool,
+    dream_tool, scheduler_tool, skills_tool,
 )
 
 # vector_memory_tool now re-exported through friday_tools
@@ -1542,6 +1542,20 @@ def _build_tools():
                     "id": {"type": "STRING", "description": "Task ID (for remove/pause/resume)."},
                 }, required=["action"]),
             ),
+            # ======== SKILLS SYSTEM ========
+            types.FunctionDeclaration(
+                name="skills_tool",
+                description="Self-improving skills system: save, search, and reuse successful workflows. Actions: list (show all skills), add (create skill), search (find by keyword), delete, stats, auto_create.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, add, search, delete, stats, auto_create."},
+                    "name": {"type": "STRING", "description": "Skill name (for add/search/delete)."},
+                    "steps": {"type": "STRING", "description": "Steps/procedure for the skill (for add/auto_create)."},
+                    "trigger": {"type": "STRING", "description": "Trigger phrase that should activate this skill (for add/auto_create)."},
+                    "tags": {"type": "STRING", "description": "Comma-separated tags (for add/auto_create)."},
+                    "query": {"type": "STRING", "description": "Search query (for search)."},
+                    "id": {"type": "STRING", "description": "Skill ID (for delete)."},
+                }, required=["action"]),
+            ),
         ])
     ]
 
@@ -1694,6 +1708,7 @@ TOOL_MAP = {
     "clear_notifications": clear_notifications,
     "dream_tool": dream_tool,
     "scheduler_tool": scheduler_tool,
+    "skills_tool": skills_tool,
 }
 
 
