@@ -443,6 +443,18 @@ def github_create_pr(title: str, body: str, head: str) -> str:
     return github.create_pull_request(title, body, head)
 
 
+def github_list_prs(repo: str = "", state: str = "open") -> str:
+    """List pull requests for a repository."""
+    target = repo or github.repo
+    original = github.repo
+    github.repo = target
+    try:
+        result = github.get_pull_requests(state=state)
+        return result
+    finally:
+        github.repo = original
+
+
 def github_self_modify(file_path: str, new_content: str, commit_msg: str = "Self-modification by Friday") -> str:
     """Self-modify a file in the repository."""
     return github.self_modify(file_path, new_content, commit_msg)

@@ -213,10 +213,17 @@ def stop_watcher():
     _watch_stop.set()
 
 
+def _fetch_prs(repo: str, state: str = "open") -> str:
+    """Fetch PRs directly from GitHub API for any repo (not just watched ones)."""
+    from friday.github import github_list_prs as _glp
+    return _glp(repo=repo, state=state)
+
+
 def pr_manager_tool(action: str = "status", **kwargs) -> str:
     """Proactive PR manager: polls GitHub repos for open PRs and auto-reviews them.
     Actions: status (show state), list_repos (show watched repos), add_repo (add repo, default: hackers-reality/friday),
     remove_repo (stop watching a repo), scan_now (immediate scan, auto_review=true by default),
+    list_prs (fetch ALL open PRs for a repo: repo=owner/repo, state=open/closed/all),
     reviews (recent PR reviews), watch (start background poll every 5 min), stop."""
     try:
         if action == "status":
@@ -235,6 +242,12 @@ def pr_manager_tool(action: str = "status", **kwargs) -> str:
             if isinstance(auto_review, str):
                 auto_review = auto_review.lower() in ("true", "1", "yes")
             return scan_now(auto_review=auto_review)
+        elif action == "list_prs":
+            repo = kwargs.get("repo", "")
+            state = kwargs.get("state", "open")
+            if not repo:
+                return "[FAIL] repo parameter is required (e.g., 'vierisid/jarvis')."
+            return _fetch_prs(repo=repo, state=state)
         elif action == "reviews":
             return reviews(limit=kwargs.get("limit", 10))
         elif action == "watch":

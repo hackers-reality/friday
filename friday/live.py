@@ -100,7 +100,7 @@ from friday.tools import (
     clock_tool, status_check,
     workflow_tool, plugin_tool, knowledge_graph_tool,
     github_list_files, github_read_file, github_write_file,
-    github_create_branch, github_create_pr, github_self_modify, github_review_pr,
+    github_create_branch, github_create_pr, github_list_prs, github_self_modify, github_review_pr,
     multi_agent_delegate, message_channel_tool,
     vector_memory_tool,
     send_notification, get_pending_notifications, clear_notifications,
@@ -326,7 +326,7 @@ Workflows & Plugins:
 - github_authorize() — Device Flow fallback (Opens browser, shows code to enter at github.com/login/device)
 - github_refresh_token() — manually refresh GitHub App token (only needed if expiry enabled)
 - github_list_files, github_read_file, github_write_file — GitHub repo access
-- github_create_branch, github_create_pr, github_self_modify, github_review_pr
+- github_create_branch, github_create_pr, github_list_prs(repo, state), github_self_modify, github_review_pr
 
 Smart Home:
 - tell_alexa(command), smart_home_command(action, device)
@@ -1428,6 +1428,14 @@ def _build_tools():
                 }, required=["title", "body", "head"]),
             ),
             types.FunctionDeclaration(
+                name="github_list_prs",
+                description="List pull requests for a GitHub repository. Pass repo='owner/repo' or leave empty for default. Use state='open' (default), 'closed', or 'all'.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "repo": {"type": "STRING", "description": "Repository in 'owner/repo' format (default: hackers-reality/friday)."},
+                    "state": {"type": "STRING", "description": "PR state: open, closed, or all (default: open)."},
+                }),
+            ),
+            types.FunctionDeclaration(
                 name="github_self_modify",
                 description="Self-modify a file in Friday's own repository and commit the change.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1684,10 +1692,11 @@ def _build_tools():
             # ======== PROACTIVE PR MANAGER ========
             types.FunctionDeclaration(
                 name="pr_manager_tool",
-                description="Proactive PR manager: polls configured GitHub repos for open PRs and auto-reviews new ones. Actions: status (watcher+repo state), list_repos (show watched repos), add_repo (repo=REPO, default hackers-reality/friday), remove_repo (repo=REPO), scan_now (immediate scan, auto_review=true), reviews (recent reviews), watch (start background 5min polling), stop.",
+                description="Proactive PR manager: polls configured GitHub repos for open PRs and auto-reviews new ones. Actions: status, list_repos, add_repo (repo=REPO), remove_repo (repo=REPO), scan_now (immediate scan, auto_review=true), list_prs (fetch ALL open PRs for any repo: repo=REPO, state=open/closed/all), reviews, watch (start background 5min polling), stop.",
                 parameters=types.Schema(type="OBJECT", properties={
-                    "action": {"type": "STRING", "description": "Action: status, list_repos, add_repo, remove_repo, scan_now, reviews, watch, stop."},
-                    "repo": {"type": "STRING", "description": "Repository name (for add_repo/remove_repo, e.g. 'hackers-reality/friday')."},
+                    "action": {"type": "STRING", "description": "Action: status, list_repos, add_repo, remove_repo, scan_now, list_prs, reviews, watch, stop."},
+                    "repo": {"type": "STRING", "description": "Repository name (for add_repo/remove_repo/list_prs, e.g. 'vierisid/jarvis')."},
+                    "state": {"type": "STRING", "description": "PR state filter: open, closed, or all (for action=list_prs)."},
                     "auto_review": {"type": "BOOLEAN", "description": "Whether to auto-analyze new PRs (for scan_now, default true)."},
                     "limit": {"type": "INTEGER", "description": "Result limit (for action=reviews)."},
                 }, required=["action"]),
@@ -1842,6 +1851,7 @@ TOOL_MAP = {
     "github_write_file": github_write_file,
     "github_create_branch": github_create_branch,
     "github_create_pr": github_create_pr,
+    "github_list_prs": github_list_prs,
     "github_self_modify": github_self_modify,
     "github_review_pr": github_review_pr,
     "github_create_repo": github_create_repo,
@@ -2399,7 +2409,7 @@ async def friday_live_engine():
 
                     receive_task = asyncio.create_task(receive_loop())
 
-                    # SEND GREETING (first connect or reconnect)
+                    # SEND GREETING (first connect only)
                     if is_greeting:
                         hour = datetime.datetime.now().hour
                         if 5 <= hour < 12:
@@ -2410,10 +2420,6 @@ async def friday_live_engine():
                             greet = "Good evening Boss. What are we working on tonight?"
                         else:
                             greet = "Working late again, Boss? I am here. What do you need?"
-
-                        # Check if this is a reconnect (resume_handle is set = not first boot)
-                        if resume_handle:
-                            greet = "I am back, Boss. The connection refreshed. Continue what we were doing."
 
                         try:
                             state_path = os.path.join(
@@ -2432,8 +2438,7 @@ async def friday_live_engine():
                         if context_content:
                             greet += f"\n\nProject context:\n{context_content[:1500]}"
 
-                        if not resume_handle:
-                            greet += " Greet naturally in one sentence. Ask what to work on."
+                        greet += " Greet naturally in one sentence. Ask what to work on."
 
                         await session.send_realtime_input(text=greet)
 
@@ -2483,16 +2488,10 @@ async def friday_live_engine():
 
                     reader_task = asyncio.create_task(input_reader())
 
-                    # Proactive session restart before server duration limit (~20 min)
-                    session_lifetime_task = asyncio.create_task(asyncio.sleep(1020))
-
                     try:
                         while True:
                             if receive_task.done():
-                                break
-                            if session_lifetime_task.done():
-                                console.print("[bold yellow][SYSTEM] Proactive session restart (17 min). Reconnecting...[/]")
-                                receive_task.cancel()
+                                # receive loop died (GOAWAY, 1008, etc.) — reconnect
                                 break
                             await asyncio.sleep(0.5)
 
@@ -2505,8 +2504,7 @@ async def friday_live_engine():
                         video_task.cancel()
                         ka_task.cancel()
                         reader_task.cancel()
-                        session_lifetime_task.cancel()
-                        for t in [receive_task, audio_task, bg_monitor_task, video_task, ka_task, reader_task, session_lifetime_task]:
+                        for t in [receive_task, audio_task, bg_monitor_task, video_task, ka_task, reader_task]:
                             try:
                                 await asyncio.wait_for(asyncio.shield(t), timeout=2.0)
                             except (asyncio.CancelledError, asyncio.TimeoutError):

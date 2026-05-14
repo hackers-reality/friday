@@ -2393,6 +2393,17 @@ def github_create_pr(title: str, body: str, head: str) -> str:
         return f"[FAIL] GitHub error: {e}"
 
 
+def github_list_prs(repo: str = "", state: str = "open") -> str:
+    """List pull requests for a GitHub repository. Pass repo='owner/repo' or leave empty for default."""
+    try:
+        from friday.github import github_list_prs
+        return github_list_prs(repo=repo, state=state)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub list PRs error: {e}"
+
+
 def github_self_modify(file_path: str, new_content: str, commit_msg: str = "Self-modification by Friday") -> str:
     """Self-modify a file in Friday's own GitHub repository."""
     try:
@@ -2900,7 +2911,7 @@ __all__ = [
     "vector_memory_tool",
     "workflow_tool", "plugin_tool", "knowledge_graph_tool",
     "github_list_files", "github_read_file", "github_write_file",
-    "github_create_branch", "github_create_pr", "github_self_modify", "github_review_pr",
+    "github_create_branch", "github_create_pr", "github_list_prs", "github_self_modify", "github_review_pr",
     "github_create_repo", "github_list_issues", "github_create_issue", "github_search_code",
     "github_merge_pr", "github_repo_info", "github_list_branches", "github_commit_history",
     "github_authorize", "github_exchange_code", "github_setup",
