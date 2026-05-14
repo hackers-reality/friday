@@ -2571,6 +2571,33 @@ def clear_notifications(task_id: str = "") -> str:
         return f"[FAIL] Clear error: {e}"
 
 
+def pr_manager_tool(action: str = "status", **kwargs) -> str:
+    """Proactive PR manager: polls GitHub repos for open PRs, auto-reviews new ones.
+    Actions: status, list_repos, add_repo (repo=name), remove_repo (repo=name),
+    scan_now (auto_review=true), reviews (limit=N), watch, stop."""
+    try:
+        from friday.pr_manager import pr_manager_tool as _pmt
+        return _pmt(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] friday.pr_manager not available."
+    except Exception as e:
+        return f"[FAIL] PR manager error: {e}"
+
+
+def protector_tool(action: str = "status", **kwargs) -> str:
+    """System protector: prevent unauthorized shutdown/lid-close, manage Windows startup.
+    Actions: status, watch (start background monitor), stop, allow (permit shutdown),
+    startup (manage startup registration: startup_action=install/remove/status),
+    test_voice (test TTS)."""
+    try:
+        from friday.protector import protector_tool as _pt
+        return _pt(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] friday.protector not available."
+    except Exception as e:
+        return f"[FAIL] Protector error: {e}"
+
+
 #  Vector Memory Tool (re-exported from vector_memory.py) #
 
 def vector_memory_tool(action: str = "stats", query: str = None, text: str = None, n_results: int = 5) -> str:
@@ -2873,6 +2900,8 @@ __all__ = [
     "episodic_tool",
     "self_improve_tool",
     "crash_tool",
+    "pr_manager_tool",
+    "protector_tool",
 ]
 
 if __name__ == "__main__":

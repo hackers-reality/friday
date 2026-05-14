@@ -174,6 +174,7 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Token auto-refresh | ✅ Done | For expiring tokens; permanent tokens (no expiry) also supported |
 | Repository operations | ✅ Working | Read/write files, create repos, list branches, commit history |
 | Pull request operations | ✅ Working | Create, merge, list, review (AI-powered with Gemini) |
+| Proactive PR manager | ✅ NEW | `pr_manager_tool` — polls GH repos for open PRs, auto-reviews new ones, background 5min polling |
 | Issue tracking | ✅ Working | Create, list, search, label management |
 | Code search | ✅ Working | Search across repos with GitHub code search API |
 | Self-modification | ✅ Working | Read → modify → commit — Friday can edit her own code |
@@ -185,7 +186,8 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 🚀 System & Startup
 | Feature | Status | Details |
 |---------|--------|---------|
-| Windows startup on boot | ✅ Working | `startup_integration.py` via Task Scheduler |
+| Windows startup on boot | ✅ Working | `protector_tool(action='startup', startup_action='install')` via HKCU Run |
+| System protector | ✅ NEW | `protector_tool` — prevents unauthorized shutdown/lid-close, monitors lid state, Win+X+U, Alt+F4, Ctrl+C, smart override based on uptime/resources |
 | Keepalive (prevents GOAWAY) | ✅ Working | `keepalive_task()` pings every 45s |
 | Auto-reconnect | ✅ Working | 5s reconnect loop on disconnect |
 | Background operation | ✅ Working | asyncio task-based |
@@ -419,16 +421,20 @@ python friday_live.py
 
 ### Add to Windows Startup
 
-```bash
-# Run as Administrator
-python startup_integration.py --add
+Friday can auto-start with Windows via the built-in `protector_tool`:
 
-# Verify
-python startup_integration.py --status
+```bash
+# Install Friday in Windows startup
+python -c "from friday.protector import install_startup; print(install_startup())"
+
+# Check status
+python -c "from friday.protector import is_startup_installed; print('Startup:', is_startup_installed())"
 
 # Remove from startup
-python startup_integration.py --remove
+python -c "from friday.protector import remove_startup; print(remove_startup())"
 ```
+
+Or ask Friday: *"Friday, add yourself to Windows startup"* — she will call `protector_tool(action="startup", startup_action="install")`.
 
 ---
 
@@ -594,6 +600,13 @@ Friday responds to natural language. No rigid syntax required.
 - [x] Cron scheduler — schedule autonomous tasks (status checks, goal reviews, dream cycles, custom)
 - [x] GitHub Device Flow simplified — only client ID needed (no secret), auto-opens browser
 - [x] GitHub OAuth setup wizard — step-by-step guidance for creating the OAuth app
+- [x] Episodic archive — SQLite FTS5 full-text search across all past sessions, auto-records all tool calls
+- [x] Skill curator — auto-prunes failing skills, archives stale ones, suggests merges
+- [x] Self-improvement pipeline — propose → review → apply code changes to own source
+- [x] Crash watcher — real-time Windows Event Log crash monitoring, auto-detection + analysis
+- [x] Proactive PR manager — polls GitHub repos for new PRs, auto-reviews with Gemini
+- [x] System protector — prevents unauthorized shutdown/lid-close, detects Win+X+U/Alt+F4/Ctrl+C, smart override based on system health
+- [x] Windows startup registration — `protector_tool` with HKCU Run key, install/remove/status
 
 ### v2.0 — Desktop App 🌟
 - [ ] Native Windows app (PyQt6 or Tauri)

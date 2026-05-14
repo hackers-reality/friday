@@ -112,6 +112,8 @@ from friday.tools import (
     episodic_tool,
     self_improve_tool,
     crash_tool,
+    pr_manager_tool,
+    protector_tool,
 )
 
 # vector_memory_tool now re-exported through friday_tools
@@ -293,6 +295,8 @@ Goals & Memory:
 - episodic_tool(action, query) — episodic memory with FTS5: full-text search all past sessions, tool calls, and interactions. Actions: search (query past), recent (last N), session (full session by id), stats. Auto-records all tool calls.
 - self_improve_tool(action, file_path, content) — self-improvement pipeline: propose changes to my own code, show diffs, apply or reject with your approval. Actions: propose, list, diff, apply, reject, status.
 - crash_tool(action) — crash watcher: monitors Windows Event Log for app crashes in real-time, captures fault details. Actions: status, recent, analyze (deep dive), watch (start), stop.
+- pr_manager_tool(action) — proactive PR manager: polls GitHub repos for open PRs, auto-reviews new ones. Actions: status, list_repos, add_repo (repo=name), remove_repo (repo=name), scan_now (auto_review=true), reviews, watch, stop.
+- protector_tool(action) — system protector: prevent unauthorized shutdown/lid-close, manage Windows startup registration. Actions: status, watch (start background monitor), stop, allow (permit shutdown), startup (startup_action=install/remove/status), test_voice (test TTS).
 
 System & Monitoring:
 - status_check(include) — quick system overview (goals, calendar, email, notifications, CPU, RAM, active window)
@@ -1672,6 +1676,26 @@ def _build_tools():
                     "index": {"type": "INTEGER", "description": "Crash index to analyze, -1 = latest (for action=analyze)."},
                 }, required=["action"]),
             ),
+            # ======== PROACTIVE PR MANAGER ========
+            types.FunctionDeclaration(
+                name="pr_manager_tool",
+                description="Proactive PR manager: polls configured GitHub repos for open PRs and auto-reviews new ones. Actions: status (watcher+repo state), list_repos (show watched repos), add_repo (repo=REPO, default hackers-reality/friday), remove_repo (repo=REPO), scan_now (immediate scan, auto_review=true), reviews (recent reviews), watch (start background 5min polling), stop.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, list_repos, add_repo, remove_repo, scan_now, reviews, watch, stop."},
+                    "repo": {"type": "STRING", "description": "Repository name (for add_repo/remove_repo, e.g. 'hackers-reality/friday')."},
+                    "auto_review": {"type": "BOOLEAN", "description": "Whether to auto-analyze new PRs (for scan_now, default true)."},
+                    "limit": {"type": "INTEGER", "description": "Result limit (for action=reviews)."},
+                }, required=["action"]),
+            ),
+            # ======== SYSTEM PROTECTOR ========
+            types.FunctionDeclaration(
+                name="protector_tool",
+                description="System protector: prevent unauthorized shutdown/lid-close, manage Windows startup registration. Actions: status (show state), watch (start background monitor for lid/shutdown/sleep), stop, allow (permit shutdown), startup (manage startup: pass startup_action=install/remove/status), test_voice (test TTS).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, watch, stop, allow, startup, test_voice."},
+                    "startup_action": {"type": "STRING", "description": "For action=startup: install, remove, or status."},
+                }, required=["action"]),
+            ),
             # ======== MCP BRIDGE ========
             types.FunctionDeclaration(
                 name="mcp_tool",
@@ -1847,6 +1871,8 @@ TOOL_MAP = {
     "episodic_tool": episodic_tool,
     "self_improve_tool": self_improve_tool,
     "crash_tool": crash_tool,
+    "pr_manager_tool": pr_manager_tool,
+    "protector_tool": protector_tool,
 }
 
 
@@ -2188,6 +2214,14 @@ async def friday_live_engine():
         from friday.crash_watcher import start_watcher
         start_watcher()
         console.print("[dim]Crash watcher started[/]")
+    except Exception:
+        pass
+
+    # Start Proactive PR Manager (silent — no autostart polling, just ready)
+    try:
+        from friday.pr_manager import pr_manager_tool as _pmt
+        _pmt("add_repo", repo="hackers-reality/friday")
+        console.print("[dim]PR manager ready (watching hackers-reality/friday)[/]")
     except Exception:
         pass
 
