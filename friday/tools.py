@@ -2393,6 +2393,72 @@ def github_create_pr(title: str, body: str, head: str) -> str:
         return f"[FAIL] GitHub error: {e}"
 
 
+def github_pr_comment(pr_number: int, body: str) -> str:
+    """Add a comment to a pull request or issue."""
+    try:
+        from friday.github import github_pr_comment
+        return github_pr_comment(pr_number, body)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub PR comment error: {e}"
+
+
+def github_pr_diff(pr_number: int) -> str:
+    """Get the full diff of a pull request."""
+    try:
+        from friday.github import github_pr_diff
+        return github_pr_diff(pr_number)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub PR diff error: {e}"
+
+
+def github_pr_files(pr_number: int) -> str:
+    """List files changed in a pull request."""
+    try:
+        from friday.github import github_pr_files
+        return github_pr_files(pr_number)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub PR files error: {e}"
+
+
+def github_delete_file(path: str, message: str = "Delete via Friday") -> str:
+    """Delete a file from the repository."""
+    try:
+        from friday.github import github_delete_file
+        return github_delete_file(path, message)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub delete file error: {e}"
+
+
+def github_get_contents(path: str = "") -> str:
+    """List contents of a directory or read a file from the repository."""
+    try:
+        from friday.github import github_get_contents
+        return github_get_contents(path)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub contents error: {e}"
+
+
+def github_get_user() -> str:
+    """Get authenticated GitHub user info."""
+    try:
+        from friday.github import github_get_user
+        return github_get_user()
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub user error: {e}"
+
+
 def github_list_prs(repo: str = "", state: str = "open") -> str:
     """List pull requests for a GitHub repository. Pass repo='owner/repo' or leave empty for default."""
     try:
@@ -2911,7 +2977,7 @@ __all__ = [
     "vector_memory_tool",
     "workflow_tool", "plugin_tool", "knowledge_graph_tool",
     "github_list_files", "github_read_file", "github_write_file",
-    "github_create_branch", "github_create_pr", "github_list_prs", "github_self_modify", "github_review_pr",
+    "github_create_branch", "github_create_pr", "github_list_prs", "github_pr_comment", "github_pr_diff", "github_pr_files", "github_delete_file", "github_get_contents", "github_get_user", "github_self_modify", "github_review_pr",
     "github_create_repo", "github_list_issues", "github_create_issue", "github_search_code",
     "github_merge_pr", "github_repo_info", "github_list_branches", "github_commit_history",
     "github_authorize", "github_exchange_code", "github_setup",

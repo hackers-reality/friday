@@ -100,7 +100,7 @@ from friday.tools import (
     clock_tool, status_check,
     workflow_tool, plugin_tool, knowledge_graph_tool,
     github_list_files, github_read_file, github_write_file,
-    github_create_branch, github_create_pr, github_list_prs, github_self_modify, github_review_pr,
+    github_create_branch, github_create_pr, github_list_prs, github_pr_comment, github_pr_diff, github_pr_files, github_delete_file, github_get_contents, github_get_user, github_self_modify, github_review_pr,
     multi_agent_delegate, message_channel_tool,
     vector_memory_tool,
     send_notification, get_pending_notifications, clear_notifications,
@@ -326,7 +326,7 @@ Workflows & Plugins:
 - github_authorize() — Device Flow fallback (Opens browser, shows code to enter at github.com/login/device)
 - github_refresh_token() — manually refresh GitHub App token (only needed if expiry enabled)
 - github_list_files, github_read_file, github_write_file — GitHub repo access
-- github_create_branch, github_create_pr, github_list_prs(repo, state), github_self_modify, github_review_pr
+- github_create_branch, github_create_pr, github_list_prs(repo, state), github_pr_comment(pr_number, body), github_pr_diff(pr_number), github_pr_files(pr_number), github_delete_file(path, message), github_get_contents(path), github_get_user(), github_self_modify, github_review_pr
 
 Smart Home:
 - tell_alexa(command), smart_home_command(action, device)
@@ -1436,6 +1436,47 @@ def _build_tools():
                 }),
             ),
             types.FunctionDeclaration(
+                name="github_pr_comment",
+                description="Add a comment to a pull request or issue.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "pr_number": {"type": "INTEGER", "description": "Pull request or issue number."},
+                    "body": {"type": "STRING", "description": "Comment text."},
+                }, required=["pr_number", "body"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_pr_diff",
+                description="Get the full diff of a pull request.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "pr_number": {"type": "INTEGER", "description": "Pull request number."},
+                }, required=["pr_number"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_pr_files",
+                description="List files changed in a pull request.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "pr_number": {"type": "INTEGER", "description": "Pull request number."},
+                }, required=["pr_number"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_delete_file",
+                description="Delete a file from the repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path": {"type": "STRING", "description": "File path in repository."},
+                    "message": {"type": "STRING", "description": "Commit message (default: 'Delete via Friday')."},
+                }, required=["path"]),
+            ),
+            types.FunctionDeclaration(
+                name="github_get_contents",
+                description="List contents of a directory or read a file from the repository.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path": {"type": "STRING", "description": "Path to list or file to read (default: root)."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="github_get_user",
+                description="Get authenticated GitHub user info (login, name, plan)."
+            ),
+            types.FunctionDeclaration(
                 name="github_self_modify",
                 description="Self-modify a file in Friday's own repository and commit the change.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1852,6 +1893,12 @@ TOOL_MAP = {
     "github_create_branch": github_create_branch,
     "github_create_pr": github_create_pr,
     "github_list_prs": github_list_prs,
+    "github_pr_comment": github_pr_comment,
+    "github_pr_diff": github_pr_diff,
+    "github_pr_files": github_pr_files,
+    "github_delete_file": github_delete_file,
+    "github_get_contents": github_get_contents,
+    "github_get_user": github_get_user,
     "github_self_modify": github_self_modify,
     "github_review_pr": github_review_pr,
     "github_create_repo": github_create_repo,
