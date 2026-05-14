@@ -123,11 +123,16 @@ def skills_tool(action: str = "list", **kwargs) -> str:
         total = len(skills)
         total_uses = sum(s.get("use_count", 0) for s in skills)
         most_used = max(skills, key=lambda s: s.get("use_count", 0)) if skills else None
+        archive = _load_archive()
         return (
             f"Skills: {total}\n"
             f"Total uses: {total_uses}\n"
+            f"Archived: {len(archive)}\n"
             f"Most used: {most_used.get('name', 'N/A')} ({most_used.get('use_count', 0)}x)" if most_used else ""
         )
+
+    elif action == "curate":
+        return _curate()
 
     elif action == "auto_create":
         name = kwargs.get("name", "")
@@ -138,6 +143,106 @@ def skills_tool(action: str = "list", **kwargs) -> str:
 
     else:
         return f"[FAIL] Unknown action: {action}"
+
+
+def _load_archive() -> list:
+    apath = os.path.join(FRIDAY_MEMORY, "skills_archive.json")
+    if os.path.exists(apath):
+        try:
+            with open(apath) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def _save_archive(archive: list):
+    apath = os.path.join(FRIDAY_MEMORY, "skills_archive.json")
+    try:
+        with open(apath, "w") as f:
+            json.dump(archive, f, indent=2)
+    except Exception:
+        pass
+
+
+def _curate() -> str:
+    """Auto-curate skills: archive stale, prune failing, suggest merges."""
+    skills = _load()
+    if not skills:
+        return "[INFO] No skills to curate."
+    now = datetime.now()
+    archived = []
+    pruned = []
+    kept = []
+    for s in skills:
+        last_used = s.get("last_used")
+        use_count = s.get("use_count", 0)
+        success_rate = s.get("success_rate", 1.0)
+        if use_count >= 5 and success_rate < 0.3:
+            pruned.append(s)
+            continue
+        if last_used:
+            try:
+                days_since = (now - datetime.fromisoformat(last_used)).days
+            except Exception:
+                days_since = 999
+            if days_since > 14 and use_count < 3:
+                archived.append(s)
+                continue
+        kept.append(s)
+    archive = _load_archive()
+    archive.extend(archived)
+    _save_archive(archive[-100:])
+    _save(kept)
+    lines = []
+    if pruned:
+        lines.append(f"Pruned {len(pruned)} failing skills:")
+        for s in pruned:
+            lines.append(f"  - {s.get('name')} ({s.get('success_rate', 0):.0%} success, {s.get('use_count', 0)} uses)")
+    if archived:
+        lines.append(f"Archived {len(archived)} stale skills:")
+        for s in archived:
+            lines.append(f"  - {s.get('name')}")
+    if not pruned and not archived:
+        lines.append("All skills healthy. No curation needed.")
+    merge_suggestions = _suggest_merges(kept)
+    if merge_suggestions:
+        lines.append(f"Merge suggestions ({len(merge_suggestions)}):")
+        for suggestion in merge_suggestions[:3]:
+            lines.append(f"  - {suggestion}")
+    lines.append(f"Active: {len(kept)} | Archived: {len(archived)} | Pruned: {len(pruned)}")
+    return "\n".join(lines)
+
+
+def _suggest_merges(skills: list) -> list:
+    """Find skills with overlapping triggers or names. Deduplicates similar names."""
+    suggestions = []
+    seen_pairs = set()
+    for i, a in enumerate(skills):
+        for b in skills[i + 1:]:
+            a_name = a.get("name", "").lower().strip()
+            b_name = b.get("name", "").lower().strip()
+            if a_name == b_name:
+                continue
+            pair_key = tuple(sorted([a_name, b_name]))
+            if pair_key in seen_pairs:
+                continue
+            seen_pairs.add(pair_key)
+            a_trigger = a.get("trigger", "").lower()
+            b_trigger = b.get("trigger", "").lower()
+            if a_trigger and b_trigger and (a_trigger in b_trigger or b_trigger in a_trigger):
+                suggestions.append(f"'{a.get('name')[:40]}' <-> '{b.get('name')[:40]}' (overlapping triggers)")
+            elif a_name and b_name and (a_name in b_name or b_name in a_name):
+                suggestions.append(f"'{a.get('name')[:40]}' <-> '{b.get('name')[:40]}' (overlapping names)")
+    return suggestions[:5]
+
+
+def start_curator_on_boot():
+    """Run curation cycle on boot."""
+    try:
+        _curate()
+    except Exception:
+        pass
 
 
 def match_skill(context: str) -> Optional[dict]:

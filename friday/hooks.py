@@ -99,14 +99,17 @@ def _logging_pre_hook(name: str, args: dict, session=None) -> dict:
 
 
 def _logging_post_hook(name: str, args: dict, result: str, session=None) -> None:
-    """Log tool call result."""
+    """Log tool call result with success/failure detection."""
     _ensure_log_dir()
+    result_str = str(result)
+    is_fail = result_str.startswith("[FAIL]")
     entry = {
         "timestamp": datetime.now().isoformat(),
         "type": "tool_result",
         "name": name,
-        "result": str(result)[:200],
-        "status": "completed",
+        "result": result_str[:300],
+        "status": "failed" if is_fail else "completed",
+        "success": not is_fail,
     }
     try:
         with open(_LOG_PATH, "a", encoding="utf-8") as f:
@@ -253,3 +256,17 @@ def _auto_skill_post_hook(name: str, args: dict, result: str, session=None) -> N
 
 
 register_post_hook(_auto_skill_post_hook)
+
+
+# ─── Episodic Archive Auto-Recording ───
+
+def _episodic_post_hook(name: str, args: dict, result: str, session=None) -> None:
+    """Auto-record tool calls to episodic memory archive."""
+    try:
+        from friday.episodic import auto_record_tool_call
+        auto_record_tool_call(name, args, result, session)
+    except Exception:
+        pass
+
+
+register_post_hook(_episodic_post_hook)

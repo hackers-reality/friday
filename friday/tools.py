@@ -2733,6 +2733,66 @@ def execute_tool(name: str, args: dict = None) -> str:
         return f"[FAIL] {name} error: {e}"
 
 
+#  Reflection Tool #
+def reflection_tool(action: str = "status", **kwargs) -> str:
+    """GEPA self-reflection: analyze tool outcomes, find failure patterns, and auto-improve. Actions: cycle, analyze, improvements, status."""
+    try:
+        from friday.reflection import reflection_tool as _rt
+        return _rt(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] reflection.py not available."
+    except Exception as e:
+        return f"[FAIL] Reflection error: {e}"
+
+
+#  Context Tool #
+def context_tool(action: str = "list", **kwargs) -> str:
+    """Manage project context files (AGENTS.md, CLAUDE.md). Actions: list, show, add, delete, reload."""
+    try:
+        from friday.context import context_tool as _ct
+        return _ct(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] context.py not available."
+    except Exception as e:
+        return f"[FAIL] Context error: {e}"
+
+
+#  Episodic Archive Tool #
+def episodic_tool(action: str = "status", **kwargs) -> str:
+    """Episodic memory: record and search past sessions with full-text search. Actions: search (FTS query), recent (last N), record (manual entry), session (full session by id), stats, status."""
+    try:
+        from friday.episodic import episodic_tool as _et
+        return _et(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] episodic.py not available."
+    except Exception as e:
+        return f"[FAIL] Episodic error: {e}"
+
+
+#  Monitor Tool #
+def monitor_tool(action: str = "status", **kwargs) -> str:
+    """Proactive desktop monitor: CPU spikes, crash detection, auto-response. Actions: status, alerts, config, start, stop, check."""
+    try:
+        from friday.monitor import monitor_tool as _mt
+        return _mt(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] monitor.py not available."
+    except Exception as e:
+        return f"[FAIL] Monitor error: {e}"
+
+
+#  MCP Bridge Tool #
+def mcp_tool(action: str = "list", **kwargs) -> str:
+    """MCP bridge: connect external MCP servers. Actions: list, connect, disconnect, call, clean."""
+    try:
+        from friday.mcp_bridge import mcp_tool as _mcp
+        return _mcp(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] mcp_bridge.py not available."
+    except Exception as e:
+        return f"[FAIL] MCP error: {e}"
+
+
 #  Export list for friday.live #
 
 __all__ = [
@@ -2785,6 +2845,8 @@ __all__ = [
     "multi_agent_delegate", "message_channel_tool",
     "send_notification", "get_pending_notifications", "clear_notifications",
     "dream_tool", "scheduler_tool", "skills_tool", "predictive_tool",
+    "reflection_tool", "context_tool", "monitor_tool", "mcp_tool",
+    "episodic_tool",
 ]
 
 if __name__ == "__main__":

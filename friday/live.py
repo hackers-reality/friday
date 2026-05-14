@@ -105,6 +105,11 @@ from friday.tools import (
     vector_memory_tool,
     send_notification, get_pending_notifications, clear_notifications,
     dream_tool, scheduler_tool, skills_tool, predictive_tool,
+    reflection_tool,
+    context_tool,
+    monitor_tool,
+    mcp_tool,
+    episodic_tool,
 )
 
 # vector_memory_tool now re-exported through friday_tools
@@ -277,10 +282,22 @@ Goals & Memory:
 - memory_retrieve(query) — recall memories
 - memory_import_tool_handler(action, file_path) — import chat history
 - knowledge_graph_tool(action, node_id) — entity-relation knowledge graph
-- skills_tool(action, name, steps) — self-improving skills: save/load/search workflows like Hermes Agent
+- skills_tool(action, name, steps) — self-improving skills: save/load/search workflows like Hermes Agent. Actions: list, add, search, delete, stats, auto_create, curate
 - predictive_tool(action) — learns your usage patterns, predicts what you need next
 - dream_tool(action) — dreaming system: analyzes past sessions while idle
 - scheduler_tool(action, name, schedule) — cron scheduler for autonomous tasks
+- reflection_tool(action) — GEPA self-reflection: analyzes tool outcomes, finds failure patterns, auto-improves
+- context_tool(action, name, content) — manage project context files (AGENTS.md, CLAUDE.md, FRIDAY.md). Actions: list, show, add, delete, reload
+- episodic_tool(action, query) — episodic memory with FTS5: full-text search all past sessions, tool calls, and interactions. Actions: search (query past), recent (last N), session (full session by id), stats. Auto-records all tool calls.
+
+System & Monitoring:
+- status_check(include) — quick system overview (goals, calendar, email, notifications, CPU, RAM, active window)
+- system_cpu(), system_memory(), system_disk(), system_network() — individual system stats
+- system_report() — detailed full system report
+- monitor_tool(action) — proactive desktop monitor: detects CPU spikes, crashes, memory pressure. Actions: status, alerts, config, start, stop, check
+
+MCP (Model Context Protocol):
+- mcp_tool(action, name, command, args, server, tool, params) — connect external MCP servers for extensibility. Actions: list (show servers+tools), connect (add server by command), disconnect (remove), call (invoke tool), clean (disconnect all)
 
 KYU (Know Your User):
 - kyu_tool_handler(action) — manage personality profile (status, interview, profile, adapt)
@@ -387,16 +404,16 @@ _mic_muted = threading.Event()  # set = muted (don't send mic audio)
 _model_turn_done = threading.Event()  # set = Gemini finished sending this turn
 
 
-def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
+def _audio_playback_worker(pa: pyaudio.PyAudio):
     stream = pa.open(
-        format=pyaudio.paInt16, channels=1, rate=sample_rate,
+        format=pyaudio.paInt16, channels=1, rate=24000,
         output=True, frames_per_buffer=4800
     )
     stream.start_stream()
     had_audio = False
     empty_cycles = 0
     jitter_buffer = []
-    UNDERFLOW_GUARD = 12  # chunks to pre-fill (~2.4s at 200ms/chunk) for smooth playback
+    UNDERFLOW_GUARD = 20  # chunks to pre-fill (~4s at 200ms/chunk)
     try:
         while not _audio_playback_stop.is_set():
             while len(jitter_buffer) < UNDERFLOW_GUARD and not _audio_playback_stop.is_set():
@@ -414,7 +431,11 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
                 if not had_audio:
                     had_audio = True
                     _mic_muted.set()
-                stream.write(chunk, exception_on_underflow=True)
+                try:
+                    stream.write(chunk, exception_on_underflow=False)
+                except OSError:
+                    jitter_buffer.clear()
+                    continue
                 global _is_ducked, last_audio_time
                 if not _is_ducked:
                     _is_ducked = True
@@ -435,8 +456,15 @@ def _audio_playback_worker(pa: pyaudio.PyAudio, sample_rate: int):
         jitter_buffer.clear()
         _mic_muted.clear()
         _model_turn_done.clear()
-        stream.stop_stream()
-        stream.close()
+        set_audio_ducking(False)
+        try:
+            stream.stop_stream()
+        except Exception:
+            pass
+        try:
+            stream.close()
+        except Exception:
+            pass
 
 
 def set_audio_ducking(duck: bool = True) -> None:
@@ -467,7 +495,7 @@ def _start_audio_playback(pa: pyaudio.PyAudio):
     global _audio_playback_thread
     _audio_playback_stop.clear()
     _audio_playback_thread = threading.Thread(
-        target=_audio_playback_worker, args=(pa, 24000), daemon=True
+        target=_audio_playback_worker, args=(pa,), daemon=True
     )
     _audio_playback_thread.start()
 
@@ -1551,7 +1579,7 @@ def _build_tools():
             # ======== SKILLS SYSTEM ========
             types.FunctionDeclaration(
                 name="skills_tool",
-                description="Self-improving skills system: save, search, and reuse successful workflows. Actions: list (show all skills), add (create skill), search (find by keyword), delete, stats, auto_create.",
+                description="Self-improving skills system: save, search, and reuse successful workflows. Actions: list (show all), add (create), search (find by keyword), delete, stats, auto_create, curate (auto-archive stale, prune failing, suggest merges).",
                 parameters=types.Schema(type="OBJECT", properties={
                     "action": {"type": "STRING", "description": "Action: list, add, search, delete, stats, auto_create."},
                     "name": {"type": "STRING", "description": "Skill name (for add/search/delete)."},
@@ -1570,6 +1598,65 @@ def _build_tools():
                     "action": {"type": "STRING", "description": "Action: predict, patterns, stats."},
                     "hour": {"type": "INTEGER", "description": "Hour to predict for (0-23, optional, defaults to now)."},
                     "day": {"type": "STRING", "description": "Day to predict for (monday-sunday, optional)."},
+                }, required=["action"]),
+            ),
+            # ======== GEPA SELF-REFLECTION ========
+            types.FunctionDeclaration(
+                name="reflection_tool",
+                description="GEPA self-reflection: analyze tool outcomes, find failure patterns, and auto-improve. Actions: cycle (run full reflection), analyze (show active failure patterns), improvements (list applied fixes), status (show state).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: cycle, analyze, improvements, status."},
+                }, required=["action"]),
+            ),
+            # ======== CONTEXT FILES ========
+            types.FunctionDeclaration(
+                name="context_tool",
+                description="Manage project context files (AGENTS.md, CLAUDE.md, FRIDAY.md). Actions: list (show all), show (view content), add (create/update), delete (remove), reload (re-read files).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, show, add, delete, reload."},
+                    "name": {"type": "STRING", "description": "Context file name (for show/add/delete)."},
+                    "content": {"type": "STRING", "description": "File content (for add)."},
+                }, required=["action"]),
+            ),
+            # ======== PROACTIVE MONITOR ========
+            types.FunctionDeclaration(
+                name="monitor_tool",
+                description="Proactive desktop monitor: detects CPU spikes, app crashes, and memory pressure. Automatically alerts on issues. Actions: status (show state), alerts (recent incidents), config (set thresholds), start/stop, check (run manual check).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, alerts, config, start, stop, check."},
+                    "cpu_threshold": {"type": "INTEGER", "description": "CPU alert threshold % (for config action)."},
+                    "memory_threshold": {"type": "INTEGER", "description": "Memory alert threshold % (for config action)."},
+                    "check_interval": {"type": "INTEGER", "description": "Check interval in seconds (for config action)."},
+                    "crash_monitor": {"type": "STRING", "description": "Enable crash detection: 'true' or 'false' (for config)."},
+                    "auto_response": {"type": "STRING", "description": "Auto-respond to critical alerts: 'true' or 'false' (for config)."},
+                }, required=["action"]),
+            ),
+            # ======== EPISODIC ARCHIVE ========
+            types.FunctionDeclaration(
+                name="episodic_tool",
+                description="Episodic memory: full-text search past sessions, tool calls, and interactions. Actions: search (FTS query), recent (last N), record (manual), session (by id), stats, status. Auto-records all tool calls.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: search, recent, record, session, stats, status."},
+                    "query": {"type": "STRING", "description": "Full-text search query (for action=search)."},
+                    "limit": {"type": "INTEGER", "description": "Result limit (for search/recent, default 10/20)."},
+                    "speaker": {"type": "STRING", "description": "Filter by speaker: user, tool, friday (for recent)."},
+                    "session_id": {"type": "STRING", "description": "Session ID (for session/record actions)."},
+                    "content": {"type": "STRING", "description": "Content to record (for action=record)."},
+                    "tool_name": {"type": "STRING", "description": "Tool name (for action=record)."},
+                }, required=["action"]),
+            ),
+            # ======== MCP BRIDGE ========
+            types.FunctionDeclaration(
+                name="mcp_tool",
+                description="MCP bridge: connect external Model Context Protocol servers for extensibility. Actions: list (show servers+tools), connect (add server), disconnect (remove), call (invoke tool on a server), clean (disconnect all).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, connect, disconnect, call, clean."},
+                    "name": {"type": "STRING", "description": "Server name (for connect/disconnect)."},
+                    "command": {"type": "STRING", "description": "Command to start the MCP server (e.g., 'npx', 'python', 'node')."},
+                    "args": {"type": "STRING", "description": "Command arguments as comma-separated string (for connect)."},
+                    "server": {"type": "STRING", "description": "Target server name (for call action)."},
+                    "tool": {"type": "STRING", "description": "Tool name to invoke (for call action)."},
+                    "params": {"type": "STRING", "description": "JSON string of tool parameters (for call action)."},
                 }, required=["action"]),
             ),
         ])
@@ -1726,6 +1813,11 @@ TOOL_MAP = {
     "scheduler_tool": scheduler_tool,
     "skills_tool": skills_tool,
     "predictive_tool": predictive_tool,
+    "reflection_tool": reflection_tool,
+    "context_tool": context_tool,
+    "monitor_tool": monitor_tool,
+    "mcp_tool": mcp_tool,
+    "episodic_tool": episodic_tool,
 }
 
 
@@ -2033,6 +2125,47 @@ async def friday_live_engine():
         pass
 
     try:
+        from friday.reflection import start_reflection_on_boot
+        start_reflection_on_boot()
+        console.print("[dim]Reflection system initialized[/]")
+    except Exception:
+        pass
+
+    try:
+        from friday.monitor import start_monitor_on_boot
+        start_monitor_on_boot()
+        console.print("[dim]Proactive monitor started[/]")
+    except Exception:
+        pass
+
+    try:
+        from friday.episodic import record, get_current_session
+        sid = get_current_session()
+        record(session_id=sid, speaker="friday",
+               content="[SESSION_START] Friday booted and ready.",
+               tool_name="system")
+        console.print(f"[dim]Episodic archive ready (session {sid[:8]}...)[/]")
+    except Exception:
+        pass
+
+    try:
+        from friday.skills import start_curator_on_boot
+        start_curator_on_boot()
+        console.print("[dim]Skill curator initialized[/]")
+    except Exception:
+        pass
+
+    # Load context files
+    context_content = ""
+    try:
+        from friday.context import load_context_files
+        context_content = load_context_files()
+        if context_content:
+            console.print(f"[dim]Context files loaded ({len(context_content)}b)[/]")
+    except Exception:
+        pass
+
+    try:
         while reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
             try:
                 console.print(f"\n[bold green]Connecting to {MODEL_ID}...[/]")
@@ -2090,12 +2223,16 @@ async def friday_live_engine():
                                                 shown_input = txt
                                                 chat.add_user_message(txt)
 
-                                         # Model turn - audio + thoughts
+                                        # Model turn - audio + thoughts
                                         if sc.model_turn:
-                                            _model_turn_done.clear()  # Model is speaking — don't unmute yet
+                                            _model_turn_done.clear()
                                             for part in sc.model_turn.parts:
                                                 if part.inline_data:
                                                     _audio_playback_queue.put(part.inline_data.data)
+                                                    if not hasattr(_audio_playback_queue, '_debug_printed'):
+                                                        _audio_playback_queue._debug_printed = True
+                                                        mt = getattr(part.inline_data, 'mime_type', 'unknown')
+                                                        console.print(f"[dim][AUDIO] mime={mt} size={len(part.inline_data.data)}b[/]")
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
                                             # Show thinking IMMEDIATELY (before speech transcription)
@@ -2205,6 +2342,9 @@ async def friday_live_engine():
                                 greet += f" Previous session: {lt}. Music was {mu}."
                         except Exception:
                             pass
+
+                        if context_content:
+                            greet += f"\n\nProject context:\n{context_content[:1500]}"
 
                         greet += " Greet naturally in one sentence. Ask what to work on."
 
