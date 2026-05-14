@@ -2285,9 +2285,9 @@ async def friday_live_engine():
                                 async for response in session.receive():
                                     if response.go_away is not None:
                                         console.print(
-                                            f"\n[bold yellow][SYSTEM] Connection ending, will resume...[/]"
+                                            f"\n[bold yellow][SYSTEM] Session ending (GoAway), resuming with saved handle...[/]"
                                         )
-                                        continue
+                                        return  # Exit cleanly — resume_handle already saved
 
                                     if response.session_resumption_update:
                                         update = response.session_resumption_update
@@ -2399,7 +2399,7 @@ async def friday_live_engine():
 
                     receive_task = asyncio.create_task(receive_loop())
 
-                    # SEND GREETING (first connect only)
+                    # SEND GREETING (first connect or reconnect)
                     if is_greeting:
                         hour = datetime.datetime.now().hour
                         if 5 <= hour < 12:
@@ -2410,6 +2410,10 @@ async def friday_live_engine():
                             greet = "Good evening Boss. What are we working on tonight?"
                         else:
                             greet = "Working late again, Boss? I am here. What do you need?"
+
+                        # Check if this is a reconnect (resume_handle is set = not first boot)
+                        if resume_handle:
+                            greet = "I am back, Boss. The connection refreshed. Continue what we were doing."
 
                         try:
                             state_path = os.path.join(
@@ -2428,7 +2432,8 @@ async def friday_live_engine():
                         if context_content:
                             greet += f"\n\nProject context:\n{context_content[:1500]}"
 
-                        greet += " Greet naturally in one sentence. Ask what to work on."
+                        if not resume_handle:
+                            greet += " Greet naturally in one sentence. Ask what to work on."
 
                         await session.send_realtime_input(text=greet)
 
@@ -2478,10 +2483,16 @@ async def friday_live_engine():
 
                     reader_task = asyncio.create_task(input_reader())
 
+                    # Proactive session restart before server duration limit (~20 min)
+                    session_lifetime_task = asyncio.create_task(asyncio.sleep(1020))
+
                     try:
                         while True:
                             if receive_task.done():
-                                # receive loop died (GOAWAY, 1008, etc.) — reconnect
+                                break
+                            if session_lifetime_task.done():
+                                console.print("[bold yellow][SYSTEM] Proactive session restart (17 min). Reconnecting...[/]")
+                                receive_task.cancel()
                                 break
                             await asyncio.sleep(0.5)
 
@@ -2494,7 +2505,8 @@ async def friday_live_engine():
                         video_task.cancel()
                         ka_task.cancel()
                         reader_task.cancel()
-                        for t in [receive_task, audio_task, bg_monitor_task, video_task, ka_task, reader_task]:
+                        session_lifetime_task.cancel()
+                        for t in [receive_task, audio_task, bg_monitor_task, video_task, ka_task, reader_task, session_lifetime_task]:
                             try:
                                 await asyncio.wait_for(asyncio.shield(t), timeout=2.0)
                             except (asyncio.CancelledError, asyncio.TimeoutError):
@@ -2512,8 +2524,14 @@ async def friday_live_engine():
                     set_live_session(None, None)
                 except Exception:
                     pass
-                console.print("[dim]Clearing resume handle (stale video state risk). Reconnecting fresh...[/]")
-                resume_handle = None
+                # Only clear resume_handle on real errors, NOT clean GoAway
+                # GoAway = server-initiated clean close, resume_handle is valid
+                err_str = str(e)
+                if "1008" not in err_str and "GoAway" not in err_str:
+                    console.print("[dim]Clearing resume handle (non-GoAway error). Reconnecting fresh...[/]")
+                    resume_handle = None
+                else:
+                    console.print("[dim]GoAway — preserving resume_handle for session resumption.[/]")
                 if reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
                     await asyncio.sleep(3 * reconnect_attempts)
                 else:
