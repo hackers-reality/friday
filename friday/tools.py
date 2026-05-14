@@ -2757,6 +2757,30 @@ def context_tool(action: str = "list", **kwargs) -> str:
         return f"[FAIL] Context error: {e}"
 
 
+#  Crash Watcher Tool #
+def crash_tool(action: str = "status", **kwargs) -> str:
+    """Crash watcher: monitors Windows app crashes in real-time via Event Log. Actions: status, recent (list crashes), analyze (deep dive), watch (start background), stop."""
+    try:
+        from friday.crash_watcher import crash_tool as _ct
+        return _ct(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] crash_watcher.py not available."
+    except Exception as e:
+        return f"[FAIL] Crash watcher error: {e}"
+
+
+#  Self-Improvement Pipeline Tool #
+def self_improve_tool(action: str = "status", **kwargs) -> str:
+    """Self-improvement pipeline: propose, review, and apply code changes. Actions: propose (suggest change to a file), list (show pending), diff (show diff), apply (approve + write), reject (discard), status."""
+    try:
+        from friday.self_improve import self_improve_tool as _sit
+        return _sit(action=action, **kwargs)
+    except ImportError:
+        return "[FAIL] self_improve.py not available."
+    except Exception as e:
+        return f"[FAIL] Self-improve error: {e}"
+
+
 #  Episodic Archive Tool #
 def episodic_tool(action: str = "status", **kwargs) -> str:
     """Episodic memory: record and search past sessions with full-text search. Actions: search (FTS query), recent (last N), record (manual entry), session (full session by id), stats, status."""
@@ -2847,6 +2871,8 @@ __all__ = [
     "dream_tool", "scheduler_tool", "skills_tool", "predictive_tool",
     "reflection_tool", "context_tool", "monitor_tool", "mcp_tool",
     "episodic_tool",
+    "self_improve_tool",
+    "crash_tool",
 ]
 
 if __name__ == "__main__":

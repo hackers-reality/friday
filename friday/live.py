@@ -110,6 +110,8 @@ from friday.tools import (
     monitor_tool,
     mcp_tool,
     episodic_tool,
+    self_improve_tool,
+    crash_tool,
 )
 
 # vector_memory_tool now re-exported through friday_tools
@@ -289,6 +291,8 @@ Goals & Memory:
 - reflection_tool(action) — GEPA self-reflection: analyzes tool outcomes, finds failure patterns, auto-improves
 - context_tool(action, name, content) — manage project context files (AGENTS.md, CLAUDE.md, FRIDAY.md). Actions: list, show, add, delete, reload
 - episodic_tool(action, query) — episodic memory with FTS5: full-text search all past sessions, tool calls, and interactions. Actions: search (query past), recent (last N), session (full session by id), stats. Auto-records all tool calls.
+- self_improve_tool(action, file_path, content) — self-improvement pipeline: propose changes to my own code, show diffs, apply or reject with your approval. Actions: propose, list, diff, apply, reject, status.
+- crash_tool(action) — crash watcher: monitors Windows Event Log for app crashes in real-time, captures fault details. Actions: status, recent, analyze (deep dive), watch (start), stop.
 
 System & Monitoring:
 - status_check(include) — quick system overview (goals, calendar, email, notifications, CPU, RAM, active window)
@@ -1645,6 +1649,29 @@ def _build_tools():
                     "tool_name": {"type": "STRING", "description": "Tool name (for action=record)."},
                 }, required=["action"]),
             ),
+            # ======== SELF-IMPROVEMENT ========
+            types.FunctionDeclaration(
+                name="self_improve_tool",
+                description="Self-improvement pipeline: propose changes to FRIDAY's own code, review diffs, apply or reject. Actions: propose (file_path, description, content), list (pending), diff (id), apply (approve+write, id), reject (id), status.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: propose, list, diff, apply, reject, status."},
+                    "file_path": {"type": "STRING", "description": "Path to file to modify (for action=propose)."},
+                    "description": {"type": "STRING", "description": "Description of the change (for action=propose)."},
+                    "content": {"type": "STRING", "description": "New file content (for action=propose)."},
+                    "id": {"type": "STRING", "description": "Change ID (for diff/apply/reject)."},
+                    "commit": {"type": "BOOLEAN", "description": "Whether to git commit after apply (default true, for action=apply)."},
+                }, required=["action"]),
+            ),
+            # ======== CRASH WATCHER ========
+            types.FunctionDeclaration(
+                name="crash_tool",
+                description="Crash watcher: monitors Windows app crashes via Event Log in real-time. Actions: status (watcher state), recent (list recent crashes), analyze (deep dive into crash, optional index=N), watch (start background poll every 30s), stop.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, recent, analyze, watch, stop."},
+                    "limit": {"type": "INTEGER", "description": "Result limit (for action=recent)."},
+                    "index": {"type": "INTEGER", "description": "Crash index to analyze, -1 = latest (for action=analyze)."},
+                }, required=["action"]),
+            ),
             # ======== MCP BRIDGE ========
             types.FunctionDeclaration(
                 name="mcp_tool",
@@ -1818,6 +1845,8 @@ TOOL_MAP = {
     "monitor_tool": monitor_tool,
     "mcp_tool": mcp_tool,
     "episodic_tool": episodic_tool,
+    "self_improve_tool": self_improve_tool,
+    "crash_tool": crash_tool,
 }
 
 
@@ -2152,6 +2181,13 @@ async def friday_live_engine():
         from friday.skills import start_curator_on_boot
         start_curator_on_boot()
         console.print("[dim]Skill curator initialized[/]")
+    except Exception:
+        pass
+
+    try:
+        from friday.crash_watcher import start_watcher
+        start_watcher()
+        console.print("[dim]Crash watcher started[/]")
     except Exception:
         pass
 
