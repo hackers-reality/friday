@@ -88,7 +88,7 @@ from friday.tools import (
     open_roblox_game, open_microsoft_store,
     github_create_repo, github_list_issues, github_create_issue, github_search_code,
     github_merge_pr, github_repo_info, github_list_branches, github_commit_history,
-    github_authorize, github_exchange_code, github_refresh_token,
+    github_authorize, github_exchange_code, github_refresh_token, github_setup,
     search_browser_history, open_history_item, tell_alexa,
     spotify_next, spotify_prev, spotify_volume,
     send_instagram_dm, netflix_play, google_authorize, gmail_authorize, exchange_oauth_code, read_emails, send_email,
@@ -322,7 +322,8 @@ Media:
 Workflows & Plugins:
 - workflow_tool(action, name, steps) — create/run multi-step workflows
 - plugin_tool(action, plugin_name) — load/call plugin modules
-- github_authorize() — start Device Flow auth (hardcoded GitHub App, just authorize at github.com/login/device)
+- github_setup(token='...') — PREFERRED: set GitHub PAT. Pass token='github_pat_...' or leave empty for instructions.
+- github_authorize() — Device Flow fallback (Opens browser, shows code to enter at github.com/login/device)
 - github_refresh_token() — manually refresh GitHub App token (only needed if expiry enabled)
 - github_list_files, github_read_file, github_write_file — GitHub repo access
 - github_create_branch, github_create_pr, github_self_modify, github_review_pr
@@ -1494,8 +1495,12 @@ def _build_tools():
                 }),
             ),
             types.FunctionDeclaration(
+                name="github_setup",
+                description="PREFERRED: set up GitHub with a Personal Access Token. Pass token='github_pat_...' to validate and save. Leave token empty for instructions on generating one."
+            ),
+            types.FunctionDeclaration(
                 name="github_authorize",
-                description="Start GitHub Device Flow authorization. Gives the user a code to enter at github.com/login/device. Blocks up to 5 minutes until they authorize."
+                description="FALLBACK: Start GitHub Device Flow authorization. Opens browser, shows a code to enter at github.com/login/device. Blocks up to 5 minutes."
             ),
             types.FunctionDeclaration(
                 name="github_exchange_code",

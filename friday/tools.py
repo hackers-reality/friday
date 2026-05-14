@@ -2525,6 +2525,17 @@ def github_exchange_code(device_code: str = "") -> str:
         return f"[FAIL] GitHub code exchange error: {e}"
 
 
+def github_setup(token: str = "") -> str:
+    """Set up GitHub with a Personal Access Token (PAT). PREFERRED: just put GITHUB_TOKEN in .env. Otherwise pass token=... and it validates + saves."""
+    try:
+        from friday.github import github_setup as _gs
+        return _gs(token=token)
+    except ImportError:
+        return "[FAIL] friday.github not available."
+    except Exception as e:
+        return f"[FAIL] GitHub setup error: {e}"
+
+
 def github_refresh_token() -> str:
     """Manually refresh the GitHub App token. Only works for GitHub Apps (client_id starts with Iv1.)."""
     try:
@@ -2892,7 +2903,7 @@ __all__ = [
     "github_create_branch", "github_create_pr", "github_self_modify", "github_review_pr",
     "github_create_repo", "github_list_issues", "github_create_issue", "github_search_code",
     "github_merge_pr", "github_repo_info", "github_list_branches", "github_commit_history",
-    "github_authorize", "github_exchange_code",
+    "github_authorize", "github_exchange_code", "github_setup",
     "multi_agent_delegate", "message_channel_tool",
     "send_notification", "get_pending_notifications", "clear_notifications",
     "dream_tool", "scheduler_tool", "skills_tool", "predictive_tool",

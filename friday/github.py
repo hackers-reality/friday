@@ -497,8 +497,8 @@ def github_commit_history(path: str = "", limit: int = 10) -> str:
 
 
 def _get_oauth_creds() -> tuple:
-    """Get GitHub OAuth/GitHub App client_id and client_secret from env.
-    Device Flow only needs client_id — client_secret is optional.
+    """Get GitHub client_id and client_secret.
+    Checks env, .env, then falls back to hardcoded default.
     """
     cid = os.getenv("GITHUB_CLIENT_ID")
     cs = os.getenv("GITHUB_CLIENT_SECRET", "")
@@ -513,20 +513,37 @@ def _get_oauth_creds() -> tuple:
             return cid, cs
     except Exception:
         pass
+    # Fall back to hardcoded default
+    if _GITHUB_CLIENT_ID:
+        return _GITHUB_CLIENT_ID, cs
     return None, None
 
 
 def github_authorize() -> str:
-    """Start GitHub Device Flow. Gives you a code to enter at github.com/login/device. Blocks until authorized or timeout.
-    Supports BOTH GitHub Apps (client_id starts with Iv1.) and OAuth Apps.
-    Device Flow does NOT need a client secret — only the Client ID is required.
+    """Start GitHub Device Flow OR guide PAT setup. Prints code to console prominently.
+    PREFERRED: Just set GITHUB_TOKEN in .env -- no flow needed.
     """
+    # First check if already have GITHUB_TOKEN
+    existing = _get_active_token()
+    if existing:
+        return "[OK] GITHUB_TOKEN already set. No authorization needed."
+
+    print("\n" + "=" * 60)
+    print("  GITHUB AUTHORIZATION")
+    print("=" * 60)
+    print("  PREFERRED: Add GITHUB_TOKEN to your .env file")
+    print("  (Settings > Developer settings > Personal access tokens > Fine-grained tokens)")
+    print("=" * 60)
+
     cid, cs = _get_oauth_creds()
     if not cid:
         return _github_setup_wizard()
 
     import requests, time, json, webbrowser
     is_gh_app = _is_github_app(cid)
+
+    print(f"\n  Using Device Flow as fallback (Client ID: {cid[:8]}...)")
+    print("  Opening browser...\n")
 
     # Step 1: Request device code
     device_payload = {"client_id": cid}
@@ -552,11 +569,18 @@ def github_authorize() -> str:
     interval = data.get("interval", 5)
 
     app_type = "GitHub App" if is_gh_app else "OAuth App"
+
+    # Print code PROMINENTLY to console
+    print("\n" + "!" * 60)
+    print(f"  >>> YOUR CODE:  {user_code}  <<<")
+    print(f"  >>> Enter this at: {verification_uri}")
+    print("!" * 60 + "\n")
+
     msg = (
         f"[OK] GitHub Device Flow started ({app_type}).\n\n"
-        f"  1. Go to: {verification_uri}\n"
-        f"  2. Enter code: {user_code}\n\n"
-        f"I'm waiting for you to authorize... (timeout: 5 minutes)"
+        f"  >>> YOUR CODE: {user_code} <<<\n"
+        f"  >>> Enter at: {verification_uri}\n\n"
+        f"Waiting for authorization... (timeout: 5 minutes)"
     )
 
     try:
@@ -623,18 +647,21 @@ def github_authorize() -> str:
 
 
 def _github_setup_wizard() -> str:
-    """Guides the user through GitHub authorization. Client ID is already hardcoded."""
-    import webbrowser
+    """Guides the user through GitHub authorization with PAT as primary method."""
     return (
-        "[SETUP] GitHub Auth — Ready\n\n"
-        "GitHub App 'friday-from-ironman' is pre-configured (Client ID already hardcoded).\n"
-        "Just run github_authorize() — it will:\n"
-        "  1. Auto-open https://github.com/login/device\n"
-        "  2. Show you a code to enter\n"
-        "  3. You authorize the app\n"
-        "  4. Done — permanent token saved\n\n"
-        "Permissions: Read/write to repos, PRs, issues, actions, workflows, codespaces,\n"
-        "  deployments, pages, secrets, admin to projects, and more."
+        "[SETUP] GitHub Authentication\n\n"
+        "Two ways to set up:\n\n"
+        "METHOD 1 (PREFERRED) — Personal Access Token:\n"
+        "  1. Go to https://github.com/settings/tokens?type=beta\n"
+        "  2. Click 'Generate new token' → 'Fine-grained token'\n"
+        "  3. Set repo scope (all), read:user, workflow\n"
+        "  4. Copy the token and add to your .env file:\n"
+        "     GITHUB_TOKEN=github_pat_...\n"
+        "  5. Restart Friday — done.\n\n"
+        "METHOD 2 — Device Flow (auto):\n"
+        "  The GitHub App 'friday-from-ironman' is pre-configured.\n"
+        "  Run github_authorize() — it will open a browser and show you a code.\n\n"
+        "Permissions needed: read/write repos, PRs, issues, actions, workflows."
     )
 
 
@@ -711,6 +738,46 @@ def github_exchange_code(device_code: str = "") -> str:
             return f"[FAIL] Polling error: {error}"
 
     return "[FAIL] Timeout."
+
+
+def github_setup(token: str = "") -> str:
+    """Set up GitHub authentication with a Personal Access Token (PAT).
+    PREFERRED METHOD: Generate a token at GitHub Settings → Developer settings → Personal access tokens.
+    Then run: github_setup(token='github_pat_...')
+    Or add GITHUB_TOKEN=... to your .env file.
+    """
+    if token:
+        # Validate by making a test API call
+        import requests
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        try:
+            resp = requests.get("https://api.github.com/user", headers=headers, timeout=10)
+            if resp.status_code == 200:
+                user = resp.json().get("login", "unknown")
+                # Save to .env
+                env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+                try:
+                    with open(env_path, "a") as f:
+                        f.write(f"\n# Added by Friday github_setup\nGITHUB_TOKEN={token}\n")
+                except Exception:
+                    pass
+                global github
+                github.token = token
+                github._update_headers()
+                return f"[OK] GitHub authenticated as {user}. Token saved to .env."
+            else:
+                return f"[FAIL] Token invalid: {resp.status_code} {resp.text[:200]}"
+        except Exception as e:
+            return f"[FAIL] Error validating token: {e}"
+
+    # No token provided — show instructions
+    existing = _get_active_token()
+    if existing:
+        return "[OK] GITHUB_TOKEN is already set and working."
+    return _github_setup_wizard()
 
 
 def github_refresh_token() -> str:
