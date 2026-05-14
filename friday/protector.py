@@ -19,6 +19,8 @@ _watch_thread: Optional[threading.Thread] = None
 _watch_stop = threading.Event()
 _lid_ps_proc: Optional[subprocess.Popen] = None
 _shutdown_aborted = False
+_live_session = None
+_live_loop = None
 
 ES_CONTINUOUS = 0x80000000
 ES_SYSTEM_REQUIRED = 0x00000001
@@ -33,7 +35,29 @@ def _set_sleep_prevention(enable: bool):
         _kernel32.SetThreadExecutionState(ES_CONTINUOUS)
 
 
+_SPEAK_LOCK = threading.Lock()
+
+def set_live_session(session, loop):
+    global _live_session, _live_loop
+    _live_session = session
+    _live_loop = loop
+
+
 def _speak(text: str):
+    """Speak through Gemini Live if available, fallback to Windows TTS."""
+    global _live_session, _live_loop
+    if _live_session is not None and _live_loop is not None:
+        try:
+            with _SPEAK_LOCK:
+                if _live_session is not None:
+                    import asyncio
+                    fut = asyncio.run_coroutine_threadsafe(
+                        _live_session.send_realtime_input(text=text), _live_loop
+                    )
+                    fut.result(timeout=8)
+                    return
+        except Exception:
+            pass
     try:
         safe = text.replace("'", "`'")
         subprocess.run(

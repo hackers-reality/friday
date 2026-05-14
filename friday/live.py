@@ -2249,6 +2249,13 @@ async def friday_live_engine():
                     console.print("[bold green]Neural link established.[/]\n")
                     reconnect_attempts = 0
 
+                    # Give protector access to speak through Live audio
+                    try:
+                        from friday.protector import set_live_session
+                        set_live_session(session, asyncio.get_running_loop())
+                    except Exception:
+                        pass
+
                     greeting_done = asyncio.Event()
                     audio_ready = asyncio.Event()
                     is_greeting = last_session_was_greeting
@@ -2494,6 +2501,12 @@ async def friday_live_engine():
             except Exception as e:
                 reconnect_attempts += 1
                 console.print(f"[red]Link error:[/] {e}")
+                # Clear protector's session reference so it doesn't use stale session
+                try:
+                    from friday.protector import set_live_session
+                    set_live_session(None, None)
+                except Exception:
+                    pass
                 console.print("[dim]Clearing resume handle (stale video state risk). Reconnecting fresh...[/]")
                 resume_handle = None
                 if reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
