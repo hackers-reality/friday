@@ -9,6 +9,9 @@ import os
 import re
 import json
 import glob
+import zipfile
+import tempfile
+import shutil
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -81,8 +84,12 @@ def import_from_json_file(filepath: str) -> Dict[str, Any]:
                 title = item.get("name", "Untitled")
                 turns = []
                 for msg in item.get("chat_messages", []):
+                    if not isinstance(msg, dict):
+                        continue
                     role = "user" if msg.get("sender") in ("human", "user") else "assistant"
-                    turns.append({"role": role, "content": msg.get("text", "")})
+                    text = msg.get("text", "") or _parse_claude_content(msg.get("content", ""))
+                    if text:
+                        turns.append({"role": role, "content": text})
                 conversations.append({"title": title, "turns": turns})
             elif isinstance(item, dict) and "message" in item:
                 source_type = "chatgpt"
@@ -170,9 +177,283 @@ def import_from_directory(directory: str) -> List[Dict[str, Any]]:
                 print(f"[MemoryImport] Skipping {filepath}: {e}")
     return results
 
+# ─── Claude Memories JSON ─────────────────────────────────
+
+def _parse_claude_content(content_field) -> str:
+    """Parse Claude content field which can be a string or list of content parts."""
+    if isinstance(content_field, str):
+        return content_field
+    if isinstance(content_field, list):
+        parts = []
+        for part in content_field:
+            if isinstance(part, dict):
+                if "text" in part:
+                    parts.append(part["text"])
+                elif "type" in part and part["type"] == "text" and "text" in part:
+                    parts.append(part["text"])
+            elif isinstance(part, str):
+                parts.append(part)
+        return "\n".join(parts)
+    return str(content_field) if content_field else ""
+
+
+def import_from_claude_memories(memories_data: List[Dict]) -> Dict[str, Any]:
+    """Parse Claude memories.json: extracts conversations_memory and project_memories."""
+    all_text = ""
+    account_count = 0
+    project_count = 0
+
+    for entry in memories_data:
+        if not isinstance(entry, dict):
+            continue
+        account_count += 1
+        cm = entry.get("conversations_memory", "")
+        if isinstance(cm, str) and cm.strip():
+            all_text += f"\n{cm}\n"
+        pm = entry.get("project_memories", {})
+        if isinstance(pm, dict):
+            for proj_id, proj_text in pm.items():
+                if isinstance(proj_text, str) and proj_text.strip():
+                    all_text += f"\n[Project {proj_id}]\n{proj_text}\n"
+                    project_count += 1
+
+    return {
+        "source": "claude_memories.json",
+        "source_type": "claude_memories",
+        "imported_at": datetime.now().isoformat(),
+        "conversations": [{"title": "Claude Memories", "turns": [{"role": "assistant", "content": all_text.strip()}]}],
+        "account_count": account_count,
+        "project_count": project_count,
+        "raw_text_snippet": all_text[:2000],
+    }
+
+
+def import_from_claude_conversations(convs_data: List[Dict]) -> Dict[str, Any]:
+    """Parse Claude conversations.json. Each entry has uuid, name, summary, chat_messages etc."""
+    conversations = []
+    for item in convs_data:
+        if not isinstance(item, dict):
+            continue
+        title = item.get("name") or item.get("summary", "Untitled Claude Chat") or "Untitled"
+        summary = item.get("summary", "")
+        turns = []
+        for msg in item.get("chat_messages", []):
+            if not isinstance(msg, dict):
+                continue
+            role = "user" if msg.get("sender") in ("human", "user") else "assistant"
+            text = msg.get("text", "") or _parse_claude_content(msg.get("content", ""))
+            if text:
+                turns.append({"role": role, "content": text})
+        if summary and (not turns or turns[0].get("role") != "system"):
+            turns.insert(0, {"role": "system", "content": f"Summary: {summary}"})
+        conversations.append({"title": title[:200], "turns": turns})
+
+    return {
+        "source": "claude_conversations.json",
+        "source_type": "claude_conversations",
+        "imported_at": datetime.now().isoformat(),
+        "conversations": conversations,
+        "conversation_count": len(conversations),
+    }
+
+
+# ─── Gemini Workspace TXT ──────────────────────────────────
+
+def import_from_gemini_workspace(data: Dict) -> Dict[str, Any]:
+    """Parse Gemini Workspace conversation JSON (from Takeout TXT files).
+    Structure: {title, conversation_turns: [{user_turn: {prompt}, model_turn: {response}}]}"""
+    title = data.get("title", "Gemini Conversation")
+    turns = []
+    for turn in data.get("conversation_turns", []):
+        if not isinstance(turn, dict):
+            continue
+        user_turn = turn.get("user_turn")
+        if isinstance(user_turn, dict):
+            prompt = user_turn.get("prompt", "")
+            if prompt:
+                turns.append({"role": "user", "content": prompt})
+        model_turn = turn.get("model_turn")
+        if isinstance(model_turn, dict):
+            response = model_turn.get("response", "")
+            if response:
+                turns.append({"role": "assistant", "content": response})
+
+    return {
+        "source": f"gemini_workspace_{title[:30]}",
+        "source_type": "gemini_workspace",
+        "imported_at": datetime.now().isoformat(),
+        "conversations": [{"title": title[:200], "turns": turns}],
+        "turn_count": len(turns),
+    }
+
+
+# ─── ZIP Import ────────────────────────────────────────────
+
+_DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
+# Also check E:\downloads
+_E_DOWNLOADS = r"E:\downloads"
+
+
+def import_from_zip_file(zip_path: str) -> List[Dict[str, Any]]:
+    """Auto-detect and import data from a zip file (in-memory, no disk extraction).
+    Handles Claude exports and Google Takeout zips."""
+    results = []
+    if not zipfile.is_zipfile(zip_path):
+        return results
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as z:
+            names = z.namelist()
+            basenames = {os.path.basename(n) for n in names}
+
+            # Claude export: memories.json + conversations.json
+            if "memories.json" in basenames and "conversations.json" in basenames:
+                try:
+                    mem_data = json.loads(z.read("memories.json"))
+                    if isinstance(mem_data, list):
+                        result = import_from_claude_memories(mem_data)
+                        copy_path = os.path.join(_RAW_IMPORTS_DIR, f"claude_memories_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                        with open(copy_path, "w", encoding="utf-8") as f:
+                            json.dump(result, f, indent=4)
+                        result["saved_copy"] = copy_path
+                        results.append(result)
+                except Exception as e:
+                    print(f"[MemoryImport] Claude memories error: {e}")
+
+                try:
+                    conv_data = json.loads(z.read("conversations.json"))
+                    if isinstance(conv_data, list) and conv_data and "chat_messages" in conv_data[0]:
+                        result = import_from_claude_conversations(conv_data)
+                        copy_path = os.path.join(_RAW_IMPORTS_DIR, f"claude_convs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                        with open(copy_path, "w", encoding="utf-8") as f:
+                            json.dump(result, f, indent=4)
+                        result["saved_copy"] = copy_path
+                        results.append(result)
+                except Exception as e:
+                    print(f"[MemoryImport] Claude conversations error: {e}")
+
+                # Also handle individual project files
+                for n in names:
+                    if n.startswith("projects/") and n.endswith(".json"):
+                        try:
+                            proj_data = json.loads(z.read(n))
+                            proj_result = import_from_json_file_raw("projects", proj_data)
+                            if proj_result and proj_result.get("conversations"):
+                                results.append(proj_result)
+                        except Exception:
+                            pass
+
+            # Google Takeout: Gemini in Workspace TXT files
+            for n in names:
+                if n.endswith(".txt") and "conversation_" in n:
+                    try:
+                        raw = z.read(n).decode("utf-8", errors="replace")
+                        data = json.loads(raw)
+                        if isinstance(data, dict) and "conversation_turns" in data:
+                            result = import_from_gemini_workspace(data)
+                            base_name = os.path.basename(n).replace(".txt", "")
+                            copy_path = os.path.join(_RAW_IMPORTS_DIR, f"gemini_{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                            with open(copy_path, "w", encoding="utf-8") as f:
+                                json.dump(result, f, indent=4)
+                            result["saved_copy"] = copy_path
+                            results.append(result)
+                    except Exception as e:
+                        print(f"[MemoryImport] Gemini TXT error {n}: {e}")
+
+        return results
+    except Exception as e:
+        print(f"[MemoryImport] Zip import error for {zip_path}: {e}")
+        return results
+
+
+def import_from_json_file_raw(source_name: str, data) -> Optional[Dict[str, Any]]:
+    """Parse raw JSON data (already loaded) as conversation, without file path.
+    Used for in-memory zip contents."""
+    source_type = "unknown_json"
+    conversations = []
+
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict) and "chat_messages" in item:
+                source_type = "claude"
+                title = item.get("name", item.get("summary", "Untitled"))
+                turns = []
+                for msg in item.get("chat_messages", []):
+                    if not isinstance(msg, dict):
+                        continue
+                    role = "user" if msg.get("sender") in ("human", "user") else "assistant"
+                    text = msg.get("text", "") or _parse_claude_content(msg.get("content", ""))
+                    if text:
+                        turns.append({"role": role, "content": text})
+                conversations.append({"title": title[:200], "turns": turns})
+
+    if not conversations and isinstance(data, dict):
+        if "conversations" in data:
+            for item in data["conversations"]:
+                source_type = "chatgpt"
+                turns = []
+                for msg in item.get("messages", []):
+                    role = msg.get("role", "user")
+                    role = "user" if role == "user" else "assistant"
+                    text = msg.get("content", msg.get("text", ""))
+                    if isinstance(text, list):
+                        text = " ".join(t for t in text if isinstance(t, str))
+                    if text:
+                        turns.append({"role": role, "content": text})
+                conversations.append({"title": item.get("title", "Untitled"), "turns": turns})
+
+    if not conversations:
+        return None
+
+    return {
+        "source": source_name,
+        "source_type": source_type,
+        "imported_at": datetime.now().isoformat(),
+        "conversations": conversations,
+    }
+
+
+def import_exports(exports_dir: str = None) -> List[Dict[str, Any]]:
+    """Scan a directory for supported zip files and import all of them.
+    Defaults to checking both ~/Downloads and E:\\downloads."""
+    results = []
+    directories = []
+
+    if exports_dir:
+        directories = [exports_dir]
+    else:
+        if os.path.isdir(_DOWNLOADS_DIR):
+            directories.append(_DOWNLOADS_DIR)
+        if os.path.isdir(_E_DOWNLOADS):
+            directories.append(_E_DOWNLOADS)
+
+    seen_zips = set()
+    for d in directories:
+        for fname in os.listdir(d):
+            fpath = os.path.join(d, fname)
+            if not fname.endswith(".zip") or not os.path.isfile(fpath):
+                continue
+            # Skip non-data zips
+            if not any(kw in fname.lower() for kw in ["data-", "takeout-", "export"]):
+                continue
+            if fpath in seen_zips:
+                continue
+            seen_zips.add(fpath)
+            print(f"[MemoryImport] Importing {fname}...")
+            try:
+                imported = import_from_zip_file(fpath)
+                results.extend(imported)
+                print(f"[MemoryImport]  -> {len(imported)} result(s)")
+            except Exception as e:
+                print(f"[MemoryImport]  -> FAIL: {e}")
+
+    return results
+
+
 # ─── Audit Engine ──────────────────────────────────────────
 
 def _extract_name(text: str) -> Optional[str]:
+    _GENERIC_NAMES = {"account", "user", "human", "assistant", "claude", "chatgpt", "gemini", "customer", "client", "student", "teacher", "admin", "guest", "default", "person", "someone", "nobody", "none"}
     patterns = [
         r"(?:my name is|call me|I'm|I am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
         r"(?:name['\u2019s]?s?\s*(?::|is|-)\s*)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
@@ -180,7 +461,9 @@ def _extract_name(text: str) -> Optional[str]:
     for p in patterns:
         m = re.search(p, text)
         if m:
-            return m.group(1).strip()
+            name = m.group(1).strip()
+            if name.lower() not in _GENERIC_NAMES:
+                return name
     return None
 
 def _extract_age_grade(text: str) -> Optional[str]:
@@ -491,7 +774,7 @@ def generate_profile_markdown() -> str:
 def memory_import_tool(action: str = "status", **kwargs) -> str:
     """
     Friday tool for importing and auditing chat history.
-    Actions: status, import_file, import_dir, profile, audit
+    Actions: status, import_file, import_dir, import_zip, import_exports, profile, audit
     """
     if action == "status":
         profile = load_profile()
@@ -586,7 +869,29 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
             f"\nFull profile: {_PROFILE_MD}"
         )
 
-    return f"Unknown action: {action}. Available: status, import_file, import_dir, audit, profile"
+    if action == "import_zip":
+        zip_path = kwargs.get("path") or kwargs.get("zip") or kwargs.get("filepath")
+        if not zip_path or not os.path.exists(zip_path):
+            return f"[FAIL] Zip not found: {zip_path}"
+        if not zipfile.is_zipfile(zip_path):
+            return f"[FAIL] Not a valid zip: {zip_path}"
+        results = import_from_zip_file(zip_path)
+        if not results:
+            return f"[FAIL] No importable data found in zip."
+        total_convs = sum(len(r.get("conversations", [])) for r in results)
+        sources = ", ".join(r.get("source_type", "?") for r in results)
+        return f"[OK] Imported {len(results)} data source(s) ({total_convs} conversations) from zip\nSources: {sources}"
+
+    if action == "import_exports":
+        exports_dir = kwargs.get("dir") or kwargs.get("directory") or kwargs.get("path")
+        results = import_exports(exports_dir)
+        if not results:
+            return f"[FAIL] No supported export zips found."
+        total_convs = sum(len(r.get("conversations", [])) for r in results)
+        sources = ", ".join(set(r.get("source_type", "?") for r in results))
+        return f"[OK] Imported {len(results)} data source(s) ({total_convs} conversations) from exports\nSources: {sources}"
+
+    return f"Unknown action: {action}. Available: status, import_file, import_dir, import_zip, import_exports, audit, profile"
 
 
 if __name__ == "__main__":
