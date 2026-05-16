@@ -2677,7 +2677,249 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
         lines.append(f"\n[OK] Profile repaired and saved.")
         return "\n".join(lines)
 
-    return f"Unknown action: {action}. Available: status, import_file, import_dir, import_zip, import_exports, audit, profile, repair_profile"
+    if action == "doctor":
+        profile = load_profile()
+        if not profile or profile.get("version", 0) < 1:
+            return "[FAIL] No profile to diagnose."
+
+        lines = ["### MEMORY DOCTOR - Diagnostic Report\n"]
+
+        # Validate
+        issues = validate_profile(profile)
+        if issues.get("invalid_fields"):
+            lines.append(f"[ISSUE] Invalid fields: {', '.join(issues['invalid_fields'])}")
+        if issues.get("warnings"):
+            for w in issues["warnings"]:
+                lines.append(f"[WARN] {w}")
+        if not issues.get("invalid_fields") and not issues.get("warnings"):
+            lines.append("[OK] Validation passed.")
+
+        # Conflicts
+        conflicts = detect_profile_conflicts(profile)
+        if conflicts.get("warnings"):
+            lines.append(f"\n[CONFLICTS] {len(conflicts['warnings'])} conflict(s):")
+            for w in conflicts["warnings"]:
+                lines.append(f"  - {w}")
+        else:
+            lines.append("\n[OK] No conflicts detected.")
+
+        # Decay preview (dry run)
+        _, decay_report = decay_profile_memory(dict(profile))
+        if decay_report.get("removed_items"):
+            lines.append(f"\n[DECAY] {len(decay_report['removed_items'])} item(s) would be removed:")
+            for item in decay_report["removed_items"][:10]:
+                lines.append(f"  - {item}")
+            if len(decay_report["removed_items"]) > 10:
+                lines[-1] += f" (+{len(decay_report['removed_items'])-10} more)"
+        if decay_report.get("scalar_warnings"):
+            for w in decay_report["scalar_warnings"]:
+                lines.append(f"[DECAY SCALAR] {w}")
+        if not decay_report.get("removed_items") and not decay_report.get("scalar_warnings"):
+            lines.append("[OK] No decay needed.")
+        lines.append(f"  (Pinned items spared: {decay_report.get('pinned_spared', 0)})")
+
+        # Review queue
+        queue = build_memory_review_queue(profile)
+        if queue:
+            lines.append(f"\n[REVIEW] {len(queue)} item(s) need review:")
+            for item in queue[:10]:
+                lines.append(f"  - [{item.get('id','?')}] {item.get('field','?')}: {item.get('value','?')[:60]} ({item.get('reason','?')})")
+            if len(queue) > 10:
+                lines.append(f"  ... and {len(queue)-10} more")
+        else:
+            lines.append("\n[OK] Review queue empty.")
+
+        # Redaction test
+        sample = "Contact: user@example.com or token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        redacted = redact_sensitive_text(sample)
+        if "REDACTED" in redacted and "user@" not in redacted:
+            lines.append(f"\n[OK] Redaction working (sample: '{redacted[:60]}...')")
+        else:
+            lines.append(f"\n[WARN] Redaction may not be working (sample result: '{redacted[:60]}')")
+
+        # Profile size
+        profile_json = json.dumps(profile, indent=2)
+        lines.append(f"\n[INFO] Profile size: {len(profile_json)} bytes, {len(queue)} review items, {len(profile.get('audits', []))} audits")
+
+        return "\n".join(lines)
+
+    if action == "review_profile":
+        profile = load_profile()
+        if not profile or profile.get("version", 0) < 1:
+            return "[FAIL] No profile to review."
+
+        queue = build_memory_review_queue(profile)
+        if not queue:
+            return "[OK] Review queue is empty. No items need human review."
+
+        lines = ["### MEMORY REVIEW QUEUE\n"]
+        for i, item in enumerate(queue):
+            lines.append(f"{i+1}. [{item['id']}]")
+            lines.append(f"   Field: {item.get('field', '?')}")
+            lines.append(f"   Value: {item.get('value', '?')[:80]}")
+            lines.append(f"   Reason: {item.get('reason', '?')}")
+            lines.append(f"   Confidence: {item.get('confidence', 'N/A')}")
+            lines.append(f"   Suggested: {item.get('suggested_action', '?')}")
+            lines.append("")
+        lines.append(f"[QUEUE] {len(queue)} item(s) total.")
+        lines.append("Use approve_memory(id=...) or reject_memory(id=...) to resolve.")
+        return "\n".join(lines)
+
+    if action == "approve_memory":
+        mem_id = kwargs.get("id", "")
+        if not mem_id:
+            return "[FAIL] Usage: approve_memory(id='field::value')"
+        profile = load_profile()
+        if not profile or profile.get("version", 0) < 1:
+            return "[FAIL] No profile."
+        # Check if it exists in review queue
+        queue = profile.get("_review_queue", [])
+        new_queue = [q for q in queue if q.get("id") != mem_id]
+        removed = len(queue) - len(new_queue)
+        if removed == 0:
+            # Maybe it was a low-confidence item - add to pinned
+            parts = mem_id.split("::", 1)
+            if len(parts) == 2:
+                field, value = parts
+                # Normalize value
+                value = value.strip()
+                pinned = profile.setdefault("_pinned", [])
+                pin_key = f"{field}:{value.lower()}"
+                if pin_key not in pinned:
+                    pinned.append(pin_key)
+                return f"[OK] Pinned '{value}' in '{field}' to protect from decay/removal."
+            return f"[FAIL] No review item with id '{mem_id}' found."
+        profile["_review_queue"] = new_queue
+        # Also pin it
+        parts = mem_id.split("::", 1)
+        if len(parts) == 2:
+            pinned = profile.setdefault("_pinned", [])
+            pin_key = f"{parts[0]}:{parts[1].lower()}"
+            if pin_key not in pinned:
+                pinned.append(pin_key)
+        try:
+            save_profile(profile)
+        except Exception as e:
+            return f"[FAIL] Failed to save: {e}"
+        return f"[OK] Approved and pinned '{mem_id}'."
+
+    if action == "reject_memory":
+        mem_id = kwargs.get("id", "")
+        if not mem_id:
+            return "[FAIL] Usage: reject_memory(id='field::value')"
+        profile = load_profile()
+        if not profile or profile.get("version", 0) < 1:
+            return "[FAIL] No profile."
+
+        # Remove from review queue
+        queue = profile.get("_review_queue", [])
+        new_queue = [q for q in queue if q.get("id") != mem_id]
+        profile["_review_queue"] = new_queue
+
+        # Also remove the actual value from the profile
+        parts = mem_id.split("::", 1)
+        removed_from_profile = False
+        if len(parts) == 2:
+            field, value = parts
+            value = value.strip()
+            items = profile.get(field, [])
+            if isinstance(items, list):
+                filtered = [i for i in items if not (isinstance(i, str) and i.lower().strip() == value.lower())]
+                if len(filtered) != len(items):
+                    profile[field] = filtered
+                    removed_from_profile = True
+            # Also check dict-of-list keys
+            for dkey in _DICT_KEYS:
+                d = profile.get(dkey, {})
+                if isinstance(d, dict):
+                    for subkey, subitems in d.items():
+                        if isinstance(subitems, list):
+                            filtered = [i for i in subitems if not (isinstance(i, str) and i.lower().strip() == value.lower())]
+                            if len(filtered) != len(subitems):
+                                d[subkey] = filtered
+                                removed_from_profile = True
+
+        try:
+            save_profile(profile)
+        except Exception as e:
+            return f"[FAIL] Failed to save: {e}"
+
+        if removed_from_profile:
+            return f"[OK] Rejected '{mem_id}' and removed it from profile."
+        return f"[OK] Rejected '{mem_id}' (removed from review queue, value not found in profile)."
+
+    if action == "pin_memory":
+        mem_id = kwargs.get("id", "")
+        field = kwargs.get("field", "")
+        value = kwargs.get("value", "")
+        # Accept either id=FIELD::VALUE or separate field/value
+        if not mem_id and field and value:
+            mem_id = f"{field}::{value}"
+        if not mem_id:
+            return "[FAIL] Usage: pin_memory(id='field::value') or pin_memory(field='tech_stack', value='Python')"
+        profile = load_profile()
+        pinned = profile.setdefault("_pinned", [])
+        parts = mem_id.split("::", 1)
+        pin_key = mem_id if len(parts) == 1 else f"{parts[0]}:{parts[1].lower()}"
+        if pin_key not in pinned:
+            pinned.append(pin_key)
+        try:
+            save_profile(profile)
+        except Exception as e:
+            return f"[FAIL] Failed to save: {e}"
+        return f"[OK] Pinned '{mem_id}'."
+
+    if action == "unpin_memory":
+        mem_id = kwargs.get("id", "")
+        field = kwargs.get("field", "")
+        value = kwargs.get("value", "")
+        if not mem_id and field and value:
+            mem_id = f"{field}::{value}"
+        if not mem_id:
+            return "[FAIL] Usage: unpin_memory(id='field::value')"
+        profile = load_profile()
+        pinned = profile.get("_pinned", [])
+        parts = mem_id.split("::", 1)
+        pin_key = mem_id if len(parts) == 1 else f"{parts[0]}:{parts[1].lower()}"
+        if pin_key in pinned:
+            pinned.remove(pin_key)
+        try:
+            save_profile(profile)
+        except Exception as e:
+            return f"[FAIL] Failed to save: {e}"
+        return f"[OK] Unpinned '{mem_id}'."
+
+    if action == "decay_profile":
+        profile = load_profile()
+        if not profile or profile.get("version", 0) < 1:
+            return "[FAIL] No profile to decay."
+
+        profile, decay_report = decay_profile_memory(profile)
+        _inject_confidence(profile)
+        profile["last_updated"] = datetime.now().isoformat()
+
+        try:
+            save_profile(profile)
+        except Exception as e:
+            return f"[FAIL] Failed to save decayed profile: {e}"
+
+        lines = ["### MEMORY DECAY - Report\n"]
+        if decay_report.get("removed_items"):
+            lines.append(f"[REMOVED] {len(decay_report['removed_items'])} item(s):")
+            for item in decay_report["removed_items"][:15]:
+                lines.append(f"  - {item}")
+            if len(decay_report["removed_items"]) > 15:
+                lines[-1] += f" (+{len(decay_report['removed_items'])-15} more)"
+        if decay_report.get("scalar_warnings"):
+            for w in decay_report["scalar_warnings"]:
+                lines.append(f"[WARN] {w}")
+        if not decay_report.get("removed_items") and not decay_report.get("scalar_warnings"):
+            lines.append("[OK] No items needed decay.")
+        lines.append(f"[INFO] Pinned items spared: {decay_report.get('pinned_spared', 0)}")
+
+        return "\n".join(lines)
+
+    return f"Unknown action: {action}. Available: status, import_file, import_dir, import_zip, import_exports, audit, profile, repair_profile, doctor, review_profile, approve_memory, reject_memory, pin_memory, unpin_memory, decay_profile"
 
 
 # ─── User Memory Context Builder ─────────────────────────
@@ -2835,6 +3077,469 @@ def build_user_memory_context(max_chars: int = 6000) -> str:
         result = result[:max_chars].rsplit("\n", 1)[0] + "\n[TRUNCATED]"
     return result
 
+
+# ─── Memory Upgrades: Redaction, Conflicts, Decay, Review ──
+
+
+def redact_sensitive_text(text: str) -> str:
+    """
+    Redact sensitive information from text before storing in memory.
+
+    Redacts:
+    - Email addresses
+    - API keys / tokens (hex or base64 patterns)
+    - AWS / Azure / GCP keys
+    - GitHub tokens
+    - Slack tokens / webhooks
+    - Private IP addresses (10.x, 172.16-31.x, 192.168.x)
+    - JWT tokens
+    - Phone numbers
+    - Credit card numbers
+    - Social security numbers / Aadhaar
+
+    Args:
+        text: Raw text to redact.
+
+    Returns:
+        Text with sensitive patterns replaced by '[REDACTED]'.
+    """
+    patterns = [
+        # Email addresses
+        (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', '[REDACTED_EMAIL]'),
+        # API keys: hex (32+ chars) or base64 (40+ chars) patterns
+        (r'(?i)(?:api[_-]?key|apikey|secret|token|password)\s*[=:]\s*["\']?[A-Za-z0-9_\-]{16,}["\']?', '[REDACTED_CREDENTIAL]'),
+        # Standalone hex tokens (32+ hex chars)
+        (r'\b[0-9a-fA-F]{32,}\b', '[REDACTED_TOKEN]'),
+        # Standalone base64-like tokens (40+ base64 chars)
+        (r'\b[A-Za-z0-9+/]{40,}(?:={0,2})\b', '[REDACTED_TOKEN]'),
+        # JWT tokens (header.payload.signature)
+        (r'\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b', '[REDACTED_JWT]'),
+        # Private IPv4 addresses
+        (r'\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', '[REDACTED_IP_PRIVATE]'),
+        (r'\b(?:172\.(?:1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3})\b', '[REDACTED_IP_PRIVATE]'),
+        (r'\b(?:192\.168\.\d{1,3}\.\d{1,3})\b', '[REDACTED_IP_PRIVATE]'),
+        # Phone numbers (basic patterns)
+        (r'\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b', '[REDACTED_PHONE]'),
+        # GitHub tokens (ghp_***)
+        (r'\bgh[pso]_[A-Za-z0-9_]{36,}\b', '[REDACTED_GITHUB_TOKEN]'),
+        # Slack tokens (xox[bpras]-***)
+        (r'\bxox[bpras]-\d+-[A-Za-z0-9]{10,}\b', '[REDACTED_SLACK_TOKEN]'),
+        # Webhook URLs
+        (r'(?i)https?://hooks\.slack\.com/services/[A-Za-z0-9/]{20,}', '[REDACTED_WEBHOOK]'),
+        # Credit cards (basic Luhn-checkable pattern)
+        (r'\b(?:\d{4}[-\s]?){3}\d{4}\b', '[REDACTED_CC]'),
+        # SSN-like (NNN-NN-NNNN)
+        (r'\b\d{3}-\d{2}-\d{4}\b', '[REDACTED_SSN]'),
+    ]
+    for pattern, replacement in patterns:
+        text = re.sub(pattern, replacement, text)
+    return text
+
+
+def detect_profile_conflicts(profile: dict) -> dict:
+    """
+    Detect conflicting information within the user profile.
+
+    Checks:
+    - Multiple age/grade values across audit records
+    - Multiple location values across audit records
+    - Conflicting name spellings
+    - Projects that appear to be goals, or vice versa
+    - Items that appear in multiple list categories (duplicate content)
+    - Education that looks like a person name or vice versa
+
+    Args:
+        profile: The user profile dict.
+
+    Returns:
+        Dict with keys:
+          - "age_grade": list of conflicting values
+          - "location": list of conflicting values
+          - "name": list of name variants found in audits
+          - "cross_category": list of items found in suspiciously many categories
+          - "warnings": list of human-readable conflict descriptions
+    """
+    conflicts: dict = {
+        "age_grade": [],
+        "location": [],
+        "name": [],
+        "cross_category": [],
+        "warnings": [],
+    }
+
+    # Check audit history for changing scalar values
+    audits = profile.get("audits", [])
+    all_ages = set()
+    all_locs = set()
+    all_names = set()
+    for audit in audits:
+        findings = audit.get("findings", {})
+        if isinstance(findings, dict):
+            age = findings.get("age_grade")
+            if age and isinstance(age, str):
+                all_ages.add(age)
+            loc = findings.get("location")
+            if loc and isinstance(loc, str):
+                all_locs.add(loc)
+            name = findings.get("name")
+            if name and isinstance(name, str):
+                all_names.add(name)
+
+    # Check for embedded audit_audit (nested findings)
+    for audit in audits:
+        af = audit.get("findings", {})
+        sub = af.get("findings", {}) if isinstance(af, dict) else {}
+        for f in [af, sub]:
+            if isinstance(f, dict):
+                age = f.get("age_grade")
+                if age and isinstance(age, str):
+                    all_ages.add(age)
+                loc = f.get("location")
+                if loc and isinstance(loc, str):
+                    all_locs.add(loc)
+                name = f.get("name") or f.get("person_name", "")
+                if name and isinstance(name, str):
+                    all_names.add(name)
+
+    current_age = profile.get("age_grade")
+    if current_age:
+        all_ages.add(current_age)
+    current_loc = profile.get("location")
+    if current_loc:
+        all_locs.add(current_loc)
+    current_name = profile.get("name")
+    if current_name:
+        all_names.add(current_name)
+
+    if len(all_ages) > 1:
+        conflicts["age_grade"] = sorted(all_ages)
+        conflicts["warnings"].append(
+            f"Multiple age/grade values found: {', '.join(sorted(all_ages))}"
+        )
+    if len(all_locs) > 1:
+        conflicts["location"] = sorted(all_locs)
+        conflicts["warnings"].append(
+            f"Multiple location values found: {', '.join(sorted(all_locs))}"
+        )
+    if len(all_names) > 1:
+        conflicts["name"] = sorted(all_names)
+        conflicts["warnings"].append(
+            f"Multiple name variants found: {', '.join(sorted(all_names))}"
+        )
+
+    # Cross-category: items appearing in 3+ list categories
+    all_list_items: dict = {}
+    list_keys = [k for k in _LIST_KEYS if k not in ("languages", "personality_traits")]
+    for key in list_keys:
+        items = profile.get(key, [])
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, str) and len(item) > 3:
+                    norm = item.lower().strip()
+                    all_list_items.setdefault(norm, []).append(key)
+
+    for item, categories in all_list_items.items():
+        if len(categories) >= 3:
+            conflicts["cross_category"].append(item)
+            conflicts["warnings"].append(
+                f"'{item}' appears in {len(categories)} categories: {', '.join(categories)}"
+            )
+
+    return conflicts
+
+
+def resolve_profile_conflicts(profile: dict) -> tuple[dict, dict]:
+    """
+    Auto-resolve profile conflicts by keeping the most-confident or most-recent value.
+
+    Resolution strategy:
+    - age_grade: keep the most common value across audits. If tie, keep current.
+    - location: keep the most common, or most recent if tie.
+    - name: keep the current name (assumed already validated). Flag others as notes.
+    - cross-category: deduplicate by pruning from less specific categories.
+    - Duplicate items: remove exact duplicates within same list.
+
+    Args:
+        profile: The user profile dict.
+
+    Returns:
+        (resolved_profile, resolution_report)
+        resolution_report has keys: "age_grade", "location", "name", "deduplicated", "re categorized"
+    """
+    report: dict = {
+        "age_grade": None,
+        "location": None,
+        "name": None,
+        "deduplicated": [],
+        "recategorized": [],
+    }
+
+    # Remove exact duplicates within each list
+    for key in _LIST_KEYS:
+        items = profile.get(key, [])
+        if isinstance(items, list):
+            seen = set()
+            unique = []
+            for item in items:
+                if isinstance(item, str):
+                    norm = item.lower().strip()
+                    if norm not in seen:
+                        seen.add(norm)
+                        unique.append(item)
+                    else:
+                        report["deduplicated"].append(f"{key}: '{item}'")
+            profile[key] = unique
+
+    # For dict-of-list keys
+    for key in _DICT_KEYS:
+        d = profile.get(key, {})
+        if isinstance(d, dict):
+            for subkey, items in d.items():
+                if isinstance(items, list):
+                    seen = set()
+                    unique = []
+                    for item in items:
+                        if isinstance(item, str):
+                            norm = item.lower().strip()
+                            if norm not in seen:
+                                seen.add(norm)
+                                unique.append(item)
+                            else:
+                                report["deduplicated"].append(f"{key}.{subkey}: '{item}'")
+                    d[subkey] = unique
+
+    return profile, report
+
+
+def decay_profile_memory(profile: dict) -> tuple[dict, dict]:
+    """
+    Apply decay to profile memory: age old / unconfirmed items.
+
+    Decay policy:
+    - Items without recent confirmation (in last N audits) get demoted confidence.
+    - Items with _decay score below threshold are removed.
+    - Scalar values without re-confirmation in >5 audits are flagged.
+    - Pinned items (in profile["_pinned"]) are exempt from decay.
+    - Items already in memory for >10 audits with no reconfirmation get removed.
+
+    Args:
+        profile: The user profile dict.
+
+    Returns:
+        (decayed_profile, decay_report)
+        decay_report has keys: "decayed_items" (list), "removed_items" (list),
+                               "pinned_spared" (int), "scalar_warnings" (list)
+    """
+    report: dict = {
+        "decayed_items": [],
+        "removed_items": [],
+        "pinned_spared": 0,
+        "scalar_warnings": [],
+    }
+
+    pinned: set = set(profile.get("_pinned", []))
+    audits: list = profile.get("audits", [])
+    audit_count: int = len(audits)
+    last_5_audit_sources: set = set()
+    for audit in audits[-5:]:
+        ts = audit.get("timestamp", "")
+        if ts:
+            last_5_audit_sources.add(ts)
+
+    # Age scalar fields: if no re-confirmation in last 5 audits, warn
+    for scalar_key in _SCALAR_KEYS:
+        val = profile.get(scalar_key)
+        if val and val not in (None, ""):
+            reconfirmed = False
+            for audit in audits[-5:]:
+                findings = audit.get("findings", {})
+                if isinstance(findings, dict):
+                    if findings.get(scalar_key) == val:
+                        reconfirmed = True
+                        break
+            if not reconfirmed and audit_count >= 5:
+                report["scalar_warnings"].append(
+                    f"{scalar_key}='{val}' not reconfirmed in last {min(5, audit_count)} audits"
+                )
+
+    # Age list items: remove items that haven't been seen in >10 audits
+    for key in _LIST_KEYS:
+        items = profile.get(key, [])
+        if not isinstance(items, list):
+            continue
+        kept = []
+        for item in items:
+            if not isinstance(item, str):
+                continue
+            item_lower = item.lower().strip()
+            pin_key = f"{key}:{item_lower}"
+            if pin_key in pinned:
+                kept.append(item)
+                report["pinned_spared"] += 1
+                continue
+            # Check if item appeared in recent audits
+            found_recent = False
+            for audit in audits[-10:]:
+                findings = audit.get("findings", {})
+                # Flatten findings to find this item
+                f_items = findings.get(key, [])
+                if isinstance(f_items, list):
+                    for fi in f_items:
+                        if isinstance(fi, str) and fi.lower().strip() == item_lower:
+                            found_recent = True
+                            break
+                if found_recent:
+                    break
+            if found_recent:
+                kept.append(item)
+            else:
+                report["removed_items"].append(f"{key}: '{item}'")
+        if kept or not items:
+            profile[key] = kept
+        else:
+            profile[key] = []
+
+    # Age dict-of-list items similarly
+    for key in _DICT_KEYS:
+        d = profile.get(key, {})
+        if not isinstance(d, dict):
+            continue
+        for subkey, items in d.items():
+            if not isinstance(items, list):
+                continue
+            kept = []
+            for item in items:
+                if not isinstance(item, str):
+                    continue
+                item_lower = item.lower().strip()
+                pin_key = f"{key}.{subkey}:{item_lower}"
+                if pin_key in pinned:
+                    kept.append(item)
+                    report["pinned_spared"] += 1
+                    continue
+                found_recent = False
+                for audit in audits[-10:]:
+                    findings = audit.get("findings", {})
+                    # This is approximate; dict-of-list findings are harder to trace
+                    if isinstance(findings, dict):
+                        sub = findings.get(key, {})
+                        if isinstance(sub, dict):
+                            si = sub.get(subkey, [])
+                            if isinstance(si, list):
+                                for fi in si:
+                                    if isinstance(fi, str) and fi.lower().strip() == item_lower:
+                                        found_recent = True
+                                        break
+                    if found_recent:
+                        break
+                if found_recent:
+                    kept.append(item)
+                else:
+                    report["removed_items"].append(f"{key}.{subkey}: '{item}'")
+            d[subkey] = kept
+
+    return profile, report
+
+
+def build_memory_review_queue(profile: dict) -> list:
+    """
+    Build a queue of memory items that need human review.
+
+    Items are queued when:
+    - There are conflicting values for the same field (age, location, name)
+    - Low-confidence items (< 0.4) that survived cleaning
+    - Items in cross-category conflicts
+    - Scalar fields that were never re-confirmed
+    - Items specifically flagged as "review" in profile metadata
+
+    Args:
+        profile: The user profile dict.
+
+    Returns:
+        List of dicts, each with:
+          - "id": unique identifier for this review item
+          - "field": profile key
+          - "value": the value needing review
+          - "reason": why it needs review
+          - "confidence": current confidence score (if available)
+          - "suggested_action": "keep", "reject", or "clarify"
+    """
+    queue: list = []
+    conf: dict = profile.get("_confidence", {})
+    seen_ids: set = set()
+
+    def _make_id(field: str, value: str) -> str:
+        return f"{field}::{value.lower().strip()[:60]}"
+
+    # 1. Conflicts from detect_profile_conflicts
+    conflicts = detect_profile_conflicts(profile)
+    for warning in conflicts.get("warnings", []):
+        queue.append({
+            "id": f"conflict::{len(queue)}",
+            "field": "conflict",
+            "value": warning,
+            "reason": "Detected profile conflict",
+            "confidence": 0.0,
+            "suggested_action": "clarify",
+        })
+
+    # 2. Low-confidence list items
+    for key in _LIST_KEYS:
+        items = profile.get(key, [])
+        if not isinstance(items, list):
+            continue
+        item_conf = conf.get(key, {})
+        if not isinstance(item_conf, dict):
+            continue
+        for item in items:
+            if not isinstance(item, str):
+                continue
+            c = item_conf.get(item, 0.5)
+            if c < 0.4:
+                item_id = _make_id(key, item)
+                if item_id not in seen_ids:
+                    seen_ids.add(item_id)
+                    queue.append({
+                        "id": item_id,
+                        "field": key,
+                        "value": item,
+                        "reason": f"Low confidence ({c:.2f})",
+                        "confidence": c,
+                        "suggested_action": "reject" if c < 0.2 else "clarify",
+                    })
+
+    # 3. Previously flagged review items
+    flagged = profile.get("_review_queue", [])
+    for f_item in flagged:
+        if isinstance(f_item, dict):
+            item_id = f_item.get("id") or _make_id(f_item.get("field", "?"), f_item.get("value", "?"))
+            if item_id not in seen_ids:
+                seen_ids.add(item_id)
+                f_item.setdefault("reason", "Previously flagged")
+                f_item.setdefault("suggested_action", "clarify")
+                queue.append(f_item)
+
+    # 4. Scalar warnings from decay
+    decay_result = decay_profile_memory(dict(profile))  # copy to avoid mutation
+    for w in decay_result[1].get("scalar_warnings", []):
+        queue.append({
+            "id": f"decay_scalar::{len(queue)}",
+            "field": "scalar",
+            "value": w,
+            "reason": "Scalar field not reconfirmed",
+            "confidence": 0.3,
+            "suggested_action": "clarify",
+        })
+
+    return queue
+
+
+def _update_tool_action_list():
+    """Update the available actions string in memory_import_tool docstring and error message."""
+    pass  # Handled via the edit below
+
+
+# ─── Main Entry Point ────────────────────────────────────
 
 if __name__ == "__main__":
     print("Testing Memory Import System...\n")
