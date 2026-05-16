@@ -360,6 +360,65 @@ def import_from_zip_file(zip_path: str) -> List[Dict[str, Any]]:
                     except Exception as e:
                         print(f"[MemoryImport] Gemini TXT error {n}: {e}")
 
+            # Google Takeout: NotebookLM — extract notes and artifacts as text
+            for n in names:
+                if "NotebookLM" in n and n.endswith((".md", ".html")):
+                    try:
+                        raw = z.read(n).decode("utf-8", errors="replace")
+                        # Clean HTML tags for HTML files
+                        if n.endswith(".html"):
+                            raw = re.sub(r"<[^>]+>", " ", raw)
+                            raw = re.sub(r"\s+", " ", raw).strip()
+                        title = os.path.splitext(os.path.basename(n))[0]
+                        if len(raw) > 50:
+                            result = {
+                                "source": f"notebooklm_{title[:40]}",
+                                "source_type": "notebooklm",
+                                "imported_at": datetime.now().isoformat(),
+                                "conversations": [{"title": f"NotebookLM: {title[:100]}", "turns": [{"role": "assistant", "content": raw[:5000]}]}],
+                            }
+                            copy_path = os.path.join(_RAW_IMPORTS_DIR, f"notebooklm_{title[:30]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                            with open(copy_path, "w", encoding="utf-8") as f:
+                                json.dump(result, f, indent=4)
+                            result["saved_copy"] = copy_path
+                            results.append(result)
+                    except Exception:
+                        pass
+
+            # Google Takeout: YouTube — extract watch history, subscriptions as profile data
+            for n in names:
+                if "youtube" in n.lower() and n.endswith(".json"):
+                    try:
+                        raw = z.read(n).decode("utf-8", errors="replace")
+                        yt = json.loads(raw)
+                        texts = []
+                        if isinstance(yt, list):
+                            for entry in yt:
+                                if isinstance(entry, dict):
+                                    title = entry.get("title", "") or entry.get("snippet", {}).get("title", "")
+                                    if title:
+                                        texts.append(f"[YouTube] {title}")
+                        elif isinstance(yt, dict):
+                            for key in ["items", "videos", "playlists"]:
+                                for entry in yt.get(key, []):
+                                    t = entry.get("title", "") or entry.get("snippet", {}).get("title", "")
+                                    if t:
+                                        texts.append(f"[YouTube] {t}")
+                        if texts:
+                            result = {
+                                "source": "youtube_takeout",
+                                "source_type": "youtube_takeout",
+                                "imported_at": datetime.now().isoformat(),
+                                "conversations": [{"title": "YouTube History", "turns": [{"role": "user", "content": "\n".join(texts[:200])}]}],
+                            }
+                            copy_path = os.path.join(_RAW_IMPORTS_DIR, f"youtube_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                            with open(copy_path, "w", encoding="utf-8") as f:
+                                json.dump(result, f, indent=4)
+                            result["saved_copy"] = copy_path
+                            results.append(result)
+                    except Exception:
+                        pass
+
         return results
     except Exception as e:
         print(f"[MemoryImport] Zip import error for {zip_path}: {e}")
@@ -450,10 +509,266 @@ def import_exports(exports_dir: str = None) -> List[Dict[str, Any]]:
     return results
 
 
+# ─── Auto-Import Any File ──────────────────────────────────
+
+_SUPPORTED_EXTENSIONS = {".txt", ".md", ".json", ".csv", ".log"}
+
+def import_from_any_file(filepath: str) -> Optional[Dict[str, Any]]:
+    """Auto-import any supported file: zip, json, text, md, csv.
+    Detects format automatically."""
+    if not os.path.isfile(filepath):
+        return None
+    try:
+        # Zip files
+        if filepath.endswith(".zip") and zipfile.is_zipfile(filepath):
+            results = import_from_zip_file(filepath)
+            if results:
+                # Merge all results into one
+                merged = {
+                    "source": os.path.basename(filepath),
+                    "source_type": "zip_multi",
+                    "imported_at": datetime.now().isoformat(),
+                    "conversations": [],
+                }
+                for r in results:
+                    merged["conversations"].extend(r.get("conversations", []))
+                return merged
+            return None
+        # JSON files
+        if filepath.endswith(".json"):
+            return import_from_json_file(filepath)
+        # Text/md/csv files
+        if filepath.endswith((".txt", ".md", ".csv", ".log")):
+            return import_from_text_file(filepath)
+        return None
+    except Exception as e:
+        print(f"[MemoryImport] import_from_any_file error {filepath}: {e}")
+        return None
+
+
+def import_from_memory_folder() -> List[Dict[str, Any]]:
+    """Scan memory folder + downloads for ANY new file and import it.
+    Tracks already-imported files via a processed_files set."""
+    processed_file = os.path.join(_MEMORY_DIR, ".processed_files.json")
+    seen = set()
+    if os.path.exists(processed_file):
+        try:
+            with open(processed_file, "r") as f:
+                seen = set(json.load(f))
+        except Exception:
+            pass
+
+    results = []
+    scan_dirs = [_RAW_IMPORTS_DIR, _MEMORY_DIR]
+    if os.path.isdir(_DOWNLOADS_DIR):
+        scan_dirs.append(_DOWNLOADS_DIR)
+    if os.path.isdir(_E_DOWNLOADS):
+        scan_dirs.append(_E_DOWNLOADS)
+
+    for d in scan_dirs:
+        if not os.path.isdir(d):
+            continue
+        for fname in os.listdir(d):
+            fpath = os.path.join(d, fname)
+            if not os.path.isfile(fpath):
+                continue
+            if fpath in seen:
+                continue
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in _SUPPORTED_EXTENSIONS and ext != ".zip":
+                continue
+            # Skip processed JSON copies (already imported)
+            if ext == ".json" and d == _RAW_IMPORTS_DIR and fname.startswith(("claude_", "gemini_", "notebooklm_", "youtube_")):
+                seen.add(fpath)
+                continue
+
+            print(f"[MemoryImport] Auto-importing {fname}...")
+            imported = import_from_any_file(fpath)
+            if imported and imported.get("conversations"):
+                # Save processed copy
+                copy_name = f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{fname.replace('.','_')}.json"
+                copy_path = os.path.join(_RAW_IMPORTS_DIR, copy_name)
+                with open(copy_path, "w", encoding="utf-8") as f:
+                    json.dump(imported, f, indent=4)
+                imported["saved_copy"] = copy_path
+                results.append(imported)
+            seen.add(fpath)
+
+    # Save updated processed set
+    try:
+        with open(processed_file, "w") as f:
+            json.dump(sorted(seen), f, indent=2)
+    except Exception:
+        pass
+
+    return results
+
+
+# ─── LLM Deep Audit ────────────────────────────────────────
+
+def _llm_deep_audit(all_text: str) -> Optional[Dict[str, Any]]:
+    """Use Gemini to extract structured profile data from all conversation text.
+    Returns dict with validated fields or None."""
+    import requests as _requests
+    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        # Truncate text to fit context window (flash-lite: 1M tokens ≈ ~500K chars)
+        text_sample = all_text[:300000]
+        prompt = f"""Extract real, verified personal information from this conversation archive. Only include information that is explicitly stated multiple times or confirmed. Return a JSON object with ONLY fields that have high-confidence data:
+
+{{
+  "name": "Full name or null",
+  "age": "Age or null",
+  "location": "City, Country or null",
+  "education": ["list of schools/colleges/exams"],
+  "occupation": "Job title/role or null",
+  "skills": ["confirmed skills"],
+  "goals": ["stated goals/aspirations"],
+  "tech_stack": ["confirmed technologies used"],
+  "languages_spoken": ["languages"],
+  "projects": ["confirmed project names"],
+  "personality": ["self-described traits"]
+}}
+
+Do NOT infer. Only extract explicitly stated information. Return ONLY valid JSON."""
+
+        r = _requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+            headers={"Content-Type": "application/json"},
+            params={"key": api_key},
+            json={"contents": [{"parts": [{"text": prompt + "\n\n---CONVERSATIONS---\n" + text_sample[:200000]}]}]},
+            timeout=60,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        # Extract JSON from markdown fences
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+        return json.loads(text)
+    except Exception as e:
+        print(f"[MemoryImport] LLM audit error: {e}")
+        return None
+
+
 # ─── Audit Engine ──────────────────────────────────────────
+# Utility helpers
+
+_WORD_BOUNDARY = r"(?<![a-zA-Z])"
+_WORD_END = r"(?![a-zA-Z])"
+_GENERIC_NAMES = {"account", "user", "human", "assistant", "claude", "chatgpt", "gemini", "customer", "client", "student", "teacher", "admin", "guest", "default", "person", "someone", "nobody", "none", "test", "demo"}
+
+def _wb(pattern: str) -> str:
+    """Wrap pattern with word-boundary-aware guards."""
+    return _WORD_BOUNDARY + pattern + _WORD_END
+
+_NOISE_WORDS = {"the", "this", "that", "these", "those", "there", "their", "them", "they",
+    "what", "which", "where", "when", "how", "all", "each", "every", "some", "any", "none",
+    "both", "either", "neither", "here", "there", "then", "than", "just", "also", "very",
+    "too", "much", "more", "most", "many", "such", "only", "even", "still", "already",
+    "about", "above", "after", "again", "almost", "along", "always", "among", "another",
+    "around", "because", "before", "being", "below", "between", "beyond", "might", "could",
+    "would", "should", "shall", "must", "need", "dare", "ought", "used", "while", "whether",
+    "without", "through", "during", "within", "across", "against", "behind", "though"}
+
+def _is_noise(item: str) -> bool:
+    """Fast filter: True if item is almost certainly garbage/unreal."""
+    item = item.strip()
+    if len(item) < 4:
+        return True
+    # Pure number or punctuation
+    if re.match(r'^[\d\s.,;:\-_\'"]+$', item):
+        return True
+    # Single letter with punctuation
+    if re.match(r'^[A-Za-z]\s*[.,;:\-]$', item):
+        return True
+    # Starts with generic filler
+    first = item.split()[0].lower() if item.split() else ""
+    if first in _NOISE_WORDS and len(item) < 10:
+        return True
+    # Contains suspicious fragments (likely partial word matches)
+    suspicious_endings = ["ing ", "ion ", "tion ", "ment ", "ness ", "less ", "ful ", "ous "]
+    if len(item) < 8 and any(item.endswith(s.strip()) for s in suspicious_endings if len(s.strip()) < len(item)):
+        # Single verb/noun fragment with no context
+        if not item[0].isupper():
+            return True
+    return False
+
+
+def _filter_items(items: List[str], text: str, min_score: float = 0.4) -> List[str]:
+    """Universal filter for extracted items: noise check + quality score."""
+    result = []
+    for item in items:
+        if _is_noise(item):
+            continue
+        score = _score_item_quality(item, text)
+        if score >= min_score:
+            result.append(item)
+    return _deduplicate(result)
+
+
+def _score_item_quality(item: str, context: str) -> float:
+    """Score extracted item quality 0-1 based on length, repetition, and context."""
+    if len(item) < 4:
+        return 0.0
+    # Very long items are likely garbage
+    if len(item) > 100:
+        return 0.1
+    # Check if it looks like a sentence fragment vs named entity
+    caps_ratio = sum(1 for c in item if c.isupper()) / max(len(item), 1)
+    # Items with no capital letters that aren't common words are suspicious
+    if caps_ratio < 0.05 and len(item) > 5:
+        # Lowercase-only long string — check if it's a real phrase
+        common_words = {"the", "this", "that", "and", "for", "with", "from", "want", "need", "have", "has", "was", "are", "can", "could", "would", "should", "about", "there", "their", "what", "when", "where", "which", "your", "some", "them", "they", "been", "into", "more", "than", "very", "just", "also", "does", "make", "come", "take", "know", "like", "look", "work", "year", "life", "back", "even", "well", "down", "over", "only", "new", "each", "other", "many", "then"}
+    if caps_ratio < 0.05 and len(item) > 8:
+        words = item.lower().split()
+        real_words = sum(1 for w in words if w in common_words or len(w) > 2)
+        if real_words / max(len(words), 1) < 0.3:
+            return 0.15  # Likely random letters
+
+    # Count occurrences in context (higher = more likely real)
+    count = context.lower().count(item.lower())
+    frequency_bonus = min(count / 10, 1.0) * 0.2
+
+    base = 0.6
+    if item[0].isupper():
+        base += 0.15  # Named entities more likely real
+    if 4 <= len(item) <= 50:
+        base += 0.1
+    if count >= 2:
+        base += 0.1
+
+    return min(base + frequency_bonus, 1.0)
+
+
+def _deduplicate(items: List[str], threshold: float = 0.8) -> List[str]:
+    """Deduplicate items using simple similarity."""
+    if not items:
+        return []
+    result = []
+    for item in items:
+        item_lower = item.strip().lower()
+        is_dup = False
+        for existing in result:
+            if item_lower == existing.lower():
+                is_dup = True
+                break
+            # Check if one is substring of the other (meaningful overlap)
+            short, long = (item_lower, existing.lower()) if len(item_lower) < len(existing.lower()) else (existing.lower(), item_lower)
+            if len(short) > 5 and short in long:
+                is_dup = True
+                break
+        if not is_dup:
+            result.append(item.strip())
+    return result
+
 
 def _extract_name(text: str) -> Optional[str]:
-    _GENERIC_NAMES = {"account", "user", "human", "assistant", "claude", "chatgpt", "gemini", "customer", "client", "student", "teacher", "admin", "guest", "default", "person", "someone", "nobody", "none"}
     patterns = [
         r"(?:my name is|call me|I'm|I am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
         r"(?:name['\u2019s]?s?\s*(?::|is|-)\s*)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
@@ -466,13 +781,14 @@ def _extract_name(text: str) -> Optional[str]:
                 return name
     return None
 
+
 def _extract_age_grade(text: str) -> Optional[str]:
     patterns = [
         r"(?:I\s+am|I'm)\s+(\d+)\s*(?:years?\s*old|y\.?o\.?|yo)",
         r"(?:age|aged?)\s*(?::|is|-)\s*(\d+)",
-        r"(?:(?:in|in\s+the?)?\s*(?:class|grade|standard|std)\s*)(?::|is|-|\s+)(\d+)(?:\s*(?:th|st|nd|rd)\s*(?:grade|standard|class)?)?",
-        r"(\d+)(?:th|st|nd|rd)\s*(?:grade|class|standard)",
-        r"(?:college|university|school)\s*(?:student)?",
+        _wb(r"(?:class|grade|standard|std)\s*(?::|is|-|\s+)(\d+)(?:\s*(?:th|st|nd|rd)\s*(?:grade|standard|class)?)?"),
+        _wb(r"(\d+)(?:th|st|nd|rd)\s*(?:grade|class|standard)"),
+        r"(?:(?:in\s+)?(?:class|grade|standard)\s+)(\d+)",
     ]
     for p in patterns:
         m = re.search(p, text, re.IGNORECASE)
@@ -480,125 +796,472 @@ def _extract_age_grade(text: str) -> Optional[str]:
             return m.group(0).strip()
     return None
 
+
 def _extract_education(text: str) -> List[str]:
     details = []
     patterns = [
-        r"(?:studying|studied|pursuing|doing|taking)\s+([A-Za-z\s]{4,50}?)(?:at|in|from|,|\.)",
-        r"(?:school|college|university|academy|institute)\s*(?::|is|-|\s+)([A-Za-z\s]{4,60}?)(?:\.|,|$)",
-        r"(\d+)(?:th|st|nd|rd)\s*(?:grade|class|standard)\s*(?:at|in|,)?\s*([A-Za-z\s]{4,40}?)(?:\.|,|$)",
-        r"(?:10th|12th|CBSE|ICSE|state\s*board|JEE|NEET|GATE|UPSC|IIT|NIT|IIIT)\s*(?:[A-Za-z]{3,30})?(?:\s*\d+[\.,]?\d*)?",
-        r"(?:percentage|score|marks|grade|GPA|CGPA)\s*(?::|is|-|\s+)(\d+[\.,]?\d*\s*%?)",
+        # School/college names with word-boundary guard
+        _wb(r"(?:school|college|university|academy|institute|institution)\s+(?:of\s+)?(?:is\s+)?(?:at\s+|in\s+)?([A-Z][A-Za-z\s.'&-]{3,60}?)(?:\.|,|$)"),
+        r"(?:studying|studied|pursuing|enrolled|doing|taking)\s+([A-Za-z\s]{4,50}?)\s+(?:at|in|from|,|\.)",
+        r"(\d+)(?:th|st|nd|rd)\s*(?:grade|class|standard)\s+(?:at|in|,)?\s*([A-Z][A-Za-z\s]{3,40}?)(?:\.|,|$)",
+        # Specific exams — only as whole words
+        _wb(r"(?:CBSE|ICSE|IB)\s+(?:board\s+)?(?:[A-Z][A-Za-z\s]{3,30})?"),
+        _wb(r"(IIT|NIT|IIIT|JEE|NEET|GATE|UPSC|CAT|GMAT|GRE|TOEFL|IELTS|SAT)\s*(?:[A-Za-z]{2,30})?(?:\s*\d+[\.,]?\d*)?"),
+        # Scores with word boundaries
+        r"(?:percentage|score|marks|grade|GPA|CGPA|aggregate)\s*(?::|is|-|\s+)(\d+[\.,]?\d*\s*%?)",
     ]
+    for p in patterns:
+        if p.startswith(_WORD_BOUNDARY):
+            # This pattern already has word boundaries
+            matches = re.findall(p, text, re.IGNORECASE)
+        else:
+            matches = re.findall(p, text, re.IGNORECASE)
+        for m in matches:
+            if isinstance(m, tuple):
+                m = " ".join(part for part in m if part).strip()
+            else:
+                m = m.strip()
+            if len(m) > 3 and len(m) < 100 and m not in details:
+                score = _score_item_quality(m, text)
+                if score > 0.3:
+                    details.append(m)
+    return _deduplicate(details)
+
+
+def _extract_projects(text: str) -> List[str]:
+    projects = []
+    patterns = [
+        r"(?:project|building|working\s*on|creating|developed|created|made|designing)\s+(?:a|an|the|my|this)?\s*([A-Z][A-Za-z0-9\s_\-'&]{3,60}?)(?:\.|,|$|using|with|for|which|that)",
+        r"(?:github\.com|gitlab\.com|bitbucket\.org)/([A-Za-z0-9_\-]+/[A-Za-z0-9_\-]+)",
+        r"(?:github|gitlab|bitbucket)\s+(?:at|@|:)\s*([A-Za-z0-9_\-]+/[A-Za-z0-9_\-]+)",
+        _wb(r"(?:repo|repository)\s*(?::|is|-|\s+)([A-Za-z0-9_\-/]{3,60})"),
+        r"(?:called|named|titled)\s+['\u201c]?([A-Z][A-Za-z0-9\s_\-'&]{3,60}?)['\u201d]?\s+(?:project|app|tool|system|site|platform|bot|assistant)",
+        r"(?:project|app|tool|system|site|platform|software|assistant)\s+(?:called|named|titled)\s+['\u201c]?([A-Z][A-Za-z0-9\s_\-'&]{3,60}?)['\u201d]?",
+    ]
+    for p in patterns:
+        matches = re.findall(p, text, re.IGNORECASE)
+        for m in matches:
+            m = m.strip().rstrip(".,;:'\"")
+            if len(m) > 3 and len(m) < 80 and m not in projects:
+                score = _score_item_quality(m, text)
+                if score > 0.35:
+                    projects.append(m)
+    return _deduplicate(projects)
+
+
+def _extract_preferences(text: str) -> Dict[str, List[str]]:
+    prefs = {"browsers": [], "apps": [], "music": [], "anime": [], "games": [], "food": [], "other": []}
+
+    known_browsers = ["Chrome", "Firefox", "Edge", "Brave", "Opera", "Safari", "Vivaldi", "Tor"]
+    known_apps = ["Figma", "Spotify", "VS Code", "Discord", "Slack", "Notion", "Obsidian", "Telegram", "WhatsApp", "Instagram", "Twitter", "GitHub Desktop", "Postman", "Docker Desktop", "Photoshop", "Premiere Pro", "Fusion 360", "Blender"]
+    known_music = ["Spotify", "YouTube Music", "Apple Music", "SoundCloud", "Gaana", "Wynk", "JioSaavn", "Amazon Music"]
+    known_anime = ["Naruto", "One Piece", "Attack on Titan", "Demon Slayer", "Jujutsu Kaisen", "Death Note", "Fullmetal Alchemist", "My Hero Academia", "Dragon Ball", "Tokyo Ghoul", "One Punch Man", "Sword Art Online"]
+    known_games = ["Minecraft", "Roblox", "Fortnite", "Valorant", "GTA", "Call of Duty", "Apex Legends", "Elden Ring", "Red Dead Redemption", "The Legend of Zelda", "Pokemon", "Among Us", "Bloons TD", "Chess"]
+    known_food = ["Pizza", "Biryani", "Sushi", "Pasta", "Burger", "Tacos", "Dosa", "Samosa", "Chocolate", "Ice Cream", "Coffee", "Tea", "Noodles", "Ramen", "Butter Chicken", "Paneer"]
+
+    lower = text.lower()
+
+    # All known-item checks with word boundaries, no string containment
+    def _in_text(term: str) -> bool:
+        return bool(re.search(_wb(re.escape(term.lower())), lower))
+
+    for b in known_browsers:
+        if _in_text(b) and b not in prefs["browsers"]:
+            prefs["browsers"].append(b)
+
+    for a in known_apps:
+        if _in_text(a) and a not in prefs["apps"]:
+            prefs["apps"].append(a)
+
+    for m in known_music:
+        if _in_text(m) and m not in prefs["music"]:
+            prefs["music"].append(m)
+
+    for a in known_anime:
+        if _in_text(a) and a not in prefs["anime"]:
+            prefs["anime"].append(a)
+
+    for g in known_games:
+        if _in_text(g) and g not in prefs["games"]:
+            prefs["games"].append(g)
+
+    for f in known_food:
+        if _in_text(f) and f not in prefs["food"]:
+            prefs["food"].append(f)
+
+    return prefs
+
+
+def _extract_relationships(text: str) -> List[str]:
+    people = []
+    patterns = [
+        r"(?:my friend|friend named|friend called|best friend|my sister|my brother|my mom|my dad|my mother|my father|my cousin|my uncle|my aunt|my colleague|my partner|my teammate)\s+([A-Z][a-z]+)",
+        r"(?:with|to|for)\s+([A-Z][a-z]+)\s+(?:on|about|regarding|yesterday|today|tomorrow|next)",
+    ]
+    stop_words = {"the", "this", "that", "these", "those", "there", "their", "them", "they", "what", "which", "where", "when", "how", "all", "each", "every", "some", "any", "none", "both", "either", "neither", "here", "there"}
+    for p in patterns:
+        matches = re.findall(p, text)
+        for m in matches:
+            if m and m.lower() not in stop_words:
+                people.append(m)
+    return _deduplicate(people)
+
+
+def _extract_goals(text: str) -> List[str]:
+    goals = []
+    patterns = [
+        r"(?:want to|need to|planning to|going to|aim to|goal is|aspire to|trying to|hoping to|looking to)\s+([A-Za-z\s]{5,80}?)(?:\.|,|$|so that|because|and|but)",
+        _wb(r"(?:goal|target|aim|dream|ambition|objective)\s*(?::|is|-|\s+)([A-Za-z\s]{5,80}?)(?:\.|,|$)"),
+        r"(?:preparing|studying|study|prepare|give|appear|sit)\s+(?:for|in)\s+([A-Za-z0-9\s]{3,40}?)(?:\.|,|$|next|this|exam|test|competition)",
+    ]
+    stop_phrases = {"it", "this", "that", "the", "a", "an", "do", "make", "get", "have", "be", "go", "see", "know", "find", "use", "take", "come", "work", "look", "want", "give", "tell", "help", "keep", "let", "start", "show", "hear", "play", "run", "move", "live", "believe", "hold", "bring", "happen", "write", "provide", "sit", "stand", "lose", "pay", "meet", "include", "continue", "set", "learn", "change", "lead", "understand", "watch"}
     for p in patterns:
         matches = re.findall(p, text, re.IGNORECASE)
         for m in matches:
             if isinstance(m, tuple):
                 m = " ".join(part for part in m if part).strip()
             else:
-                m = m.strip()
-            if len(m) > 3 and m not in details:
-                details.append(m)
-    return details
+                m = m.strip().rstrip(".,;")
+            first_word = m.split()[0].lower() if m.split() else ""
+            if first_word in stop_phrases:
+                continue
+            if 5 <= len(m) <= 80 and m not in goals:
+                score = _score_item_quality(m, text)
+                if score > 0.35:
+                    goals.append(m)
+    return _deduplicate(goals)
 
-def _extract_projects(text: str) -> List[str]:
-    projects = []
+
+def _extract_location(text: str) -> Optional[str]:
     patterns = [
-        r"(?:project|building|working\s*on|creating|developed|made)\s+(?:a|an|the|my)?\s*([A-Za-z0-9\s_\-]{3,60}?)(?:\.|,|$|using|with|for)",
-        r"(?:github\.com|gitlab\.com|bitbucket\.org)/([A-Za-z0-9_\-]+/[A-Za-z0-9_\-]+)",
-        r"(?:repo|repository)\s*(?::|is|-|\s+)([A-Za-z0-9_\-/]{3,60})",
+        r"(?:live in|from|based in|located in|stay in|reside in|hailing from)\s+([A-Z][a-z]+(?:[, ]+\s*[A-Z][a-z]+)?(?:[, ]+\s*[A-Z][a-z]+)?)",
+        r"(?:city|town|village|place|area|region)\s*(?::|is|-|\s+)([A-Z][a-z]+(?:[, ]+\s*[A-Z][a-z]+)?)",
     ]
     for p in patterns:
-        matches = re.findall(p, text, re.IGNORECASE)
-        for m in matches:
-            m = m.strip().rstrip(".,;")
-            if len(m) > 3 and m not in projects:
-                projects.append(m)
-    return projects
+        m = re.search(p, text)
+        if m:
+            loc = m.group(1).strip().rstrip(".,")
+            if loc.lower() not in {"the", "this", "that", "here", "there", "where"} and len(loc) > 2:
+                return loc
+    return None
 
-def _extract_preferences(text: str) -> Dict[str, List[str]]:
-    prefs = {"browsers": [], "apps": [], "music": [], "anime": [], "games": [], "food": [], "other": []}
 
+def _extract_tech_stack(text: str) -> List[str]:
+    known_techs = [
+        "python", "javascript", "typescript", "java", "c++", "c#", "go", "rust",
+        "react", "angular", "vue", "svelte", "node", "node.js", "deno", "bun",
+        "django", "flask", "fastapi", "express", "next.js", "nuxt", "remix",
+        "tensorflow", "pytorch", "keras", "opencv", "scikit-learn", "pandas", "numpy",
+        "llm", "gpt", "gemini", "claude", "ollama", "langchain", "huggingface",
+        "docker", "kubernetes", "k8s", "aws", "gcp", "azure", "firebase", "vercel", "netlify",
+        "linux", "git", "github", "gitlab",
+        "html", "css", "sass", "tailwind", "bootstrap", "material-ui", "chakra",
+        "sql", "mysql", "postgresql", "sqlite", "mongodb", "redis", "supabase",
+        "electron", "tauri", "flutter", "react native", "swift", "kotlin",
+        "graphql", "rest", "grpc", "websocket", "rabbitmq", "kafka",
+        "ansible", "terraform", "jenkins", "github actions", "ci/cd",
+    ]
+    techs = set()
+    lower = text.lower()
+    for tech in known_techs:
+        if re.search(_wb(re.escape(tech)), lower):
+            techs.add(tech)
+    return sorted(techs)
+
+
+# ─── New Comprehensive Extractors ──────────────────────────
+
+def _extract_interests_hobbies(text: str) -> Dict[str, List[str]]:
+    """Extract interests, hobbies, and activities."""
+    result = {"hobbies": [], "activities": [], "topics_of_interest": []}
     patterns = {
-        "browsers": [r"(?:use|using|browser)\s*(?::|is|-|\s+)(Chrome|Firefox|Edge|Brave|Opera|Safari)"],
-        "apps":    [r"(?:use|using|app|application|software)\s*(?::|is|-|\s+)([A-Za-z\s]{2,30}?)(?:\.|,|$|for|to)"],
-        "anime":   [r"(?:watching|watch|seen|anime)\s*(?::|is|-|\s+)([A-Za-z0-9\s]{2,40}?)(?:\.|,|$|episode|season)"],
-        "games":   [r"(?:playing|play|game|gaming)\s*(?::|is|-|\s+)([A-Za-z0-9\s]{2,30}?)(?:\.|,|$|on|with)"],
-        "food":    [r"(?:like|love|eat|eating|food|cuisine)\s*(?::|is|-|\s+)([A-Za-z\s]{2,30}?)(?:\.|,|$)"],
+        "hobbies": [
+            r"(?:my hobby|hobbies|love to|enjoy|i like)\s+(?:is|are|:)?\s*([A-Za-z\s]{4,40}?)(?:\.|,|$|and|but)",
+        ],
+        "activities": [
+            r"(?:i\s+(?:like|love|enjoy|do|practice|play|go)\s+)([A-Za-z\s]{4,40}?)(?:\.|,|$|every|on|in|with|for|when)",
+        ],
     }
-
     for category, pat_list in patterns.items():
         for p in pat_list:
             matches = re.findall(p, text, re.IGNORECASE)
             for m in matches:
                 m = m.strip().rstrip(".,;")
-                if len(m) > 2 and m not in prefs[category]:
-                    prefs[category].append(m)
+                if len(m) > 3 and len(m) < 50:
+                    result[category].append(m)
 
-    # Check for music services
-    music_services = ["spotify", "youtube music", "apple music", "soundcloud", "wynk", "gaana", "jiosaavn"]
-    for svc in music_services:
-        if svc in text.lower():
-            if svc not in prefs["music"]:
-                prefs["music"].append(svc)
+    # Deduplicate
+    for k in result:
+        result[k] = _deduplicate(result[k])
 
-    return prefs
+    return result
 
-def _extract_relationships(text: str) -> List[str]:
-    people = []
-    patterns = [
-        r"(?:my friend|friend named|friend called|best friend|my sister|my brother|my mom|my dad|my mother|my father)\s+([A-Z][a-z]+)",
-        r"(?:with|to|for)\s+([A-Z][a-z]+)\s+(?:on|about|regarding|yesterday|today|tomorrow)",
+
+def _extract_skills(text: str) -> List[str]:
+    """Extract general skills (not just tech)."""
+    known_skills = [
+        # Design
+        "ui/ux", "ui design", "ux design", "graphic design", "motion design", "3d modeling",
+        "video editing", "photo editing", "illustration", "animation", "wireframing",
+        "prototyping", "figma", "photoshop", "blender", "fusion 360", "canva",
+        # Writing
+        "content writing", "copywriting", "technical writing", "creative writing",
+        "blogging", "editing", "proofreading", "storytelling",
+        # Communication
+        "public speaking", "presentation", "communication", "negotiation",
+        "leadership", "team management", "project management", "mentoring",
+        "teaching", "training", "coaching",
+        # Business
+        "entrepreneurship", "marketing", "seo", "social media", "community building",
+        "product management", "business development", "sales",
+        # Music / Arts
+        "singing", "guitar", "piano", "drums", "music production", "djing",
+        "painting", "drawing", "photography", "cooking",
+        # Sports / Fitness
+        "yoga", "meditation", "running", "swimming", "cycling", "gym", "workout",
+        "basketball", "football", "cricket", "badminton", "tennis", "chess",
+        # General
+        "problem solving", "critical thinking", "analytical", "research",
+        "data analysis", "data science", "machine learning", "deep learning",
     ]
-    for p in patterns:
-        matches = re.findall(p, text)
-        for m in matches:
-            if m not in people:
-                people.append(m)
-    return people
+    found = set()
+    lower = text.lower()
+    for skill in known_skills:
+        if re.search(_wb(skill.lower()), lower):
+            found.add(skill)
+    return sorted(found)
 
-def _extract_goals(text: str) -> List[str]:
-    goals = []
+
+def _extract_social_media(text: str) -> Dict[str, List[str]]:
+    """Extract social media handles, emails, URLs."""
+    result = {"email": [], "github": [], "twitter": [], "linkedin": [], "discord": [], "other": []}
+    # Emails
+    emails = re.findall(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", text)
+    for e in emails:
+        skip = {"example.com", "test.com", "domain.com", "email.com", "@gmail.com", "@yahoo.com", "@outlook.com", "@hotmail.com"}
+        domain = e.split("@")[1] if "@" in e else ""
+        if domain not in skip and e not in result["email"]:
+            result["email"].append(e)
+    # GitHub
+    gh = re.findall(r"github\.com/([A-Za-z0-9_-]+)", text)
+    for g in gh:
+        if g not in result["github"]:
+            result["github"].append(g)
+    # Twitter
+    tw = re.findall(r"(?:twitter\.com|x\.com)/([A-Za-z0-9_]+)", text)
+    for t in tw:
+        if t not in result["twitter"]:
+            result["twitter"].append(t)
+    # LinkedIn
+    li = re.findall(r"linkedin\.com/(?:in|company)/([A-Za-z0-9_-]+)", text)
+    for l in li:
+        if l not in result["linkedin"]:
+            result["linkedin"].append(l)
+    return result
+
+
+def _extract_languages(text: str) -> List[str]:
+    """Extract natural languages mentioned."""
+    known = [
+        "english", "hindi", "marathi", "bengali", "tamil", "telugu", "kannada", "malayalam",
+        "gujarati", "punjabi", "urdu", "sanskrit", "odia", "assamese",
+        "spanish", "french", "german", "chinese", "japanese", "korean", "arabic",
+        "russian", "portuguese", "italian", "dutch", "turkish", "vietnamese",
+        "thai", "swedish", "norwegian", "danish", "finnish", "polish",
+    ]
+    found = set()
+    lower = text.lower()
+    for lang in known:
+        if re.search(_wb(lang), lower):
+            found.add(lang.capitalize())
+    return sorted(found)
+
+
+def _extract_devices_os(text: str) -> Dict[str, List[str]]:
+    """Extract devices, operating systems, hardware mentions."""
+    result = {"os": [], "devices": [], "hardware": []}
+    lower = text.lower()
+    # OS
+    oss = ["windows 11", "windows 10", "windows", "macos", "linux", "ubuntu", "debian", "fedora", "arch", "kali", "android", "ios", "ipados"]
+    for os_name in oss:
+        if re.search(_wb(os_name), lower):
+            if os_name.capitalize() not in result["os"]:
+                result["os"].append(os_name.capitalize() if os_name[0].islower() else os_name)
+    # Devices
+    devices = ["iphone", "ipad", "macbook", "macbook pro", "macbook air", "imac", "mac mini",
+               "samsung galaxy", "oneplus", "pixel", "xiaomi", "dell xps", "thinkpad",
+               "surface pro", "surface laptop", "raspberry pi", "arduino", "esp32", "esp8266"]
+    for d in devices:
+        if re.search(_wb(d), lower):
+            if d.title() not in result["devices"]:
+                result["devices"].append(d.title() if "_" not in d else d)
+    # Hardware
+    hardware = ["rtx 3060", "rtx 3070", "rtx 3080", "rtx 3090", "rtx 4060", "rtx 4070", "rtx 4080", "rtx 4090",
+                "intel i5", "intel i7", "intel i9", "amd ryzen 5", "amd ryzen 7", "amd ryzen 9",
+                "16gb ram", "32gb ram", "64gb ram", "ssd", "nvidia", "amd"]
+    for h in hardware:
+        if re.search(_wb(h), lower):
+            result["hardware"].append(h.upper() if h.isupper() else h.title())
+    return result
+
+
+def _extract_achievements(text: str) -> List[str]:
+    """Extract accomplishments, awards, milestones."""
+    achievements = []
     patterns = [
-        r"(?:want to|need to|planning to|going to|aim to|goal is|aspire to|trying to)\s+([A-Za-z\s]{4,60}?)(?:\.|,|$|so that|because)",
-        r"(?:goal|target|aim|dream|ambition)\s*(?::|is|-|\s+)([A-Za-z\s]{4,60}?)(?:\.|,|$)",
-        r"(?:preparing|study|prepare|give|appear)\s+(?:for|in)\s+([A-Za-z0-9\s]{3,30}?)(?:\.|,|$|next|this|exam)",
+        r"(?:won|achieved|earned|received|awarded|completed|accomplished|successfully)\s+(.{5,80}?)(?:\.|,|$|\band\b|\bin\b|\bat\b|\bby\b|\bfor\b|\bas\b|\bon\b)",
+        r"(?:award|prize|medal|trophy|certificate|certification|badge)\s*(?::|is|-|\s+)(.{5,60}?)(?:\.|,|$)",
+        r"(?:ranked|rank|scored|secured|placed)\s+(.{5,60}?)(?:\.|,|$|\bin\b|\bat\b|\bby\b|\bfor\b)",
     ]
     for p in patterns:
         matches = re.findall(p, text, re.IGNORECASE)
         for m in matches:
             m = m.strip().rstrip(".,;")
-            if len(m) > 5 and m not in goals:
-                goals.append(m)
-    return goals
+            if 5 <= len(m) <= 80 and m not in achievements:
+                score = _score_item_quality(m, text)
+                if score > 0.4:
+                    achievements.append(m)
+    return _deduplicate(achievements)
 
-def _extract_location(text: str) -> Optional[str]:
+
+def _extract_challenges(text: str) -> List[str]:
+    """Extract problems, obstacles, pain points."""
+    challenges = []
     patterns = [
-        r"(?:live in|from|based in|located in|stay in|reside in)\s+([A-Z][a-z]+(?:,\s*[A-Z][a-z]+)?)",
-        r"(?:city|town|place|area)\s*(?::|is|-|\s+)([A-Z][a-z]+)",
+        r"(?:struggling with|struggled with|facing|faced|dealing with|dealt with|issue with|problem with|bug|error is|stuck on|stuck with)\s+(.{5,80}?)(?:\.|,|$|\band\b|\bbut\b|\bfor\b|\bin\b|\bwhen\b|\bbecause\b)",
+        r"(?:difficult|hard|challenging|tough|complex|complicated)\s+(.{5,60}?)(?:\.|,|$|\bbut\b|\band\b|\bhowever\b)",
+        r"(?:doesn't work|not working|broken|failed|crashing|crash|error\s+)\s*(.{5,80}?)(?:\.|,|$|\bwhen\b|\bif\b|\bbecause\b)",
     ]
     for p in patterns:
-        m = re.search(p, text)
-        if m:
-            return m.group(1).strip()
-    return None
+        matches = re.findall(p, text, re.IGNORECASE)
+        for m in matches:
+            m = m.strip().rstrip(".,;")
+            if 5 <= len(m) <= 80 and m not in challenges:
+                score = _score_item_quality(m, text)
+                if score > 0.3:
+                    challenges.append(m)
+    return _deduplicate(challenges)
 
-def _extract_tech_stack(text: str) -> List[str]:
-    techs = []
-    known_techs = [
-        "python", "javascript", "typescript", "java", "c++", "c#", "go", "rust",
-        "react", "angular", "vue", "node", "django", "flask", "fastapi",
-        "tensorflow", "pytorch", "keras", "opencv", "llm", "gpt", "gemini",
-        "docker", "kubernetes", "aws", "gcp", "azure", "linux", "git",
-        "html", "css", "sql", "mongodb", "redis", "postgresql",
-        "tailwind", "bootstrap", "next.js", "svelte", "jquery",
-        "electron", "tauri", "flutter", "react native", "swift",
-    ]
+
+def _extract_learning(text: str) -> Dict[str, List[str]]:
+    """Extract courses, books, resources mentioned."""
+    result = {"courses": [], "books": [], "resources": []}
+    # Books
+    books = re.findall(r"(?:book|reading|read)\s+(?:called|named|:)?\s*['\"]?([A-Z][A-Za-z0-9\s_\-'&]{3,60}?)['\"]?(?:\s+(?:by|from|about|\.|,))", text, re.IGNORECASE)
+    for b in books:
+        b = b.strip().rstrip(".,;")
+        if b and b not in result["books"]:
+            result["books"].append(b)
+    # Courses
+    courses = re.findall(r"(?:course|class|tutorial|workshop|bootcamp|training)\s+(?:on|in|about|of|:)?\s*([A-Za-z0-9\s_\-'&]{4,60}?)(?:\.|,|$|by|from|which)", text, re.IGNORECASE)
+    for c in courses:
+        c = c.strip().rstrip(".,;")
+        if len(c) > 3 and c not in result["courses"]:
+            result["courses"].append(c)
+    return result
+
+
+def _extract_entertainment(text: str) -> Dict[str, List[str]]:
+    """Extract specific movies, shows, anime, music genres."""
+    result = {"shows": [], "movies": [], "anime": [], "music_genres": []}
+    known_anime = ["naruto", "one piece", "attack on titan", "demon slayer", "jujutsu kaisen",
+                   "death note", "fullmetal alchemist", "my hero academia", "dragon ball",
+                   "tokyo ghoul", "one punch man", "sword art online", "bleach", "hunter x hunter",
+                   "cowboy bebop", "steins;gate", "re:zero", "vinland saga", "chainsaw man",
+                   "spy x family", "haikyuu", "code geass", "evangelion"]
+    known_genres = ["pop", "rock", "hip hop", "rap", "jazz", "classical", "electronic",
+                    "edm", "lofi", "phonk", "metal", "punk", "reggae", "blues", "r&b",
+                    "indie", "folk", "country", "k-pop", "j-pop", "anime ost",
+                    "bollywood", "bhajan", "qawwali", "ghazal", "sufi"]
     lower = text.lower()
-    for tech in known_techs:
-        if tech in lower:
-            if tech not in techs:
-                techs.append(tech)
-    return techs
+    for a in known_anime:
+        if re.search(_wb(a), lower):
+            result["anime"].append(a.title())
+    for g in known_genres:
+        if re.search(_wb(g), lower):
+            result["music_genres"].append(g.capitalize())
+    # Show/movie titles in quotes
+    quoted = re.findall(r"""["\u201c\u201d]([A-Za-z0-9\s_\-'&]{3,50}?)["\u201c\u201d]""", text)
+    for q in quoted:
+        q = q.strip()
+        if len(q) > 3 and q not in result["shows"]:
+            result["shows"].append(q)
+    return result
+
+
+def _extract_personality_traits(text: str) -> List[str]:
+    """Extract self-described personality traits and communication style cues."""
+    traits = []
+    patterns = [
+        r"(?:i'm|i am|i tend to be|i consider myself|i'm very|i am very)\s+([A-Za-z\s]{3,30}?)(?:\.|,|$|person|individual|and|but)",
+        r"(?:personality|nature|temperament)\s*(?::|is|-|\s+)([A-Za-z\s]{4,40}?)(?:\.|,|$)",
+    ]
+    known_traits = ["perfectionist", "lazy", "hardworking", "creative", "analytical", "curious",
+                    "patient", "impatient", "organized", "messy", "social", "introvert", "extrovert",
+                    "ambitious", "focused", "distracted", "calm", "anxious", "confident", "shy",
+                    "optimistic", "pessimistic", "realistic", "practical", "theoretical", "detail-oriented",
+                    "big picture", "logical", "emotional", "intuitive", "systematic", "spontaneous",
+                    "planner", "improviser", "independent", "team player", "leader", "follower",
+                    "morning person", "night owl", "nerd", "geek", "bookworm", "gamer"]
+    lower = text.lower()
+    for trait in known_traits:
+        if re.search(_wb(trait), lower):
+            traits.append(trait.capitalize())
+    # Extract from explicit sentences
+    for p in patterns:
+        matches = re.findall(p, text, re.IGNORECASE)
+        for m in matches:
+            m = m.strip()
+            if len(m) > 3 and len(m) < 40 and m not in traits:
+                traits.append(m.capitalize())
+    return _deduplicate(traits)
+
+
+def _extract_career(text: str) -> Dict[str, List[str]]:
+    """Extract career-related information: roles, industries, work type."""
+    result = {"roles": [], "industries": [], "work_types": []}
+    patterns = {
+        "roles": [
+            r"(?:i\s+am\s+a|i'm\s+a|i\s+work\s+as\s+a|i\s+work\s+as\s+an|working\s+as\s+a|role\s+is)\s+([A-Za-z/\s&-]{5,50}?)(?:\.|,|$|at|in|for|with)",
+        ],
+        "industries": [
+            r"(?:work in|working in|industry|sector|field\s+of)\s+([A-Za-z\s]{5,50}?)(?:\.|,|$)",
+        ],
+    }
+    for category, pat_list in patterns.items():
+        for p in pat_list:
+            matches = re.findall(p, text, re.IGNORECASE)
+            for m in matches:
+                m = m.strip().rstrip(".,;")
+                if len(m) > 3 and m not in result[category]:
+                    result[category].append(m)
+    return result
+
+
+def _extract_health_wellness(text: str) -> Dict[str, List[str]]:
+    """Extract health, fitness, sleep, wellness mentions."""
+    result = {"fitness": [], "sleep": [], "health_mentions": []}
+    lower = text.lower()
+    # Fitness activities
+    fitness_keywords = ["yoga", "meditation", "gym", "workout", "running", "jogging", "swimming",
+                         "cycling", "walking", "exercise", "stretching", "pilates", "calisthenics",
+                         "weight lifting", "cardio", "hiit", "sports", "cricket", "football",
+                         "basketball", "badminton", "tennis", "martial arts", "boxing"]
+    for f in fitness_keywords:
+        if re.search(_wb(f), lower):
+            result["fitness"].append(f.capitalize())
+    # Sleep
+    sleep_patterns = [r"(?:sleep|slept|insomnia|awake|tired|exhausted)\s*(.{3,50}?)(?:\.|,|$)"]
+    for p in sleep_patterns:
+        matches = re.findall(p, text, re.IGNORECASE)
+        for m in matches:
+            m = m.strip()
+            if m and m not in result["sleep"]:
+                result["sleep"].append(m[:60])
+    return result
+
+
+# ─── Aggregation ───────────────────────────────────────────
 
 def audit_all_text(text: str) -> Dict[str, Any]:
     """Run all audit extractors on text and return structured data."""
@@ -612,6 +1275,18 @@ def audit_all_text(text: str) -> Dict[str, Any]:
         "goals": _extract_goals(text),
         "location": _extract_location(text),
         "tech_stack": _extract_tech_stack(text),
+        "interests_hobbies": _extract_interests_hobbies(text),
+        "skills": _extract_skills(text),
+        "social_media": _extract_social_media(text),
+        "languages": _extract_languages(text),
+        "devices_os": _extract_devices_os(text),
+        "achievements": _extract_achievements(text),
+        "challenges": _extract_challenges(text),
+        "learning": _extract_learning(text),
+        "entertainment": _extract_entertainment(text),
+        "personality_traits": _extract_personality_traits(text),
+        "career": _extract_career(text),
+        "health_wellness": _extract_health_wellness(text),
         "audited_at": datetime.now().isoformat(),
     }
 
@@ -648,37 +1323,63 @@ def save_profile(profile: Dict[str, Any]) -> None:
     with open(_PROFILE_FILE, "w", encoding="utf-8") as f:
         json.dump(profile, f, indent=4)
 
+_LIST_KEYS = ["education", "projects", "relationships", "goals", "tech_stack", "achievements", "challenges", "skills", "languages", "personality_traits"]
+_SCALAR_KEYS = ["name", "age_grade", "location"]
+_DICT_KEYS = ["preferences", "interests_hobbies", "social_media", "devices_os", "learning", "entertainment", "career", "health_wellness", "social_media"]
+
+def _merge_list_findings(profile: Dict, findings: Dict, key: str) -> list:
+    """Merge a list field, returning new items added."""
+    existing = set(p.lower().strip() if isinstance(p, str) else str(p) for p in profile.get(key, []))
+    new_items = []
+    for item in findings.get(key, []):
+        if isinstance(item, str) and item.lower().strip() not in existing:
+            new_items.append(item)
+            existing.add(item.lower().strip())
+    if new_items:
+        profile.setdefault(key, []).extend(new_items)
+    return new_items
+
+def _merge_dict_findings(profile: Dict, findings: Dict, key: str) -> Dict[str, list]:
+    """Merge a dict-of-lists field, returning {subkey: [new_items]}."""
+    changes = {}
+    for subkey in findings.get(key, {}):
+        existing = set(p.lower().strip() if isinstance(p, str) else str(p) for p in profile.get(key, {}).get(subkey, []))
+        new_items = []
+        for item in findings[key].get(subkey, []):
+            if isinstance(item, str) and item.lower().strip() not in existing:
+                new_items.append(item)
+                existing.add(item.lower().strip())
+        if new_items:
+            profile.setdefault(key, {}).setdefault(subkey, []).extend(new_items)
+            changes[subkey] = new_items
+    return changes
+
 def update_profile_with_audit(audit_result: Dict[str, Any]) -> Dict[str, Any]:
     """Merge audit findings into the user profile. Only adds NEW information."""
     profile = load_profile()
     findings = audit_result.get("findings", {})
 
-    # Track what changed
     changes = {}
 
-    for key in ["name", "age_grade", "location"]:
+    # Scalar fields: replace if new value is found
+    for key in _SCALAR_KEYS:
         val = findings.get(key)
         if val and val != profile.get(key):
             changes[key] = {"old": profile.get(key), "new": val}
             profile[key] = val
 
-    for list_key in ["education", "projects", "relationships", "goals", "tech_stack"]:
-        existing = set(profile.get(list_key, []))
-        new_items = [item for item in findings.get(list_key, []) if item not in existing]
+    # List fields: append new items
+    for key in _LIST_KEYS:
+        new_items = _merge_list_findings(profile, findings, key)
         if new_items:
-            changes[list_key] = {"added": new_items}
-            profile.setdefault(list_key, []).extend(new_items)
+            changes[key] = {"added": new_items}
 
-    prefs = findings.get("preferences", {})
-    existing_prefs = profile.get("preferences", {})
-    for cat in ["browsers", "apps", "music", "anime", "games", "food", "other"]:
-        existing = set(existing_prefs.get(cat, []))
-        new_items = [item for item in prefs.get(cat, []) if item not in existing]
-        if new_items:
-            if "preferences" not in changes:
-                changes["preferences"] = {}
-            changes["preferences"][cat] = new_items
-            profile.setdefault("preferences", {}).setdefault(cat, []).extend(new_items)
+    # Dict-of-lists fields: merge per subkey
+    for key in _DICT_KEYS:
+        if key in findings:
+            subchanges = _merge_dict_findings(profile, findings, key)
+            if subchanges:
+                changes[key] = subchanges
 
     profile.setdefault("audits", []).append({
         "timestamp": audit_result.get("audited_at", datetime.now().isoformat()),
@@ -700,6 +1401,7 @@ def generate_profile_markdown() -> str:
 *Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
 *Profile Version: {profile.get('version', 1)}*
 *Total Audits: {len(profile.get('audits', []))}*
+*Total Conversations Audited: {sum(a.get('conversations_audited', 0) for a in profile.get('audits', []))}*
 
 ---
 
@@ -712,37 +1414,38 @@ def generate_profile_markdown() -> str:
     md += f"| Name | {profile.get('name', 'Unknown')} |\n"
     md += f"| Age/Grade | {profile.get('age_grade', 'Unknown')} |\n"
     md += f"| Location | {profile.get('location', 'Unknown')} |\n"
+    languages = profile.get("languages", [])
+    md += f"| Languages | {', '.join(languages) if languages else 'Unknown'} |\n"
 
-    education = profile.get("education", [])
-    if education:
-        md += "\n## Education\n\n"
-        for item in education:
-            md += f"- {item}\n"
-
-    projects = profile.get("projects", [])
-    if projects:
-        md += "\n## Projects\n\n"
-        for item in projects:
-            md += f"- {item}\n"
+    md += _md_section("Education", profile.get("education"))
+    md += _md_section("Projects", profile.get("projects"))
 
     tech_stack = profile.get("tech_stack", [])
     if tech_stack:
         md += "\n## Technology Stack\n\n"
-        for item in tech_stack:
-            md += f"- {item}\n"
+        tags = "`" + "` `".join(tech_stack) + "`"
+        md += f"{tags}\n"
 
-    goals = profile.get("goals", [])
-    if goals:
-        md += "\n## Goals & Aspirations\n\n"
-        for item in goals:
-            md += f"- {item}\n"
+    md += _md_section("Goals & Aspirations", profile.get("goals"))
+    md += _md_section("Relationships", profile.get("relationships"))
+    md += _md_section("Achievements", profile.get("achievements"))
+    md += _md_section("Challenges & Pain Points", profile.get("challenges"))
+    md += _md_section("Skills", profile.get("skills"))
+    md += _md_section("Personality Traits", profile.get("personality_traits"))
 
-    relationships = profile.get("relationships", [])
-    if relationships:
-        md += "\n## Relationships\n\n"
-        for item in relationships:
-            md += f"- {item}\n"
+    # Career
+    career = profile.get("career", {})
+    if any(career.values()):
+        md += "\n## Career\n\n"
+        for subkey in ["roles", "industries", "work_types"]:
+            items = career.get(subkey, [])
+            if items:
+                md += f"### {subkey.replace('_', ' ').title()}\n\n"
+                for item in items:
+                    md += f"- {item}\n"
+                md += "\n"
 
+    # Preferences
     prefs = profile.get("preferences", {})
     if any(prefs.values()):
         md += "\n## Preferences\n\n"
@@ -750,6 +1453,78 @@ def generate_profile_markdown() -> str:
             items = prefs.get(cat, [])
             if items:
                 md += f"### {cat.capitalize()}\n\n"
+                for item in items:
+                    md += f"- {item}\n"
+                md += "\n"
+
+    # Interests & Hobbies
+    interests = profile.get("interests_hobbies", {})
+    if any(interests.values()):
+        md += "\n## Interests & Hobbies\n\n"
+        for subkey in ["hobbies", "activities", "topics_of_interest"]:
+            items = interests.get(subkey, [])
+            if items:
+                md += f"### {subkey.replace('_', ' ').title()}\n\n"
+                for item in items:
+                    md += f"- {item}\n"
+                md += "\n"
+
+    # Entertainment
+    ent = profile.get("entertainment", {})
+    if any(ent.values()):
+        md += "\n## Entertainment\n\n"
+        for subkey in ["shows", "movies", "anime", "music_genres"]:
+            items = ent.get(subkey, [])
+            if items:
+                md += f"### {subkey.replace('_', ' ').title()}\n\n"
+                for item in items:
+                    md += f"- {item}\n"
+                md += "\n"
+
+    # Social Media
+    social = profile.get("social_media", {})
+    if any(social.values()):
+        md += "\n## Social Media\n\n"
+        for subkey in ["email", "github", "twitter", "linkedin", "discord", "other"]:
+            items = social.get(subkey, [])
+            if items:
+                if subkey == "email":
+                    md += "### Email\n\n" + "\n".join(f"- `{e}`" for e in items) + "\n\n"
+                else:
+                    md += f"### {subkey.capitalize()}\n\n" + "\n".join(f"- {item}" for item in items) + "\n\n"
+
+    # Devices & OS
+    devices = profile.get("devices_os", {})
+    if any(devices.values()):
+        md += "\n## Devices & Operating Systems\n\n"
+        for subkey in ["os", "devices", "hardware"]:
+            items = devices.get(subkey, [])
+            if items:
+                md += f"### {subkey.capitalize()}\n\n"
+                for item in items:
+                    md += f"- {item}\n"
+                md += "\n"
+
+    # Health & Wellness
+    health = profile.get("health_wellness", {})
+    if any(health.values()):
+        md += "\n## Health & Wellness\n\n"
+        for subkey in ["fitness", "sleep", "health_mentions"]:
+            items = health.get(subkey, [])
+            if items:
+                md += f"### {subkey.replace('_', ' ').title()}\n\n"
+                for item in items:
+                    md += f"- {item}\n"
+                md += "\n"
+
+    # Learning
+    learning = profile.get("learning", {})
+    if any(learning.values()):
+        md += "\n## Learning & Resources\n\n"
+        for subkey in ["courses", "books", "resources"]:
+            items = learning.get(subkey, [])
+            if items:
+                md += f"### {subkey.capitalize()}\n\n"
                 for item in items:
                     md += f"- {item}\n"
                 md += "\n"
@@ -769,6 +1544,16 @@ def generate_profile_markdown() -> str:
 
     return md
 
+
+def _md_section(title: str, items: list) -> str:
+    """Helper: generate a markdown section if items exist."""
+    if not items:
+        return ""
+    md = f"\n## {title}\n\n"
+    for item in items:
+        md += f"- {item}\n"
+    return md
+
 # ─── Memory Import Tool ────────────────────────────────────
 
 def memory_import_tool(action: str = "status", **kwargs) -> str:
@@ -780,15 +1565,28 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
         profile = load_profile()
         audits = profile.get("audits", [])
         total_convs = sum(a.get("conversations_audited", 0) for a in audits)
+        p = profile
+        skills = p.get("skills", [])
+        langs = p.get("languages", [])
+        traits = p.get("personality_traits", [])
         return (
             f"### MEMORY IMPORT STATUS\n\n"
-            f"Profile Version: {profile.get('version', 1)}\n"
+            f"Profile Version: {p.get('version', 1)}\n"
             f"Total Audits Run: {len(audits)}\n"
             f"Total Conversations Processed: {total_convs}\n"
-            f"Last Updated: {profile.get('last_updated', 'Never')}\n"
-            f"Known Name: {profile.get('name', 'Not yet known')}\n"
-            f"Known Education: {', '.join(profile.get('education', [])) or 'Not yet known'}\n"
-            f"Known Projects: {len(profile.get('projects', []))}\n"
+            f"Last Updated: {p.get('last_updated', 'Never')}\n"
+            f"Name: {p.get('name', 'Not yet known')}\n"
+            f"Location: {p.get('location', 'Not yet known')}\n"
+            f"Languages: {', '.join(langs) if langs else 'Not yet known'}\n"
+            f"Education: {', '.join(p.get('education', [])) or 'Not yet known'}\n"
+            f"Tech Stack: {', '.join(p.get('tech_stack', [])) or 'Not yet known'}\n"
+            f"Skills: {', '.join(skills) if skills else 'Not yet known'}\n"
+            f"Projects: {len(p.get('projects', []))}\n"
+            f"Goals: {len(p.get('goals', []))}\n"
+            f"Achievements: {len(p.get('achievements', []))}\n"
+            f"Challenges: {len(p.get('challenges', []))}\n"
+            f"Personality: {', '.join(traits) if traits else 'Not yet known'}\n"
+            f"Relationships: {len(p.get('relationships', []))}\n"
             f"Profile MD: {_PROFILE_MD}"
         )
 
@@ -856,16 +1654,21 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
 
     if action == "profile":
         md = generate_profile_markdown()
-        # Return summary
         profile = load_profile()
+        p = profile
         return (
             f"### USER PROFILE\n\n"
-            f"Name: {profile.get('name', 'Unknown')}\n"
-            f"Age/Grade: {profile.get('age_grade', 'Unknown')}\n"
-            f"Education: {', '.join(profile.get('education', [])) or 'Unknown'}\n"
-            f"Projects: {', '.join(profile.get('projects', [])) or 'Unknown'}\n"
-            f"Goals: {', '.join(profile.get('goals', [])) or 'Unknown'}\n"
-            f"Tech Stack: {', '.join(profile.get('tech_stack', [])) or 'Unknown'}\n"
+            f"Name: {p.get('name', 'Unknown')}\n"
+            f"Location: {p.get('location', 'Unknown')}\n"
+            f"Age/Grade: {p.get('age_grade', 'Unknown')}\n"
+            f"Languages: {', '.join(p.get('languages', [])) or 'Unknown'}\n"
+            f"Education: {', '.join(p.get('education', [])) or 'Unknown'}\n"
+            f"Tech Stack: {', '.join(p.get('tech_stack', [])) or 'Unknown'}\n"
+            f"Skills: {', '.join(p.get('skills', [])) or 'Unknown'}\n"
+            f"Projects: {len(p.get('projects', []))}\n"
+            f"Goals: {len(p.get('goals', []))}\n"
+            f"Achievements: {len(p.get('achievements', []))}\n"
+            f"Personality: {', '.join(p.get('personality_traits', [])) or 'Unknown'}\n"
             f"\nFull profile: {_PROFILE_MD}"
         )
 
