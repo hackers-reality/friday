@@ -795,26 +795,51 @@ def _extract_age_grade(text: str) -> Optional[str]:
     for p in patterns:
         m = re.search(p, text, re.IGNORECASE)
         if m:
-            return m.group(0).strip()
+            # Return just the number with unit, not the full match text
+            val = m.group(1).strip() if m.lastindex >= 1 else m.group(0).strip()
+            # Must be a short numeric age/grade string
+            val_clean = val.rstrip(".,;:")
+            if val_clean.isdigit():
+                n = int(val_clean)
+                if 3 <= n <= 25:
+                    return f"{n} years old" if n > 12 else f"Grade {n}"
+                # Age < 3 or > 25 is suspicious
+                continue
+            if len(val_clean) < 10 and len(val_clean) > 0:
+                return val_clean
     return None
 
 
 def _extract_education(text: str) -> List[str]:
+    _EDU_FALSE_POSITIVES = {
+        "the", "this", "that", "these", "those", "there", "it", "them",
+        "i", "you", "he", "she", "we", "they", "my", "your", "his", "her",
+        "a", "an", "in", "on", "at", "to", "for", "of", "with", "by", "from",
+        "and", "or", "but", "so", "if", "because", "when", "where",
+        "what", "which", "who", "how", "all", "some", "any", "many",
+        "more", "most", "other", "such", "only", "just", "also", "very",
+        "can", "will", "may", "should", "would", "could", "must", "need",
+        "does", "has", "have", "had", "was", "were", "been", "being",
+        "get", "got", "make", "made", "take", "took", "give", "gave",
+        "see", "saw", "know", "knew", "think", "thought", "want", "wanted",
+        "come", "came", "go", "went", "use", "used", "find", "found",
+        "tell", "told", "ask", "asked", "work", "worked", "study", "learn",
+        "learn", "call", "called", "try", "tried", "feel", "felt",
+        "leave", "left", "put", "set", "bring", "brought", "begin", "began",
+        "keep", "kept", "hold", "held", "write", "wrote", "stand", "stood",
+        "hear", "heard", "let", "mean", "meant", "run", "ran",
+    }
     details = []
     patterns = [
-        # School/college names with word-boundary guard
         _wb(r"(?:school|college|university|academy|institute|institution)\s+(?:of\s+)?(?:is\s+)?(?:at\s+|in\s+)?([A-Z][A-Za-z\s.'&-]{3,60}?)(?:\.|,|$)"),
         r"(?:studying|studied|pursuing|enrolled|doing|taking)\s+([A-Za-z\s]{4,50}?)\s+(?:at|in|from|,|\.)",
         r"(\d+)(?:th|st|nd|rd)\s*(?:grade|class|standard)\s+(?:at|in|,)?\s*([A-Z][A-Za-z\s]{3,40}?)(?:\.|,|$)",
-        # Specific exams — only as whole words
         _wb(r"(?:CBSE|ICSE|IB)\s+(?:board\s+)?(?:[A-Z][A-Za-z\s]{3,30})?"),
         _wb(r"(IIT|NIT|IIIT|JEE|NEET|GATE|UPSC|CAT|GMAT|GRE|TOEFL|IELTS|SAT)\s*(?:[A-Za-z]{2,30})?(?:\s*\d+[\.,]?\d*)?"),
-        # Scores with word boundaries
         r"(?:percentage|score|marks|grade|GPA|CGPA|aggregate)\s*(?::|is|-|\s+)(\d+[\.,]?\d*\s*%?)",
     ]
     for p in patterns:
         if p.startswith(_WORD_BOUNDARY):
-            # This pattern already has word boundaries
             matches = re.findall(p, text, re.IGNORECASE)
         else:
             matches = re.findall(p, text, re.IGNORECASE)
@@ -824,13 +849,36 @@ def _extract_education(text: str) -> List[str]:
             else:
                 m = m.strip()
             if len(m) > 3 and len(m) < 100 and m not in details:
+                # Reject if it's just a stop word or fragment
+                m_lower = m.lower().strip()
+                if m_lower in _EDU_FALSE_POSITIVES:
+                    continue
+                if len(m.split()) == 1 and m_lower in _EDU_FALSE_POSITIVES:
+                    continue
+                # Reject single short words that aren't proper nouns
+                if len(m.split()) == 1 and len(m) < 5 and not m[0].isupper():
+                    continue
+                # Reject items that look like URLs or file paths
+                if re.search(r'https?://|www\.|\.com|\.org|\.net|\.io|\\|/', m):
+                    continue
                 score = _score_item_quality(m, text)
-                if score > 0.3:
+                if score > 0.35:
                     details.append(m)
     return _deduplicate(details)
 
 
 def _extract_projects(text: str) -> List[str]:
+    _PROJECT_FALSE_POSITIVES = {
+        "a", "an", "the", "my", "your", "this", "that", "it", "i", "we",
+        "them", "their", "its", "our", "some", "any", "all", "each", "every",
+        "both", "few", "more", "most", "other", "such", "no", "not", "only",
+        "own", "same", "so", "too", "very", "just", "also", "even", "still",
+        "already", "always", "never", "often", "sometimes", "usually",
+        "here", "there", "then", "now", "here", "where", "which", "while",
+        "project", "app", "tool", "system", "site", "platform", "software",
+        "assistant", "bot", "script", "module", "package", "library",
+        "thing", "stuff", "work", "code", "something", "anything",
+    }
     projects = []
     patterns = [
         r"(?:project|building|working\s*on|creating|developed|created|made|designing)\s+(?:a|an|the|my|this)?\s*([A-Z][A-Za-z0-9\s_\-'&]{3,60}?)(?:\.|,|$|using|with|for|which|that)",
@@ -844,6 +892,11 @@ def _extract_projects(text: str) -> List[str]:
         matches = re.findall(p, text, re.IGNORECASE)
         for m in matches:
             m = m.strip().rstrip(".,;:'\"")
+            m_lower = m.lower()
+            if m_lower in _PROJECT_FALSE_POSITIVES:
+                continue
+            if len(m.split()) == 1 and len(m) < 4:
+                continue
             if len(m) > 3 and len(m) < 80 and m not in projects:
                 score = _score_item_quality(m, text)
                 if score > 0.35:
@@ -910,13 +963,28 @@ def _extract_relationships(text: str) -> List[str]:
 
 
 def _extract_goals(text: str) -> List[str]:
+    _GOAL_FALSE_POSITIVES = {
+        "it", "this", "that", "the", "a", "an", "do", "make", "get", "have",
+        "be", "go", "see", "know", "find", "use", "take", "come", "work",
+        "look", "want", "give", "tell", "help", "keep", "let", "start",
+        "show", "hear", "play", "run", "move", "live", "believe", "hold",
+        "bring", "happen", "write", "provide", "sit", "stand", "lose", "pay",
+        "meet", "include", "continue", "set", "learn", "change", "lead",
+        "understand", "watch", "follow", "stop", "create", "speak", "read",
+        "allow", "add", "spend", "grow", "open", "walk", "win", "offer",
+        "remember", "love", "consider", "appear", "buy", "wait", "serve",
+        "build", "stay", "reach", "remain", "suggest", "raise", "pass",
+        "sell", "require", "report", "decide", "pull", "push", "draw",
+        "break", "ask", "call", "try", "feel", "leave", "put", "bring",
+        "begin", "keep", "hold", "write", "stand", "hear", "let", "mean",
+        "run", "cut", "hit", "beat", "sing", "choose", "drive", "fly",
+    }
     goals = []
     patterns = [
         r"(?:want to|need to|planning to|going to|aim to|goal is|aspire to|trying to|hoping to|looking to)\s+([A-Za-z\s]{5,80}?)(?:\.|,|$|so that|because|and|but)",
         _wb(r"(?:goal|target|aim|dream|ambition|objective)\s*(?::|is|-|\s+)([A-Za-z\s]{5,80}?)(?:\.|,|$)"),
         r"(?:preparing|studying|study|prepare|give|appear|sit)\s+(?:for|in)\s+([A-Za-z0-9\s]{3,40}?)(?:\.|,|$|next|this|exam|test|competition)",
     ]
-    stop_phrases = {"it", "this", "that", "the", "a", "an", "do", "make", "get", "have", "be", "go", "see", "know", "find", "use", "take", "come", "work", "look", "want", "give", "tell", "help", "keep", "let", "start", "show", "hear", "play", "run", "move", "live", "believe", "hold", "bring", "happen", "write", "provide", "sit", "stand", "lose", "pay", "meet", "include", "continue", "set", "learn", "change", "lead", "understand", "watch"}
     for p in patterns:
         matches = re.findall(p, text, re.IGNORECASE)
         for m in matches:
@@ -924,10 +992,18 @@ def _extract_goals(text: str) -> List[str]:
                 m = " ".join(part for part in m if part).strip()
             else:
                 m = m.strip().rstrip(".,;")
-            first_word = m.split()[0].lower() if m.split() else ""
-            if first_word in stop_phrases:
+            if not m or len(m) < 5 or len(m) > 80:
                 continue
-            if 5 <= len(m) <= 80 and m not in goals:
+            first_word = m.split()[0].lower() if m.split() else ""
+            if first_word in _GOAL_FALSE_POSITIVES:
+                continue
+            # Reject if it's just punctuation or whitespace
+            if re.match(r'^[\s.,;:\-_\'"]+$', m):
+                continue
+            # Reject single-word "goals"
+            if len(m.split()) == 1:
+                continue
+            if m not in goals:
                 score = _score_item_quality(m, text)
                 if score > 0.35:
                     goals.append(m)
@@ -935,6 +1011,17 @@ def _extract_goals(text: str) -> List[str]:
 
 
 def _extract_location(text: str) -> Optional[str]:
+    _KNOWN_NON_LOCATIONS = {
+        "google", "microsoft", "amazon", "apple", "meta", "netflix", "spotify",
+        "github", "gitlab", "docker", "slack", "notion", "figma", "discord",
+        "youtube", "twitter", "linkedin", "instagram", "reddit", "whatsapp",
+        "chrome", "firefox", "safari", "edge", "linux", "windows", "macos",
+        "android", "ios", "ubuntu", "debian", "python", "react", "node",
+        "the", "this", "that", "here", "there", "where", "some", "any", "all",
+        "home", "school", "college", "university", "work", "office", "online",
+        "everywhere", "nowhere", "somewhere", "default", "none", "null",
+        "india", "usa", "uk", "australia", "canada",  # Too vague without more context
+    }
     patterns = [
         r"(?:live in|from|based in|located in|stay in|reside in|hailing from)\s+([A-Z][a-z]+(?:[, ]+\s*[A-Z][a-z]+)?(?:[, ]+\s*[A-Z][a-z]+)?)",
         r"(?:city|town|village|place|area|region)\s*(?::|is|-|\s+)([A-Z][a-z]+(?:[, ]+\s*[A-Z][a-z]+)?)",
@@ -943,7 +1030,12 @@ def _extract_location(text: str) -> Optional[str]:
         m = re.search(p, text)
         if m:
             loc = m.group(1).strip().rstrip(".,")
-            if loc.lower() not in {"the", "this", "that", "here", "there", "where"} and len(loc) > 2:
+            loc_lower = loc.lower()
+            if loc_lower in _KNOWN_NON_LOCATIONS:
+                continue
+            if loc_lower in {"the", "this", "that", "here", "there", "where"}:
+                continue
+            if len(loc) > 2:
                 return loc
     return None
 
@@ -1552,18 +1644,459 @@ def audit_imported_data(imported: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 # ─── Profile Management ────────────────────────────────────
 
+_PROFILE_BAK = _PROFILE_FILE + ".bak"
+
+
 def load_profile() -> Dict[str, Any]:
     if os.path.exists(_PROFILE_FILE):
         try:
             with open(_PROFILE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
-            pass
+            # Attempt to load backup
+            if os.path.exists(_PROFILE_BAK):
+                try:
+                    with open(_PROFILE_BAK, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
     return {"name": None, "version": 1, "audits": [], "last_updated": None}
 
+
 def save_profile(profile: Dict[str, Any]) -> None:
-    with open(_PROFILE_FILE, "w", encoding="utf-8") as f:
-        json.dump(profile, f, indent=4)
+    """Atomically write profile to disk with .bak backup."""
+    os.makedirs(os.path.dirname(_PROFILE_FILE), exist_ok=True)
+    # Write to temp file first
+    tmp = _PROFILE_FILE + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(profile, f, indent=4)
+        # Verify we can read it back
+        with open(tmp, "r", encoding="utf-8") as f:
+            json.load(f)
+        # Backup existing file
+        if os.path.exists(_PROFILE_FILE):
+            try:
+                os.replace(_PROFILE_FILE, _PROFILE_BAK)
+            except Exception:
+                pass
+        # Atomic replace
+        os.replace(tmp, _PROFILE_FILE)
+    except Exception:
+        # Clean up temp on failure
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        raise
+
+
+# ─── Profile Validation & Cleaning ──────────────────────
+
+_SUSPICIOUS_SCALARS: Dict[str, set] = {
+    "location": {
+        "google", "microsoft", "amazon", "apple", "meta", "netflix",
+        "github", "gitlab", "docker", "slack", "notion", "figma",
+        "youtube", "twitter", "linkedin", "reddit", "whatsapp",
+        "chrome", "firefox", "safari", "edge", "linux", "windows",
+        "macos", "android", "ios", "ubuntu", "debian", "python",
+        "react", "node", "the", "this", "that", "here", "there",
+        "where", "some", "any", "all", "home", "school", "college",
+        "university", "work", "office", "online", "everywhere",
+        "nowhere", "somewhere", "default", "none", "null",
+        "india", "usa", "uk", "canada", "australia",
+    },
+    "age_grade": set(),
+    "name": {"account", "user", "human", "assistant", "claude", "chatgpt",
+             "gemini", "customer", "client", "student", "teacher", "admin",
+             "guest", "default", "person", "someone", "nobody", "none",
+             "test", "demo", "null", "undefined"},
+}
+
+_BAD_LIST_PATTERNS = [
+    re.compile(r'https?://\S+', re.IGNORECASE),
+    re.compile(r'www\.\S+', re.IGNORECASE),
+    re.compile(r'[\\/]'),  # file paths
+    re.compile(r'^[\s.,;:\-_\'"!?]+$'),
+    re.compile(r'^\d+$'),  # pure numbers
+    re.compile(r'^\d+[\.\,]\d+$'),  # floating point numbers
+    re.compile(r'^[A-Za-z]\s*[.,;:\-]$'),  # single letter with punct
+]
+
+_FRAGMENT_PATTERNS = [
+    re.compile(r'^(?:the|this|that|these|those|it|they|we|you|he|she)\s', re.IGNORECASE),
+    re.compile(r'^\s*(?:and|or|but|so|if|because|when|while|where|which|who|that)\s', re.IGNORECASE),
+    re.compile(r'^(?:also|then|here|there|now|just|very|too|only|even|still|already)\s', re.IGNORECASE),
+    re.compile(r'^(?:is|are|was|were|has|have|had|been|being|do|does|did|will|would|can|could|shall|should|may|might|must)\s', re.IGNORECASE),
+]
+
+_TECH_LOWERCASE: Dict[str, str] = {
+    "Python": "Python", "Javascript": "JavaScript", "Typescript": "TypeScript",
+    "Reactjs": "React", "React.js": "React", "Nodejs": "Node.js", "Node.js": "Node.js",
+    "Nextjs": "Next.js", "Next.Js": "Next.js",
+    "Vuejs": "Vue.js", "Vue.Js": "Vue.js",
+    "Expressjs": "Express.js", "Express.Js": "Express.js",
+    "Postgresql": "PostgreSQL", "Postgres": "PostgreSQL",
+    "Mysql": "MySQL", "Mongodb": "MongoDB", "Sqlite": "SQLite",
+    "Redis": "Redis", "Github": "GitHub", "Gitlab": "GitLab",
+    "Github Actions": "GitHub Actions", "Ci/Cd": "CI/CD",
+    "Graphql": "GraphQL", "Rest Api": "REST API", "Restapi": "REST API",
+    "K8s": "Kubernetes", "Kubernetes": "Kubernetes",
+    "Tensorflow": "TensorFlow", "Pytorch": "PyTorch",
+    "Scikit-Learn": "scikit-learn", "Scikit Learn": "scikit-learn",
+    "Opencv": "OpenCV", "Huggingface": "Hugging Face",
+    "Langchain": "LangChain", "Webpack": "Webpack", "Vite": "Vite",
+    "Tailwind": "Tailwind CSS", "Tailwindcss": "Tailwind CSS",
+    "Bootstrap": "Bootstrap", "Material Ui": "Material UI",
+    "Chakra": "Chakra UI", "Fastapi": "FastAPI",
+    "Flask": "Flask", "Django": "Django",
+    "Postman": "Postman", "Figma": "Figma",
+    "Vs Code": "VS Code", "Vscode": "VS Code",
+    "Pycharm": "PyCharm", "Intellij": "IntelliJ",
+    "Vim": "Vim", "Neovim": "Neovim",
+    "Jupyter": "Jupyter", "Html": "HTML", "Css": "CSS",
+    "Javascript": "JavaScript", "Typescript": "TypeScript",
+}
+
+_LANG_LOWERCASE: Dict[str, str] = {
+    "English": "English", "Hindi": "Hindi", "Marathi": "Marathi",
+    "Bengali": "Bengali", "Tamil": "Tamil", "Telugu": "Telugu",
+    "Kannada": "Kannada", "Malayalam": "Malayalam", "Gujarati": "Gujarati",
+    "Punjabi": "Punjabi", "Urdu": "Urdu", "Sanskrit": "Sanskrit",
+    "Odia": "Odia", "Assamese": "Assamese",
+    "Spanish": "Spanish", "French": "French", "German": "German",
+    "Chinese": "Chinese", "Japanese": "Japanese", "Korean": "Korean",
+    "Arabic": "Arabic", "Russian": "Russian", "Portuguese": "Portuguese",
+    "Italian": "Italian", "Dutch": "Dutch", "Turkish": "Turkish",
+    "Vietnamese": "Vietnamese", "Thai": "Thai",
+}
+
+
+def _is_suspicious_list_item(item: str) -> bool:
+    """Return True if item looks like garbage / fragment / URL / bad extraction."""
+    if not item or len(item) < 3:
+        return True
+    for pat in _BAD_LIST_PATTERNS:
+        if pat.search(item):
+            return True
+    # Grammatical fragment — starts with conjunction/preposition/verb
+    stripped = item.strip()
+    if len(stripped.split()) >= 2:
+        for pat in _FRAGMENT_PATTERNS:
+            if pat.search(stripped):
+                return True
+    # Single word, not capitalized, shorter than 5 = likely fragment
+    if len(stripped.split()) == 1 and len(stripped) < 5 and not stripped[0].isupper():
+        return True
+    # Looks like command output or error
+    if re.match(r'^(Traceback|Error|Warning|Info|DEBUG|INFO|WARNING|ERROR|CRITICAL)', stripped):
+        return True
+    # Contains unbalanced punctuation
+    if stripped.count('(') != stripped.count(')'):
+        return True
+    if stripped.count('[') != stripped.count(']'):
+        return True
+    return False
+
+
+def _normalize_item(item: str, key: str) -> str:
+    """Normalize casing for tech stack and languages."""
+    if key == "tech_stack":
+        normalized = _TECH_LOWERCASE.get(item, item)
+        if normalized != item:
+            return normalized
+        # Title-case items that look like tech (all lowercase originally)
+        if item[0].isupper() and item[1:].islower() and len(item) > 2:
+            return item.title()
+        return item
+    if key == "languages":
+        return _LANG_LOWERCASE.get(item, item)
+    return item
+
+
+def validate_profile(profile: dict) -> dict:
+    """Validate profile structure, returning issues found.
+
+    Returns:
+        Dict with keys:
+        - "invalid_fields": scalar fields with suspicious values
+        - "missing": fields expected but absent
+        - "warnings": structural issues
+    """
+    issues: Dict[str, list] = {"invalid_fields": [], "missing": [], "warnings": []}
+
+    if not isinstance(profile, dict):
+        issues["warnings"].append("Profile is not a dict")
+        return issues
+
+    # Check scalar fields
+    for key in _SCALAR_KEYS:
+        val = profile.get(key)
+        if val:
+            val_lower = str(val).strip().lower()
+            suspected = _SUSPICIOUS_SCALARS.get(key, set())
+            if val_lower in suspected:
+                issues["invalid_fields"].append(key)
+            # Check if value looks like a URL or code
+            if re.search(r'https?://|www\.|\.com|\.org|\.io', str(val)):
+                issues["invalid_fields"].append(key)
+
+    # Check for required structure
+    if "version" not in profile:
+        issues["warnings"].append("Missing version field")
+    if "audits" not in profile:
+        issues["warnings"].append("Missing audits field")
+
+    return issues
+
+
+def clean_profile(profile: dict) -> tuple[dict, dict]:
+    """Clean profile in place, removing garbage data.
+
+    Returns:
+        (cleaned_profile, change_report) where change_report has:
+        - "removed": {list_key: [removed_items]}
+        - "normalized": {list_key: [(old, new)]}
+        - "suspicious": [scalar_key]
+    """
+    report: Dict[str, Any] = {"removed": {}, "normalized": {}, "suspicious": [], "scalar_reset": []}
+
+    # Validate and reset suspicious scalar fields
+    for key in _SCALAR_KEYS:
+        val = profile.get(key)
+        if not val:
+            continue
+        val_str = str(val).strip()
+        val_lower = val_str.lower()
+        suspected = _SUSPICIOUS_SCALARS.get(key, set())
+
+        should_reset = False
+        if val_lower in suspected:
+            should_reset = True
+        if re.search(r'https?://|www\.|\.com|\.org|\.io|\\|/', val_str):
+            should_reset = True
+        # Location that is just a first name, company, or platform
+        if key == "location" and len(val_str.split()) <= 2:
+            if val_lower in suspected:
+                should_reset = True
+        # Age/grade that looks like "Standard 64" (random word + number, not a real age)
+        if key == "age_grade":
+            digits = re.findall(r'\d+', val_str)
+            if not digits:
+                should_reset = True  # No number at all
+            else:
+                n = int(digits[0])
+                # Educational grade context: max 12 (grade/class/standard)
+                grade_keywords = ["grade", "class", "standard", "std"]
+                age_keywords = ["year", "old", "age", "yo"]
+                is_grade = any(kw in val_lower for kw in grade_keywords)
+                is_age = any(kw in val_lower for kw in age_keywords)
+                if is_grade and n > 12:
+                    should_reset = True  # "Standard 64" etc.
+                elif is_age and (n < 1 or n > 120):
+                    should_reset = True  # Impossible age
+                elif not is_grade and not is_age:
+                    # Bare number - must be in reasonable range
+                    if n < 3 or n > 80:
+                        should_reset = True
+                # Check if the text is mostly non-age context
+                age_keywords = ["year", "grade", "class", "standard", "age", "old"]
+                has_age_context = any(kw in val_lower for kw in age_keywords)
+                if not has_age_context and len(val_str.split()) > 2:
+                    should_reset = True
+
+        if should_reset:
+            report["scalar_reset"].append(key)
+            report["suspicious"].append(key)
+            profile[key] = None
+
+    # Clean list fields
+    for key in _LIST_KEYS:
+        items = profile.get(key, [])
+        if not isinstance(items, list):
+            continue
+        kept = []
+        removed = []
+        for item in items:
+            if not isinstance(item, str):
+                removed.append(str(item))
+                continue
+            if _is_suspicious_list_item(item):
+                removed.append(item)
+                continue
+            # Field-specific checks
+            if key == "goals":
+                if len(item.split()) < 2:  # Single-word "goals" are useless
+                    removed.append(item)
+                    continue
+                # Generic verb-only goals
+                if item.strip().lower() in {"learn", "build", "create", "make", "get", "have", "do", "be", "go", "work", "study", "start", "finish", "complete", "improve"}:
+                    removed.append(item)
+                    continue
+            if key == "projects":
+                # Single short generic words
+                if len(item) < 4 or (len(item.split()) == 1 and len(item) < 5 and item[0].islower()):
+                    removed.append(item)
+                    continue
+            if key == "education":
+                if len(item) < 4:
+                    removed.append(item)
+                    continue
+                if item.lower() in {"the", "a", "an", "in", "at", "on", "for", "to"}:
+                    removed.append(item)
+                    continue
+            # Normalize
+            normalized = _normalize_item(item, key)
+            if normalized != item:
+                report["normalized"].setdefault(key, []).append((item, normalized))
+                item = normalized
+            kept.append(item)
+        if removed:
+            report["removed"][key] = removed
+        profile[key] = _deduplicate(kept)
+
+    # Clean dict-of-list fields
+    for key in _DICT_KEYS:
+        subdict = profile.get(key, {})
+        if not isinstance(subdict, dict):
+            continue
+        for subkey, items in subdict.items():
+            if not isinstance(items, list):
+                continue
+            kept = []
+            removed = []
+            for item in items:
+                if not isinstance(item, str):
+                    removed.append(str(item))
+                    continue
+                if _is_suspicious_list_item(item):
+                    removed.append(item)
+                    continue
+                normalized = _normalize_item(item, subkey)
+                kept.append(normalized)
+            if removed:
+                report["removed"].setdefault(f"{key}.{subkey}", []).extend(removed)
+            subdict[subkey] = _deduplicate(kept)
+
+    return profile, report
+
+
+# ─── Confidence Scoring ─────────────────────────────────
+
+def _score_scalar_confidence(profile: dict) -> dict:
+    """Compute confidence scores for scalar fields.
+
+    Returns dict like {"name": 0.95, "location": 0.35, "age_grade": 0.2}
+    """
+    conf: Dict[str, float] = {}
+
+    # Name confidence
+    name = profile.get("name")
+    if name and isinstance(name, str):
+        name = name.strip()
+        if name.lower() in _SUSPICIOUS_SCALARS.get("name", set()):
+            conf["name"] = 0.1
+        elif len(name) >= 3 and name[0].isupper() and " " not in name.strip():
+            conf["name"] = 0.95  # Single capitalized name
+        elif len(name) >= 3 and name[0].isupper():
+            conf["name"] = 0.9  # Full name
+        else:
+            conf["name"] = 0.3
+    else:
+        conf["name"] = 0.0
+
+    # Location confidence
+    loc = profile.get("location")
+    if loc and isinstance(loc, str):
+        loc = loc.strip()
+        loc_lower = loc.lower()
+        bad = _SUSPICIOUS_SCALARS.get("location", set())
+        if loc_lower in bad:
+            conf["location"] = 0.0
+        elif len(loc) > 3 and loc[0].isupper() and "," in loc:
+            conf["location"] = 0.85  # "City, Country" format
+        elif len(loc) > 3 and loc[0].isupper():
+            conf["location"] = 0.6  # Single place name
+        else:
+            conf["location"] = 0.2
+    else:
+        conf["location"] = 0.0
+
+    # Age/grade confidence
+    age = profile.get("age_grade")
+    if age and isinstance(age, str):
+        digits = re.findall(r'\d+', age)
+        if digits:
+            n = int(digits[0])
+            if 5 <= n <= 25:
+                conf["age_grade"] = 0.8  # Plausible age/grade range
+            elif 3 <= n <= 80:
+                conf["age_grade"] = 0.5
+            else:
+                conf["age_grade"] = 0.1
+        else:
+            conf["age_grade"] = 0.3
+    else:
+        conf["age_grade"] = 0.0
+
+    return conf
+
+
+def _score_list_confidence(profile: dict) -> dict:
+    """Compute per-item confidence for list fields based on extraction quality.
+
+    Returns: {"tech_stack": {"python": 0.9, ...}, ...}
+    """
+    conf: Dict[str, Dict[str, float]] = {}
+
+    for key in _LIST_KEYS:
+        items = profile.get(key, [])
+        if not isinstance(items, list) or not items:
+            continue
+        item_conf: Dict[str, float] = {}
+        for item in items:
+            if not isinstance(item, str):
+                continue
+            # Items from known lists (tech, languages) get high confidence
+            if key == "tech_stack":
+                if item in _TECH_LOWERCASE.values() or item in _TECH_LOWERCASE:
+                    item_conf[item] = 0.95
+                elif item[0].isupper() and len(item) > 1:
+                    item_conf[item] = 0.7
+                else:
+                    item_conf[item] = 0.5
+            elif key == "languages":
+                if item in _LANG_LOWERCASE.values() or item in _LANG_LOWERCASE:
+                    item_conf[item] = 0.95
+                else:
+                    item_conf[item] = 0.5
+            elif key in ("education", "projects"):
+                item_conf[item] = 0.7  # Named entities
+            elif key in ("goals", "achievements"):
+                item_conf[item] = 0.6  # Longer text, inherently ambiguous
+            elif key == "skills":
+                item_conf[item] = 0.8
+            else:
+                item_conf[item] = 0.5
+        if item_conf:
+            conf[key] = item_conf
+
+    return conf
+
+
+def _inject_confidence(profile: dict) -> dict:
+    """Add confidence metadata to profile.
+
+    Stores _confidence dict with scalar and per-list-item scores.
+    """
+    conf: Dict[str, Any] = {}
+    conf.update(_score_scalar_confidence(profile))
+    conf.update(_score_list_confidence(profile))
+    profile["_confidence"] = conf
+    return profile
+
+
+# ─── Profile Merge ──────────────────────────────────────
 
 _LIST_KEYS = ["education", "projects", "relationships", "goals", "tech_stack", "achievements", "challenges", "skills", "languages", "personality_traits"]
 _SCALAR_KEYS = ["name", "age_grade", "location"]
@@ -1675,6 +2208,13 @@ def update_profile_with_audit(audit_result: Dict[str, Any]) -> Dict[str, Any]:
     })
     profile["last_updated"] = datetime.now().isoformat()
     profile["version"] = profile.get("version", 1) + 1 if changes else profile.get("version", 1)
+
+    # Clean and inject confidence before saving
+    try:
+        clean_profile(profile)
+        _inject_confidence(profile)
+    except Exception:
+        pass
 
     save_profile(profile)
     return changes
@@ -2024,13 +2564,13 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
             for key, val in changes.items():
                 if isinstance(val, dict):
                     if "added" in val:
-                        lines.append(f"  📝 {key}: Added {', '.join(val['added'])}")
+                        lines.append(f"  [ADDED] {key}: {', '.join(val['added'])}")
                     elif "old" in val:
-                        lines.append(f"  📝 {key}: {val['old']} → {val['new']}")
+                        lines.append(f"  [UPDATED] {key}: {val['old']} -> {val['new']}")
                     else:
-                        lines.append(f"  📝 {key}: Updated")
+                        lines.append(f"  [CHANGED] {key}: Updated")
                 else:
-                    lines.append(f"  📝 {key}: {val}")
+                    lines.append(f"  [CHANGED] {key}: {val}")
             lines.append(f"\n[OK] Profile version {audit_result.get('findings', {}).get('audited_at', '?')[:10]}")
             return "\n".join(lines)
         else:
@@ -2078,7 +2618,50 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
         sources = ", ".join(set(r.get("source_type", "?") for r in results))
         return f"[OK] Imported {len(results)} data source(s) ({total_convs} conversations) from exports\nSources: {sources}"
 
-    return f"Unknown action: {action}. Available: status, import_file, import_dir, import_zip, import_exports, audit, profile"
+    if action == "repair_profile":
+        profile = load_profile()
+        if not profile or profile.get("version", 0) < 1:
+            return "[FAIL] No profile to repair."
+
+        issues = validate_profile(profile)
+        _, report = clean_profile(profile)
+        _inject_confidence(profile)
+        profile["last_updated"] = datetime.now().isoformat()
+
+        try:
+            save_profile(profile)
+            generate_profile_markdown()
+        except Exception as e:
+            return f"[FAIL] Failed to save repaired profile: {e}"
+
+        # Optionally re-index into vector memory
+        try:
+            _index_profile_to_vector_memory(profile)
+        except Exception:
+            pass
+
+        lines = ["### REPAIR PROFILE - Report\n"]
+        if report.get("scalar_reset"):
+            lines.append(f"  [RESET] Suspicious scalar fields: {', '.join(report['scalar_reset'])}")
+        for key, items in report.get("removed", {}).items():
+            if items:
+                lines.append(f"  [REMOVED from {key}] {', '.join(items[:10])}")
+                if len(items) > 10:
+                    lines[-1] += f" (+{len(items)-10} more)"
+        for key, pairs in report.get("normalized", {}).items():
+            if pairs:
+                normalized_show = [f"'{old}'->'{new}'" for old, new in pairs[:5]]
+                lines.append(f"  [NORMALIZED {key}] {', '.join(normalized_show)}")
+        if not report.get("scalar_reset") and not report.get("removed") and not report.get("normalized"):
+            lines.append("  [OK] Profile looks clean -- no issues found.")
+        if issues.get("warnings"):
+            for w in issues["warnings"]:
+                lines.append(f"  [WARN] {w}")
+
+        lines.append(f"\n[OK] Profile repaired and saved.")
+        return "\n".join(lines)
+
+    return f"Unknown action: {action}. Available: status, import_file, import_dir, import_zip, import_exports, audit, profile, repair_profile"
 
 
 # ─── User Memory Context Builder ─────────────────────────
@@ -2087,22 +2670,21 @@ def build_user_memory_context(max_chars: int = 6000) -> str:
     """
     Build a compact memory-context block from the user profile.
 
-    Designed to be injected into the live session system prompt so
-    FRIDAY wakes up knowing compact user context without needing
-    to call a tool first.
+    Uses confidence scores to decide which fields to include.
+    Low-confidence scalar fields (< 0.5) are omitted.
+    Designed to be injected into the live session system prompt.
 
     Args:
         max_chars: Maximum character length for the output.
 
     Returns:
         A compact markdown/plain-text block with high-signal fields,
-        or empty string if no profile data exists.
+        or empty string if no usable profile data exists.
     """
     try:
         profile = load_profile()
         if not profile or profile.get("version", 0) < 1:
             return ""
-        # Check there is actual user data (not just the fallback template)
         has_data = bool(
             profile.get("name")
             or profile.get("location")
@@ -2116,19 +2698,36 @@ def build_user_memory_context(max_chars: int = 6000) -> str:
     except Exception:
         return ""
 
+    # First, clean the profile so we don't inject garbage
+    try:
+        clean_profile(profile)
+        _inject_confidence(profile)
+    except Exception:
+        pass
+
+    conf: dict = profile.get("_confidence", {})
+
     parts = [
         "[USER MEMORY]",
         "This memory was inferred from imported chat history and may be imperfect.",
     ]
 
+    # Name: include regardless (already validated)
     name = profile.get("name")
-    if name:
+    name_conf = conf.get("name", 0) if isinstance(conf.get("name"), (int, float)) else 0
+    if name and name_conf >= 0.5:
         parts.append(f"- Name: {name}")
+
+    # Location: only if confidence >= 0.5
     loc = profile.get("location")
-    if loc:
+    loc_conf = conf.get("location", 0) if isinstance(conf.get("location"), (int, float)) else 0
+    if loc and loc_conf >= 0.5:
         parts.append(f"- Location: {loc}")
+
+    # Age/grade: only if confidence >= 0.5
     age = profile.get("age_grade")
-    if age:
+    age_conf = conf.get("age_grade", 0) if isinstance(conf.get("age_grade"), (int, float)) else 0
+    if age and age_conf >= 0.5:
         parts.append(f"- Age/Grade: {age}")
 
     langs = profile.get("languages", [])
@@ -2202,6 +2801,10 @@ def build_user_memory_context(max_chars: int = 6000) -> str:
     topics = profile.get("last_tfidf_topics", [])
     if topics:
         parts.append(f"- Key Topics: {'; '.join(topics[:15])}")
+
+    # If nothing meaningful made it in, return empty
+    if len(parts) <= 2:
+        return ""
 
     result = "\n".join(parts)
     if len(result) > max_chars:
