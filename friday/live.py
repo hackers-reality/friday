@@ -1942,6 +1942,7 @@ TOOL_MAP = {
     "github_authorize": github_authorize,
     "github_exchange_code": github_exchange_code,
     "github_refresh_token": github_refresh_token,
+    "github_setup": github_setup,
     "multi_agent_delegate": multi_agent_delegate,
     "kyu_tool_handler": kyu_tool_handler,
     "research_tool_handler": research_tool_handler,
@@ -2103,6 +2104,15 @@ Patience: {adapt.get('patience', 5)}/10
     except Exception:
         kyu_section = ""
     system_text = SYSTEM_INSTRUCTION + kyu_section
+
+    # Append compact user memory from imported profile
+    try:
+        from friday.memory_import import build_user_memory_context
+        user_memory = build_user_memory_context(max_chars=3000)
+        if user_memory:
+            system_text += "\n\n" + user_memory
+    except Exception:
+        pass
 
     return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
@@ -2360,6 +2370,33 @@ async def friday_live_engine():
                     # Start audio playback thread
                     _start_audio_playback(pa)
 
+                    # ── Memory context injection (shared by text + audio) ──
+                    _last_mem_inject_time = 0.0
+                    _injected_mem_signatures: set = set()
+                    _MEM_INJECT_COOLDOWN = 30.0
+
+                    async def _inject_memory_context(user_text: str) -> None:
+                        nonlocal _last_mem_inject_time
+                        if len(user_text.strip()) < 5:
+                            return
+                        now = __import__("time").time()
+                        if now - _last_mem_inject_time < _MEM_INJECT_COOLDOWN:
+                            return
+                        try:
+                            from friday.memory_context import build_relevant_memory_context
+                            ctx = build_relevant_memory_context(user_text.strip(), max_chars=2000)
+                            if not ctx:
+                                return
+                            sig = ctx[:60]
+                            if sig in _injected_mem_signatures:
+                                return
+                            _injected_mem_signatures.add(sig)
+                            await session.send_realtime_input(text=f"[RELEVANT MEMORY CONTEXT]\n{ctx}")
+                            await asyncio.sleep(0.2)
+                            _last_mem_inject_time = now
+                        except Exception:
+                            pass
+
                     # RECEIVE LOOP
                     async def receive_loop():
                         nonlocal is_greeting, shown_input, resume_handle, follow_up_mode
@@ -2393,6 +2430,8 @@ async def friday_live_engine():
                                             if txt and txt != shown_input:
                                                 shown_input = txt
                                                 chat.add_user_message(txt)
+                                                # Fire-and-forget memory context injection for audio
+                                                asyncio.create_task(_inject_memory_context(txt))
 
                                         # Model turn - audio + thoughts
                                         if sc.model_turn:
@@ -2561,7 +2600,9 @@ async def friday_live_engine():
                     async def input_reader():
                         while True:
                             text = await input_queue.get()
-                            if text.strip():
+                            text = text.strip()
+                            if text:
+                                await _inject_memory_context(text)
                                 await session.send_realtime_input(text=text)
                                 chat.add_user_message(text)
 

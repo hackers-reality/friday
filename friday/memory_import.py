@@ -1855,6 +1855,88 @@ def _md_section(title: str, items: list) -> str:
         md += f"- {item}\n"
     return md
 
+# ─── Vector Memory Indexing ────────────────────────────
+
+def _index_profile_to_vector_memory(profile: Dict[str, Any]) -> None:
+    """Index profile data into vector memory for semantic retrieval.
+
+    Pushes profile summary, projects, goals, tech stack, preferences,
+    and TF-IDF topics into ChromaDB with appropriate metadata.
+    Silently skipped if vector memory is unavailable.
+    """
+    try:
+        from friday.vector_memory import get_vector_memory
+        vm = get_vector_memory()
+        if not vm or not vm.is_available():
+            return
+    except Exception:
+        return
+
+    try:
+        # Profile summary as a single rich document
+        summary = build_user_memory_context(max_chars=2000)
+        if summary:
+            vm.add(
+                text=summary,
+                metadata={"source": "memory_import", "type": "profile_summary"},
+            )
+
+        # Projects
+        for proj in profile.get("projects", []):
+            if isinstance(proj, str) and len(proj) > 3:
+                vm.add(
+                    text=f"Project: {proj}",
+                    metadata={"source": "memory_import", "type": "project"},
+                )
+
+        # Goals
+        for goal in profile.get("goals", []):
+            if isinstance(goal, str) and len(goal) > 3:
+                vm.add(
+                    text=f"Goal: {goal}",
+                    metadata={"source": "memory_import", "type": "goal"},
+                )
+
+        # Tech stack
+        tech = profile.get("tech_stack", [])
+        if tech:
+            vm.add(
+                text=f"Tech stack: {', '.join(tech)}",
+                metadata={"source": "memory_import", "type": "preference"},
+            )
+
+        # Preferences summary
+        prefs = profile.get("preferences", {})
+        pref_items = []
+        for cat, items in prefs.items():
+            if isinstance(items, list) and items:
+                pref_items.append(f"{cat}: {', '.join(str(i) for i in items[:5])}")
+        if pref_items:
+            vm.add(
+                text=f"Preferences: {'; '.join(pref_items)}",
+                metadata={"source": "memory_import", "type": "preference"},
+            )
+
+        # TF-IDF topics
+        topics = profile.get("last_tfidf_topics", [])
+        if topics:
+            vm.add(
+                text=f"Key topics from conversations: {', '.join(topics[:20])}",
+                metadata={"source": "memory_import", "type": "topic"},
+            )
+
+        # Achievements
+        for ach in profile.get("achievements", []):
+            if isinstance(ach, str) and len(ach) > 3:
+                vm.add(
+                    text=f"Achievement: {ach}",
+                    metadata={"source": "memory_import", "type": "achievement"},
+                )
+
+    except Exception:
+        pass
+
+
 # ─── Memory Import Tool ────────────────────────────────────
 
 def memory_import_tool(action: str = "status", **kwargs) -> str:
@@ -1934,6 +2016,7 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
 
         audit_result = audit_imported_data(stored)
         changes = update_profile_with_audit(audit_result)
+        _index_profile_to_vector_memory(load_profile())
         md = generate_profile_markdown()
 
         if changes:
@@ -1996,6 +2079,134 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
         return f"[OK] Imported {len(results)} data source(s) ({total_convs} conversations) from exports\nSources: {sources}"
 
     return f"Unknown action: {action}. Available: status, import_file, import_dir, import_zip, import_exports, audit, profile"
+
+
+# ─── User Memory Context Builder ─────────────────────────
+
+def build_user_memory_context(max_chars: int = 6000) -> str:
+    """
+    Build a compact memory-context block from the user profile.
+
+    Designed to be injected into the live session system prompt so
+    FRIDAY wakes up knowing compact user context without needing
+    to call a tool first.
+
+    Args:
+        max_chars: Maximum character length for the output.
+
+    Returns:
+        A compact markdown/plain-text block with high-signal fields,
+        or empty string if no profile data exists.
+    """
+    try:
+        profile = load_profile()
+        if not profile or profile.get("version", 0) < 1:
+            return ""
+        # Check there is actual user data (not just the fallback template)
+        has_data = bool(
+            profile.get("name")
+            or profile.get("location")
+            or profile.get("education")
+            or profile.get("projects")
+            or profile.get("tech_stack")
+            or profile.get("last_tfidf_topics")
+        )
+        if not has_data:
+            return ""
+    except Exception:
+        return ""
+
+    parts = [
+        "[USER MEMORY]",
+        "This memory was inferred from imported chat history and may be imperfect.",
+    ]
+
+    name = profile.get("name")
+    if name:
+        parts.append(f"- Name: {name}")
+    loc = profile.get("location")
+    if loc:
+        parts.append(f"- Location: {loc}")
+    age = profile.get("age_grade")
+    if age:
+        parts.append(f"- Age/Grade: {age}")
+
+    langs = profile.get("languages", [])
+    if langs:
+        parts.append(f"- Languages: {', '.join(langs[:5])}")
+
+    edu = profile.get("education", [])
+    if edu:
+        parts.append(f"- Education: {'; '.join(edu[:3])}")
+
+    projects = profile.get("projects", [])
+    if projects:
+        parts.append(f"- Key Projects: {'; '.join(projects[:5])}")
+
+    tech = profile.get("tech_stack", [])
+    if tech:
+        parts.append(f"- Tech: {'; '.join(tech[:10])}")
+
+    goals = profile.get("goals", [])
+    if goals:
+        parts.append(f"- Goals: {'; '.join(goals[:5])}")
+
+    prefs = profile.get("preferences", {})
+    pref_parts = []
+    for cat in ("browsers", "apps", "music", "food"):
+        items = prefs.get(cat, [])
+        if items:
+            pref_parts.append(f"{cat}: {'; '.join(items[:3])}")
+    if pref_parts:
+        parts.append(f"- Preferences: {' | '.join(pref_parts)}")
+
+    interests = profile.get("interests_hobbies", {})
+    int_parts = []
+    for subkey in ("hobbies", "activities", "topics_of_interest"):
+        items = interests.get(subkey, [])
+        if items:
+            int_parts.append(
+                f"{subkey.replace('_', ' ')}: {'; '.join(str(i) for i in items[:3])}"
+            )
+    if int_parts:
+        parts.append(f"- Interests: {' | '.join(int_parts)}")
+
+    learning = profile.get("learning", {})
+    learn_parts = []
+    for subkey in ("courses", "books", "resources"):
+        items = learning.get(subkey, [])
+        if items:
+            learn_parts.append(f"{subkey}: {'; '.join(items[:3])}")
+    if learn_parts:
+        parts.append(f"- Learning: {' | '.join(learn_parts)}")
+
+    career = profile.get("career", {})
+    career_parts = []
+    roles = career.get("roles", [])
+    if roles:
+        career_parts.append(f"roles: {'; '.join(roles[:3])}")
+    industries = career.get("industries", [])
+    if industries:
+        career_parts.append(f"industries: {'; '.join(industries[:3])}")
+    if career_parts:
+        parts.append(f"- Career: {' | '.join(career_parts)}")
+
+    challenges = profile.get("challenges", [])
+    if challenges:
+        parts.append(f"- Challenges: {'; '.join(challenges[:3])}")
+
+    achievements = profile.get("achievements", [])
+    if achievements:
+        parts.append(f"- Achievements: {'; '.join(achievements[:3])}")
+
+    topics = profile.get("last_tfidf_topics", [])
+    if topics:
+        parts.append(f"- Key Topics: {'; '.join(topics[:15])}")
+
+    result = "\n".join(parts)
+    if len(result) > max_chars:
+        result = result[:max_chars].rsplit("\n", 1)[0] + "\n[TRUNCATED]"
+    return result
 
 
 if __name__ == "__main__":
