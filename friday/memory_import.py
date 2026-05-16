@@ -9,12 +9,14 @@ import os
 import re
 import json
 import glob
+import math
 import zipfile
 import tempfile
 import shutil
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
+from collections import Counter
 
 _MEMORY_DIR = FRIDAY_MEMORY
 _PROFILE_FILE = os.path.join(_MEMORY_DIR, "user_profile.json")
@@ -1261,6 +1263,217 @@ def _extract_health_wellness(text: str) -> Dict[str, List[str]]:
     return result
 
 
+# ─── TF-IDF Analysis ─────────────────────────────────────
+
+_STOPWORDS: set = {
+    "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was",
+    "one", "our", "out", "has", "have", "been", "some", "them", "than", "its", "over",
+    "such", "that", "this", "with", "will", "what", "which", "when", "where", "how",
+    "who", "why", "does", "doing", "done", "about", "into", "just", "also", "very",
+    "would", "could", "should", "after", "then", "there", "their", "they", "were",
+    "been", "being", "does", "doing", "done", "having", "making", "getting", "using",
+    "need", "know", "want", "think", "like", "look", "make", "take", "give", "work",
+    "try", "tell", "feel", "call", "find", "keep", "let", "ask", "seem", "help",
+    "talk", "turn", "start", "show", "hear", "play", "run", "move", "live", "believe",
+    "hold", "bring", "happen", "write", "provide", "sit", "stand", "lose", "pay",
+    "meet", "include", "continue", "set", "learn", "change", "lead", "understand",
+    "watch", "follow", "stop", "create", "speak", "read", "allow", "add", "spend",
+    "grow", "open", "walk", "win", "offer", "remember", "love", "consider", "appear",
+    "buy", "wait", "serve", "die", "send", "expect", "build", "stay", "fall", "cut",
+    "reach", "kill", "remain", "suggest", "raise", "pass", "sell", "require", "report",
+    "decide", "pull", "push", "draw", "break", "stuff", "thing", "things", "something",
+    "anything", "nothing", "everything", "someone", "anyone", "everyone", "somebody",
+    "anybody", "everybody", "way", "ways", "lot", "lots", "bit", "little", "much",
+    "many", "more", "most", "few", "less", "enough", "good", "bad", "great", "big",
+    "small", "new", "old", "first", "last", "long", "right", "high", "different",
+    "same", "next", "important", "able", "sure", "real", "hard", "easy", "best",
+    "better", "worst", "worse", "okay", "ok", "yes", "no", "yeah", "sure", "thanks",
+    "please", "sorry", "hello", "hi", "hey", "well", "so", "now", "then", "here",
+    "there", "actually", "basically", "really", "pretty", "quite", "maybe", "perhaps",
+    "probably", "always", "never", "often", "sometimes", "usually", "already", "still",
+    "even", "just", "only", "also", "too", "very", "quite", "rather", "kind", "sort",
+    "type", "like", "example", "mean", "going", "got", "get", "got", "gotten",
+    "let", "lets", "let's", "dont", "don't", "doesnt", "doesn't", "didnt", "didn't",
+    "wont", "won't", "wouldnt", "wouldn't", "couldnt", "couldn't", "shouldnt", "shouldn't",
+    "cant", "can't", "isnt", "isn't", "arent", "aren't", "wasnt", "wasn't", "werent",
+    "weren't", "hasnt", "hasn't", "havent", "haven't", "hadnt", "hadn't", "im", "i'm",
+    "ive", "i've", "id", "i'd", "ill", "i'll", "youre", "you're", "youve", "you've",
+    "youd", "you'd", "youll", "you'll", "hes", "he's", "shes", "she's", "its", "it's",
+    "we're", "weve", "we've", "wed", "we'd", "well", "we'll", "theyd", "they'd",
+    "theyre", "they're", "theyve", "they've", "theyll", "they'll", "there's", "theres",
+    "thats", "that's", "whats", "what's", "whos", "who's", "whove", "who've",
+    "wheres", "where's", "whens", "when's", "whys", "why's", "hows", "how's",
+}
+"""Common English stopwords for TF-IDF filtering."""
+
+
+def _tokenize(text: str) -> List[str]:
+    """Tokenize text: lowercase, keep alpha tokens >= 3 chars, exclude stopwords."""
+    tokens = re.findall(r'[a-zA-Z][a-zA-Z0-9]{2,}', text.lower())
+    return [t for t in tokens if t not in _STOPWORDS]
+
+
+def compute_tfidf(documents: List[str]) -> List[Dict[str, float]]:
+    """
+    Full TF-IDF computation over a list of documents.
+    
+    Steps:
+      1. Tokenize each document (lowercase, min 3 chars, stopwords removed).
+      2. Compute Term Frequency (TF) = raw count per document.
+      3. Compute Inverse Document Frequency (IDF) using smoothed formula:
+             idf(t) = log((1 + N) / (1 + df(t))) + 1
+         where N = total documents, df(t) = docs containing term t.
+      4. Compute TF-IDF = TF * IDF for each term in each document.
+      5. Normalize TF by max TF per document so longer docs don't dominate.
+    
+    Returns list of {term: tfidf_score} dicts, one per document.
+    """
+    tokenized = [_tokenize(doc) for doc in documents]
+    N = len(tokenized)
+    
+    # --- Step 3: IDF ---
+    doc_freq: Counter = Counter()
+    for doc_tokens in tokenized:
+        for term in set(doc_tokens):
+            doc_freq[term] += 1
+    
+    idf: Dict[str, float] = {}
+    for term, df in doc_freq.items():
+        idf[term] = math.log((1.0 + N) / (1.0 + df)) + 1.0  # smoothed
+    
+    # --- Step 4 & 5: TF-IDF per document ---
+    results = []
+    for doc_tokens in tokenized:
+        tf = Counter(doc_tokens)
+        max_tf = float(max(tf.values())) if tf else 1.0
+        tfidf: Dict[str, float] = {}
+        for term, freq in tf.items():
+            tf_norm = freq / max_tf
+            tfidf[term] = round(tf_norm * idf.get(term, 1.0), 6)
+        results.append(tfidf)
+    
+    return results
+
+
+def extract_top_tfidf_terms(
+    tfidf_results: List[Dict[str, float]],
+    top_n: int = 25,
+) -> Dict[str, Any]:
+    """
+    Extract top-N terms per document and overall from TF-IDF results.
+    
+    Steps:
+      1. Sort each document's terms by score descending, take top-N.
+      2. Aggregate scores across documents (sum) for overall importance.
+      3. Return structured dict with per-document and overall lists.
+    """
+    per_doc = []
+    all_scores: Dict[str, float] = {}
+    
+    for doc_scores in tfidf_results:
+        sorted_terms = sorted(doc_scores.items(), key=lambda x: -x[1])
+        top = [{"term": t, "score": round(s, 4)} for t, s in sorted_terms[:top_n]]
+        per_doc.append(top)
+        for item in top:
+            t = item["term"]
+            s = item["score"]
+            all_scores[t] = all_scores.get(t, 0.0) + s
+    
+    overall = sorted(all_scores.items(), key=lambda x: -x[1])[:top_n]
+    overall_clean = [{"term": t, "score": round(s, 4)} for t, s in overall]
+    
+    return {
+        "per_document": per_doc,
+        "overall_top_terms": overall_clean,
+    }
+
+
+# Heuristic keyword sets for TF-IDF topic classification
+_TECH_INDICATORS: set = {
+    "python", "javascript", "typescript", "react", "node", "nodejs", "docker",
+    "kubernetes", "k8s", "api", "rest", "graphql", "backend", "frontend", "fullstack",
+    "database", "sql", "nosql", "postgresql", "mysql", "mongodb", "redis",
+    "linux", "bash", "shell", "git", "github", "aws", "azure", "gcp", "cloud",
+    "cli", "framework", "library", "sdk", "npm", "pip", "yarn", "bun",
+    "package", "module", "deploy", "ci", "cd", "pipeline", "microservice",
+    "container", "vm", "server", "client", "middleware", "cache", "queue",
+    "websocket", "http", "tcp", "udp", "ssl", "tls", "oauth", "jwt",
+    "agile", "scrum", "devops", "mlops", "automation", "scripting",
+    "tensorflow", "pytorch", "llm", "ai", "ml", "nlp", "neural", "deep",
+    "learning", "transformer", "gpt", "bert", "embedding", "vector",
+    "android", "ios", "flutter", "swift", "kotlin", "dart", "reactnative",
+    "html", "css", "tailwind", "bootstrap", "sass", "webpack", "vite",
+    "rust", "golang", "go", "java", "cplusplus", "cpp", "csharp", "ruby",
+    "php", "scala", "haskell", "elixir", "lua", "assembly", "wasm",
+    "vim", "neovim", "vscode", "intellij", "pycharm", "ide", "emacs",
+    "jupyter", "notebook", "colab", "databricks", "spark", "hadoop",
+    "algorithm", "datastructure", "leetcode", "hackerrank", "codeforces",
+    "testing", "unittest", "pytest", "jest", "cypress", "selenium",
+    "debugging", "profiling", "logging", "monitoring", "grafana", "prometheus",
+    "blockchain", "crypto", "web3", "solidity", "smart", "contract",
+    "socket", "async", "concurrency", "parallel", "multithreading",
+    "regex", "serialization", "encryption", "hashing", "compression",
+}
+
+_INTEREST_INDICATORS: set = {
+    "music", "gaming", "reading", "writing", "design", "art", "photo",
+    "photography", "video", "editing", "travel", "cooking", "baking", "sports",
+    "anime", "manga", "movies", "films", "fitness", "gym", "yoga", "meditation",
+    "drawing", "painting", "singing", "dancing", "guitar", "piano", "instrument",
+    "hiking", "camping", "fishing", "gardening", "craft", "diy", "fashion",
+    "makeup", "skincare", "beauty", "food", "coffee", "tea", "cooking",
+    "podcast", "streaming", "twitch", "youtube", "tiktok", "instagram",
+    "comics", "books", "novel", "poetry", "chess", "puzzle", "board",
+    "cars", "bike", "motorcycle", "drone", "rc", "model", "train",
+}
+
+_SKILL_INDICATORS: set = {
+    "leadership", "management", "communication", "teamwork", "problem",
+    "solving", "critical", "thinking", "creativity", "adaptability",
+    "organization", "planning", "research", "analysis", "writing",
+    "editing", "public", "speaking", "presentation", "negotiation",
+    "mentoring", "teaching", "coaching", "design", "drawing", "coding",
+    "programming", "typing", "data", "entry", "cold", "calling", "sales",
+    "marketing", "seo", "sem", "analytics", "accounting", "bookkeeping",
+    "investing", "trading", "stock", "crypto", "tax", "legal", "medical",
+    "nursing", "teaching", "tutoring", "counseling", "therapy",
+}
+
+
+def classify_tfidf_terms(tfidf_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Classify TF-IDF top terms into tech, interests, skills, and general topics.
+    
+    Uses keyword heuristics against the aggregated top terms to suggest
+    profile fields the regex extractors may have missed.
+    """
+    top_terms = [t["term"] for t in tfidf_data.get("overall_top_terms", [])]
+    
+    discovered = {
+        "tech_terms": [],
+        "interest_terms": [],
+        "skill_terms": [],
+        "topic_suggestions": [],
+    }
+    
+    for term in top_terms:
+        if term in _TECH_INDICATORS:
+            discovered["tech_terms"].append(term)
+        if term in _INTEREST_INDICATORS:
+            discovered["interest_terms"].append(term)
+        if term in _SKILL_INDICATORS:
+            discovered["skill_terms"].append(term)
+        # Suggest longer terms not already categorized as potential topics
+        if len(term) > 5 and term not in _TECH_INDICATORS and term not in _INTEREST_INDICATORS and term not in _SKILL_INDICATORS:
+            discovered["topic_suggestions"].append(term)
+    
+    # De-duplicate
+    for key in discovered:
+        discovered[key] = sorted(set(discovered[key]))
+    
+    return discovered
+
+
 # ─── Aggregation ───────────────────────────────────────────
 
 def audit_all_text(text: str) -> Dict[str, Any]:
@@ -1291,21 +1504,50 @@ def audit_all_text(text: str) -> Dict[str, Any]:
     }
 
 def audit_imported_data(imported: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Audit all imported conversations and aggregate findings."""
+    """Audit all imported conversations and aggregate findings.
+
+    Also runs TF-IDF analysis over individual conversations to discover
+    important topics, validate extracted items, and suggest new entries
+    the regex extractors may have missed.
+    """
     all_text = ""
     conversation_count = 0
+    documents: List[str] = []
 
     for item in imported:
         for conv in item.get("conversations", []):
+            conv_text = ""
             for turn in conv.get("turns", []):
-                all_text += turn.get("content", "") + "\n"
+                content = turn.get("content", "")
+                all_text += content + "\n"
+                conv_text += content + "\n"
+            if conv_text.strip():
+                documents.append(conv_text)
             conversation_count += 1
+
+    # --- TF-IDF analysis over individual conversations ---
+    tfidf_analysis: Dict[str, Any] = {"enabled": False, "conversations_analyzed": 0}
+    if len(documents) >= 2:
+        try:
+            tfidf_scores = compute_tfidf(documents)
+            tfidf_data = extract_top_tfidf_terms(tfidf_scores)
+            classified = classify_tfidf_terms(tfidf_data)
+            tfidf_analysis = {
+                "enabled": True,
+                "conversations_analyzed": len(documents),
+                "top_terms_per_conversation": tfidf_data["per_document"],
+                "overall_top_terms": tfidf_data["overall_top_terms"],
+                "classified": classified,
+            }
+        except Exception as e:
+            tfidf_analysis = {"enabled": False, "error": str(e)}
 
     return {
         "conversations_audited": conversation_count,
         "sources_imported": len(imported),
         "audited_at": datetime.now().isoformat(),
         "findings": audit_all_text(all_text),
+        "tfidf_analysis": tfidf_analysis,
     }
 
 # ─── Profile Management ────────────────────────────────────
@@ -1380,6 +1622,51 @@ def update_profile_with_audit(audit_result: Dict[str, Any]) -> Dict[str, Any]:
             subchanges = _merge_dict_findings(profile, findings, key)
             if subchanges:
                 changes[key] = subchanges
+
+    # ── Merge TF-IDF classified terms into profile ──
+    tfidf = audit_result.get("tfidf_analysis", {})
+    if tfidf.get("enabled"):
+        classified = tfidf.get("classified", {})
+
+        # Boost tech_stack with high-TF-IDF tech terms not already there
+        existing_tech = set(t.lower() for t in profile.get("tech_stack", []))
+        tfidf_tech_added = []
+        for t in classified.get("tech_terms", []):
+            if t not in existing_tech:
+                profile.setdefault("tech_stack", []).append(t)
+                existing_tech.add(t)
+                tfidf_tech_added.append(t)
+        if tfidf_tech_added:
+            changes.setdefault("tech_stack", {}).setdefault("tfidf_discovered", tfidf_tech_added)
+
+        # Boost skills with TF-IDF skill terms
+        existing_skills = set(s.lower() for s in profile.get("skills", []))
+        tfidf_skills_added = []
+        for t in classified.get("skill_terms", []):
+            if t not in existing_skills:
+                profile.setdefault("skills", []).append(t.capitalize())
+                existing_skills.add(t)
+                tfidf_skills_added.append(t.capitalize())
+        if tfidf_skills_added:
+            changes.setdefault("skills", {}).setdefault("tfidf_discovered", tfidf_skills_added)
+
+        # Boost interests with TF-IDF interest terms
+        existing_interest_names = set(
+            i.lower().strip() for i in profile.get("interests_hobbies", {}).get("hobbies", [])
+        )
+        tfidf_interest_added = []
+        for t in classified.get("interest_terms", []):
+            if t not in existing_interest_names:
+                profile.setdefault("interests_hobbies", {}).setdefault("hobbies", []).append(t.capitalize())
+                existing_interest_names.add(t)
+                tfidf_interest_added.append(t.capitalize())
+        if tfidf_interest_added:
+            changes.setdefault("interests_hobbies", {}).setdefault("tfidf_discovered", tfidf_interest_added)
+
+        # Store raw TF-IDF topics as profile metadata for reference
+        overall = tfidf.get("overall_top_terms", [])
+        if overall:
+            profile["last_tfidf_topics"] = [t["term"] for t in overall[:15]]
 
     profile.setdefault("audits", []).append({
         "timestamp": audit_result.get("audited_at", datetime.now().isoformat()),
@@ -1528,6 +1815,20 @@ def generate_profile_markdown() -> str:
                 for item in items:
                     md += f"- {item}\n"
                 md += "\n"
+
+    # ── TF-IDF Discovered Topics ──
+    tfidf_topics = profile.get("last_tfidf_topics", [])
+    if tfidf_topics:
+        md += "\n## Key Topics (TF-IDF Analysis)\n\n"
+        md += "Topics statistically important across conversations:\n\n"
+        md += "`" + "` `".join(tfidf_topics) + "`\n\n"
+
+    # ── Audit source breakdown ──
+    total_convs = sum(a.get("conversations_audited", 0) for a in profile.get("audits", []))
+    md += f"\n## Statistics\n\n"
+    md += f"- **Total Conversations Audited:** {total_convs}\n"
+    md += f"- **Profile Version:** {profile.get('version', 1)}\n"
+    md += f"- **Last Updated:** {profile.get('last_updated', 'Never')}\n\n"
 
     recent_audits = profile.get("audits", [])[-5:]
     if recent_audits:
