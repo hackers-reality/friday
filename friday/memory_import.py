@@ -1731,31 +1731,41 @@ _FRAGMENT_PATTERNS = [
 ]
 
 _TECH_LOWERCASE: Dict[str, str] = {
-    "Python": "Python", "Javascript": "JavaScript", "Typescript": "TypeScript",
-    "Reactjs": "React", "React.js": "React", "Nodejs": "Node.js", "Node.js": "Node.js",
-    "Nextjs": "Next.js", "Next.Js": "Next.js",
-    "Vuejs": "Vue.js", "Vue.Js": "Vue.js",
-    "Expressjs": "Express.js", "Express.Js": "Express.js",
-    "Postgresql": "PostgreSQL", "Postgres": "PostgreSQL",
-    "Mysql": "MySQL", "Mongodb": "MongoDB", "Sqlite": "SQLite",
-    "Redis": "Redis", "Github": "GitHub", "Gitlab": "GitLab",
-    "Github Actions": "GitHub Actions", "Ci/Cd": "CI/CD",
-    "Graphql": "GraphQL", "Rest Api": "REST API", "Restapi": "REST API",
-    "K8s": "Kubernetes", "Kubernetes": "Kubernetes",
-    "Tensorflow": "TensorFlow", "Pytorch": "PyTorch",
-    "Scikit-Learn": "scikit-learn", "Scikit Learn": "scikit-learn",
-    "Opencv": "OpenCV", "Huggingface": "Hugging Face",
-    "Langchain": "LangChain", "Webpack": "Webpack", "Vite": "Vite",
-    "Tailwind": "Tailwind CSS", "Tailwindcss": "Tailwind CSS",
-    "Bootstrap": "Bootstrap", "Material Ui": "Material UI",
-    "Chakra": "Chakra UI", "Fastapi": "FastAPI",
-    "Flask": "Flask", "Django": "Django",
-    "Postman": "Postman", "Figma": "Figma",
-    "Vs Code": "VS Code", "Vscode": "VS Code",
-    "Pycharm": "PyCharm", "Intellij": "IntelliJ",
-    "Vim": "Vim", "Neovim": "Neovim",
-    "Jupyter": "Jupyter", "Html": "HTML", "Css": "CSS",
-    "Javascript": "JavaScript", "Typescript": "TypeScript",
+    "python": "Python", "javascript": "JavaScript", "typescript": "TypeScript",
+    "reactjs": "React", "react.js": "React", "react": "React",
+    "nodejs": "Node.js", "node.js": "Node.js", "node": "Node.js",
+    "nextjs": "Next.js", "next.js": "Next.js",
+    "vuejs": "Vue.js", "vue.js": "Vue.js",
+    "expressjs": "Express.js", "express.js": "Express.js",
+    "postgresql": "PostgreSQL", "postgres": "PostgreSQL",
+    "mysql": "MySQL", "mongodb": "MongoDB", "sqlite": "SQLite",
+    "redis": "Redis", "github": "GitHub", "gitlab": "GitLab",
+    "github actions": "GitHub Actions", "ci/cd": "CI/CD",
+    "graphql": "GraphQL", "rest api": "REST API", "restapi": "REST API",
+    "k8s": "Kubernetes", "kubernetes": "Kubernetes",
+    "tensorflow": "TensorFlow", "pytorch": "PyTorch",
+    "scikit-learn": "scikit-learn", "scikit learn": "scikit-learn",
+    "opencv": "OpenCV", "huggingface": "Hugging Face",
+    "langchain": "LangChain", "webpack": "Webpack", "vite": "Vite",
+    "tailwind": "Tailwind CSS", "tailwindcss": "Tailwind CSS",
+    "bootstrap": "Bootstrap", "material ui": "Material UI", "materialui": "Material UI",
+    "chakra": "Chakra UI", "fastapi": "FastAPI",
+    "flask": "Flask", "django": "Django",
+    "postman": "Postman", "figma": "Figma",
+    "vs code": "VS Code", "vscode": "VS Code",
+    "pycharm": "PyCharm", "intellij": "IntelliJ",
+    "vim": "Vim", "neovim": "Neovim",
+    "jupyter": "Jupyter", "html": "HTML", "css": "CSS",
+    "docker": "Docker", "aws": "AWS", "gcp": "GCP", "azure": "Azure",
+    "linux": "Linux", "git": "Git",
+    "rust": "Rust", "golang": "Go", "go": "Go",
+    "java": "Java", "kotlin": "Kotlin", "swift": "Swift",
+    "flutter": "Flutter", "react native": "React Native", "reactnative": "React Native",
+    "android": "Android", "ios": "iOS",
+    "sql": "SQL", "nosql": "NoSQL",
+    "api": "API", "rest": "REST", "graphql": "GraphQL",
+    "llm": "LLM", "ai": "AI", "ml": "ML", "nlp": "NLP",
+    "cli": "CLI", "sdk": "SDK", "ide": "IDE",
 }
 
 _LANG_LOWERCASE: Dict[str, str] = {
@@ -1800,17 +1810,22 @@ def _is_suspicious_list_item(item: str) -> bool:
 
 
 def _normalize_item(item: str, key: str) -> str:
-    """Normalize casing for tech stack and languages."""
+    """Normalize casing for tech stack and languages (case-insensitive)."""
     if key == "tech_stack":
-        normalized = _TECH_LOWERCASE.get(item, item)
-        if normalized != item:
+        key_lower = item.lower()
+        normalized = _TECH_LOWERCASE.get(key_lower)
+        if normalized:
             return normalized
-        # Title-case items that look like tech (all lowercase originally)
-        if item[0].isupper() and item[1:].islower() and len(item) > 2:
-            return item.title()
-        return item
+        # Fallback: preserve original if it looks reasonable
+        if item[0].isupper() and len(item) > 1:
+            return item
+        return item.title() if len(item) > 2 else item
     if key == "languages":
-        return _LANG_LOWERCASE.get(item, item)
+        key_lower = item.lower()
+        for k, v in _LANG_LOWERCASE.items():
+            if k.lower() == key_lower:
+                return v
+        return item
     return item
 
 
@@ -2165,10 +2180,11 @@ def update_profile_with_audit(audit_result: Dict[str, Any]) -> Dict[str, Any]:
         existing_tech = set(t.lower() for t in profile.get("tech_stack", []))
         tfidf_tech_added = []
         for t in classified.get("tech_terms", []):
-            if t not in existing_tech:
-                profile.setdefault("tech_stack", []).append(t)
-                existing_tech.add(t)
-                tfidf_tech_added.append(t)
+            t_normalized = _normalize_item(t, "tech_stack")
+            if t_normalized.lower() not in existing_tech:
+                profile.setdefault("tech_stack", []).append(t_normalized)
+                existing_tech.add(t_normalized.lower())
+                tfidf_tech_added.append(t_normalized)
         if tfidf_tech_added:
             changes.setdefault("tech_stack", {}).setdefault("tfidf_discovered", tfidf_tech_added)
 
@@ -2672,6 +2688,7 @@ def build_user_memory_context(max_chars: int = 6000) -> str:
 
     Uses confidence scores to decide which fields to include.
     Low-confidence scalar fields (< 0.5) are omitted.
+    List items with per-item confidence < 0.3 are filtered out.
     Designed to be injected into the live session system prompt.
 
     Args:
@@ -2707,6 +2724,13 @@ def build_user_memory_context(max_chars: int = 6000) -> str:
 
     conf: dict = profile.get("_confidence", {})
 
+    def _keep(key: str, item: str) -> bool:
+        """Check if item passes its per-item confidence threshold (>= 0.3)."""
+        item_conf = conf.get(key, {})
+        if isinstance(item_conf, dict):
+            return item_conf.get(item, 0.5) >= 0.3
+        return True
+
     parts = [
         "[USER MEMORY]",
         "This memory was inferred from imported chat history and may be imperfect.",
@@ -2734,19 +2758,19 @@ def build_user_memory_context(max_chars: int = 6000) -> str:
     if langs:
         parts.append(f"- Languages: {', '.join(langs[:5])}")
 
-    edu = profile.get("education", [])
+    edu = [e for e in profile.get("education", []) if _keep("education", e)]
     if edu:
         parts.append(f"- Education: {'; '.join(edu[:3])}")
 
-    projects = profile.get("projects", [])
+    projects = [p for p in profile.get("projects", []) if _keep("projects", p)]
     if projects:
         parts.append(f"- Key Projects: {'; '.join(projects[:5])}")
 
-    tech = profile.get("tech_stack", [])
+    tech = [t for t in profile.get("tech_stack", []) if _keep("tech_stack", t)]
     if tech:
         parts.append(f"- Tech: {'; '.join(tech[:10])}")
 
-    goals = profile.get("goals", [])
+    goals = [g for g in profile.get("goals", []) if _keep("goals", g)]
     if goals:
         parts.append(f"- Goals: {'; '.join(goals[:5])}")
 
