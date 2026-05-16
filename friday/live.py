@@ -114,6 +114,8 @@ from friday.tools import (
     crash_tool,
     pr_manager_tool,
     protector_tool,
+    deep_code_review,
+    code_review_report,
 )
 
 # vector_memory_tool now re-exported through friday_tools
@@ -327,6 +329,10 @@ Workflows & Plugins:
 - github_refresh_token() — manually refresh GitHub App token (only needed if expiry enabled)
 - github_list_files, github_read_file, github_write_file — GitHub repo access
 - github_create_branch, github_create_pr, github_list_prs(repo, state), github_pr_comment(pr_number, body), github_pr_diff(pr_number), github_pr_files(pr_number), github_delete_file(path, message), github_get_contents(path), github_get_user(), github_self_modify, github_review_pr
+
+Deep Code Review:
+- deep_code_review(action, target, auto_fix, ...) — walk source files, analyze each with Gemini AI, find bugs/security/perf/style issues. Actions: analyze (default), fix (review + auto-create GitHub PR), new_project (create repo + push), fork_pr (fork → fix → PR). Target: 'self' (FRIDAY's code), local path, or 'owner/repo'.
+- code_review_report(target) — quick file count/type summary before deep review
 
 Smart Home:
 - tell_alexa(command), smart_home_command(action, device)
@@ -1765,6 +1771,30 @@ def _build_tools():
                     "params": {"type": "STRING", "description": "JSON string of tool parameters (for call action)."},
                 }, required=["action"]),
             ),
+            # ======== DEEP CODE REVIEW ========
+            types.FunctionDeclaration(
+                name="deep_code_review",
+                description="Deep code review powered by Gemini. Walks source files, analyzes each with AI, and reports bugs/security/perf/style issues. Actions: analyze (default — review + report), fix (review + auto-create GitHub PR with fixes), new_project (create GitHub repo + push code), fork_pr (fork repo → fix → PR). Target: 'self' (FRIDAY's code), local path, or 'owner/repo'. Set auto_fix=True to create a PR.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: analyze (default), fix, new_project, fork_pr."},
+                    "target": {"type": "STRING", "description": "Target to review: 'self' (FRIDAY's code), local path, or GitHub 'owner/repo'."},
+                    "file_pattern": {"type": "STRING", "description": "File glob pattern (default '*.*')."},
+                    "auto_fix": {"type": "BOOLEAN", "description": "If true, automatically generate fixes and create PR (for analyze/fix actions)."},
+                    "pr_title": {"type": "STRING", "description": "Title for auto-generated PR."},
+                    "pr_body": {"type": "STRING", "description": "Body/description for auto-generated PR."},
+                    "repo_description": {"type": "STRING", "description": "Description for new repo (for new_project action)."},
+                    "branch_name": {"type": "STRING", "description": "Branch name for PR (for fix/fork_pr actions)."},
+                    "repo_name": {"type": "STRING", "description": "Repository name (for new_project action)."},
+                    "github_repo": {"type": "STRING", "description": "Target GitHub repo 'owner/repo' for PR (for fix action)."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="code_review_report",
+                description="Quick summary of source files: file count, total lines, breakdown by extension type. Useful before deep_code_review to estimate scope.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Target: 'self', local path, or 'owner/repo'."},
+                }, required=["target"]),
+            ),
         ])
     ]
 
@@ -1935,6 +1965,8 @@ TOOL_MAP = {
     "crash_tool": crash_tool,
     "pr_manager_tool": pr_manager_tool,
     "protector_tool": protector_tool,
+    "deep_code_review": deep_code_review,
+    "code_review_report": code_review_report,
 }
 
 

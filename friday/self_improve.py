@@ -48,7 +48,18 @@ def _git_commit(file_path: str, description: str) -> str:
             ["git", "commit", "-m", f"[Self-Improve] {description[:80]}"],
             capture_output=True, text=True, timeout=15,
         )
-        return r.stdout.strip() or r.stderr.strip()
+        result = r.stdout.strip() or r.stderr.strip()
+        # Push to remote so changes appear on GitHub
+        if r.returncode == 0:
+            push_r = subprocess.run(
+                ["git", "push"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if push_r.returncode == 0:
+                result += "\nPushed to remote."
+            else:
+                result += f"\nPush: {push_r.stderr.strip()[:200]}"
+        return result
     except Exception as e:
         return str(e)
 
