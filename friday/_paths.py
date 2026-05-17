@@ -7,6 +7,7 @@ _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(_PACKAGE_DIR)
 
 FRIDAY_MEMORY = os.path.join(PROJECT_ROOT, "friday_memory")
+FRIDAY_CONFIG = os.path.join(FRIDAY_MEMORY, "config")
 CREDENTIALS_JSON = os.path.join(PROJECT_ROOT, "credentials.json")
 GMAIL_TOKEN = os.path.join(PROJECT_ROOT, ".gmail_token.json")
 STARK_LOGS = os.path.join(PROJECT_ROOT, "stark_logs.txt")

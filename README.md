@@ -40,6 +40,7 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
    - [🛡️ Authority & Safety](#️-authority--safety)
    - [🧩 Tool Registry](#-tool-registry)
 - [Architecture](#architecture)
+- [Documentation](#documentation)
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
@@ -247,6 +248,48 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Capability report | ✅ Stable | Auto-generated markdown at `friday_reports/capability_report.md` |
 | Iron Man features | ✅ Stable | `damage_report()`, `suit_check()`, `morning_plan()`, `evening_review()` with history |
 
+### 🧠 Memory Tree
+| Feature | Status | Details |
+|---------|--------|---------|
+| Markdown knowledge base | ✅ Stable | Persistent pages under `friday_memory/memory_tree/` |
+| Daily notes | ✅ Stable | Auto-created daily notes with focus/tasks/reflections |
+| Full-text search | ✅ Stable | Search across all pages and daily notes |
+| Profile sync | ✅ Stable | Auto-generates pages from `user_profile.json` |
+| Backlinks | ✅ Stable | `[[PageName]]` cross-references |
+| Context injection | ✅ Stable | `build_memory_tree_context()` for LLM system prompt |
+| CLI access | ✅ Stable | `python -m friday.cli memory-tree` |
+
+### 🔀 Model Router
+| Feature | Status | Details |
+|---------|--------|---------|
+| Multi-provider | ✅ Stable | Gemini, OpenAI, Anthropic, local models |
+| Smart routing | ✅ Stable | Resolve best model by task type (chat, vision, code, fast) |
+| Cost tracking | ✅ Stable | Per-model cost accumulation, session stats |
+| Health checks | ✅ Stable | Provider health with latency measurement |
+| Configurable | ✅ Stable | JSON config, primary/fallback/code/vision/fast/local model mapping |
+
+### 🧩 Extension Registry
+| Feature | Status | Details |
+|---------|--------|---------|
+| Extension lifecycle | ✅ Stable | register, update, remove, list for all extension types |
+| MCP server management | ✅ Stable | stdio-based MCP server registry with health checks |
+| Capability discovery | ✅ Stable | Search extensions by capability keywords |
+| Health monitoring | ✅ Stable | HTTP/TCP/process health checks for all registered items |
+| 5 extension types | ✅ Stable | mcp, tool, bridge, hook, adapter |
+
+### 🩺 Diagnostics & CLI
+| Feature | Status | Details |
+|---------|--------|---------|
+| System diagnostics | ✅ Stable | 25+ health checks (modules, paths, config, hardware) |
+| Performance benchmarks | ✅ Stable | I/O, JSON serialization, dict lookup benchmarks |
+| `doctor` command | ✅ Stable | `python -m friday.cli doctor` with verbose/JSON modes |
+| `suit-check` command | ✅ Stable | Pre-flight system verification via CLI |
+| `damage-report` command | ✅ Stable | System risk assessment via CLI |
+| `memory-tree` commands | ✅ Stable | Full read/write/search/daily-note CLI interface |
+| `sidecar` commands | ✅ Stable | Token generation, discovery, health via CLI |
+| `snapshots` commands | ✅ Stable | List, create, restore, delete via CLI |
+| `dashboard` commands | ✅ Stable | Start, stop, URL via CLI |
+
 ---
 
 ## Architecture
@@ -318,6 +361,11 @@ E:\F.R.I.D.A.Y\
 │   ├── ironman.py          ← Damage report, suit check, morning/evening review
 │   ├── cv_engine.py        ← Background camera CV (DNN object detection, HOG, motion)
 │   ├── profile_schema.py   ← JSON Schema validation for user_profile
+│   ├── memory_tree.py       ← Persistent Markdown knowledge base with daily notes & backlinks
+│   ├── model_router.py      ← Multi-provider model routing with cost tracking & health checks
+│   ├── extension_registry.py ← Extension & MCP server lifecycle management
+│   ├── diagnostics.py       ← System diagnostics & performance benchmarks
+│   ├── cli.py               ← CLI interface (doctor, status, memory-tree, sidecar, etc.)
 │   └── startup.py          ← Windows startup + background service launcher
 │
 ├── sidecar_package/        ← Installable sidecar for remote devices
@@ -337,7 +385,12 @@ E:\F.R.I.D.A.Y\
 │   ├── sidecar_network/
 │   ├── ironman_reports/
 │   └── ...
+│
+│   └── ...
+│
+│   config/                  ← Configuration files (model_router.json, extension_registry.json, ...)
 ```
+
 
 ---
 

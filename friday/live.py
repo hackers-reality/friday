@@ -129,6 +129,10 @@ from friday.autonomy import autonomy_tool
 from friday.dashboard_api import dashboard_api_tool
 from friday.capabilities import capabilities_tool
 from friday.ironman import ironman_tool
+from friday.memory_tree import memory_tree_tool
+from friday.model_router import model_router_tool
+from friday.extension_registry import extension_registry_tool
+from friday.diagnostics import diagnostics_tool
 
 load_dotenv()
 console = Console()
@@ -145,6 +149,8 @@ for _mod_name in [
     "friday.tool_registry", "friday.authority", "friday.snapshots",
     "friday.sidecar", "friday.autonomy", "friday.dashboard_api",
     "friday.capabilities", "friday.ironman",
+    "friday.memory_tree", "friday.model_router",
+    "friday.extension_registry", "friday.diagnostics",
 ]:
     try:
         importlib.import_module(_mod_name)
@@ -1808,6 +1814,131 @@ def _build_tools():
                     "target": {"type": "STRING", "description": "Target: 'self', local path, or 'owner/repo'."},
                 }, required=["target"]),
             ),
+            # Phase 14/15/16 tool declarations
+            types.FunctionDeclaration(
+                name="tool_registry_tool",
+                description="Query the FRIDAY tool registry. Actions: status (overview), list (all tools), get (specific tool metadata), check (consistency).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, list, get, check."},
+                    "tool_name": {"type": "STRING", "description": "Tool name for 'get' action."},
+                    "category": {"type": "STRING", "description": "Optional category filter for 'list'."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="authority_tool",
+                description="Manage FRIDAY's authority/action policy. Actions: status, policy, classify, block, unblock, allow_risk, block_risk, mode (set: auto/ask/dry_run/block_all).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, policy, classify, block, unblock, allow_risk, block_risk, mode."},
+                    "tool": {"type": "STRING", "description": "Tool name for block/unblock/classify."},
+                    "risk": {"type": "STRING", "description": "Risk level for allow_risk/block_risk."},
+                    "mode": {"type": "STRING", "description": "Policy mode: auto, ask, dry_run, block_all."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="snapshot_tool",
+                description="Create and manage file/directory snapshots. Actions: list, create, restore, diff, info.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, create, restore, diff, info."},
+                    "path": {"type": "STRING", "description": "File/directory path for create action."},
+                    "id": {"type": "STRING", "description": "Snapshot ID for restore/diff/info."},
+                    "description": {"type": "STRING", "description": "Optional description for snapshot."},
+                    "restore_path": {"type": "STRING", "description": "Optional restore destination path."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="sidecar_tool",
+                description="Manage FRIDAY sidecars. Actions: status, list, register, heartbeat, info, dispatch.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, list, register, heartbeat, info, dispatch."},
+                    "name": {"type": "STRING", "description": "Sidecar name for register."},
+                    "type": {"type": "STRING", "description": "Sidecar type: desktop, browser, filesystem, system_monitor, code_workspace, smart_home."},
+                    "id": {"type": "STRING", "description": "Sidecar ID for heartbeat/info/dispatch."},
+                    "command": {"type": "STRING", "description": "Command for dispatch: ping, capabilities, exec, shutdown."},
+                    "endpoint": {"type": "STRING", "description": "Endpoint URL for remote sidecar."},
+                    "status": {"type": "STRING", "description": "Status: alive, busy, error, shutdown."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="autonomy_tool",
+                description="Manage the autonomous task queue. Actions: status, queue, get, list, complete, fail, pause, resume.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, queue, get, list, complete, fail, pause, resume."},
+                    "description": {"type": "STRING", "description": "Task description for queue."},
+                    "id": {"type": "STRING", "description": "Task ID for get/complete/fail/pause/resume."},
+                    "status": {"type": "STRING", "description": "Status filter for list."},
+                    "max_retries": {"type": "INTEGER", "description": "Max retries for task."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="dashboard_api_tool",
+                description="Manage the FRIDAY Dashboard API server. Actions: status, start, stop.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, start, stop."},
+                    "port": {"type": "INTEGER", "description": "Port number for start action."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="capabilities_tool",
+                description="Query FRIDAY's capability matrix. Actions: list (all capabilities), get (specific capability status), report (generate full capability report).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: list, get, report."},
+                    "capability": {"type": "STRING", "description": "Capability name for get action."},
+                    "status": {"type": "STRING", "description": "Status filter: stable, partial, experimental, planned."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="ironman_tool",
+                description="Iron Man system features. Actions: damage_report (system health audit with risk scoring), suit_check (pre-flight verification), morning_plan (daily briefing), evening_review (end-of-day summary).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, damage_report, suit_check, morning_plan, evening_review."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="memory_tree_tool",
+                description="Persistent Markdown knowledge base (Memory Tree). Actions: status (overview), build_index (rebuild index), read (page by name), write (content to page), search (full-text across all pages), daily_note (get/create today's note), daily_notes (list recent), update (sync from profile), context (build injection context).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, build_index, read, write, search, daily_note, daily_notes, update, context."},
+                    "name": {"type": "STRING", "description": "Page name for read/write."},
+                    "content": {"type": "STRING", "description": "Page content for write action."},
+                    "query": {"type": "STRING", "description": "Search query for search action."},
+                    "date": {"type": "STRING", "description": "Date for daily_note (YYYY-MM-DD)."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="model_router_tool",
+                description="Model Router — provider abstraction with fallback and cost tracking. Actions: status (config + costs), list (available models), resolve (best model for task), info (model details), update_config, health (provider health checks), usage (session costs), recent (recent usage records).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, list, resolve, info, update_config, health, usage, recent."},
+                    "task_type": {"type": "STRING", "description": "Task type for resolve: chat, vision, code, fast, local."},
+                    "model_id": {"type": "STRING", "description": "Model ID for info action."},
+                    "provider": {"type": "STRING", "description": "Provider filter for list: google, openai, anthropic, local."},
+                    "preferences": {"type": "STRING", "description": "JSON preferences dict for resolve."},
+                    "updates": {"type": "STRING", "description": "JSON updates dict for update_config."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="extension_registry_tool",
+                description="Extension & MCP Registry — manage extension servers, MCP tool providers. Actions: status, register_extension, update_extension, remove_extension, list_extensions, register_mcp, update_mcp, remove_mcp, list_mcp, health (check all), discover (search capabilities).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, register_extension, update_extension, remove_extension, list_extensions, register_mcp, update_mcp, remove_mcp, list_mcp, health, discover."},
+                    "name": {"type": "STRING", "description": "Extension or MCP server name."},
+                    "type": {"type": "STRING", "description": "Extension type: mcp, tool, bridge, hook, adapter."},
+                    "endpoint": {"type": "STRING", "description": "Endpoint URL or host:port for extension."},
+                    "command": {"type": "STRING", "description": "Command for MCP server (register_mcp)."},
+                    "args": {"type": "ARRAY", "description": "Args list for MCP server.", "items": {"type": "STRING"}},
+                    "description": {"type": "STRING", "description": "Description."},
+                    "capabilities": {"type": "ARRAY", "description": "Capability list.", "items": {"type": "STRING"}},
+                    "query": {"type": "STRING", "description": "Capability search query for discover."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="diagnostics_tool",
+                description="Diagnostics & Benchmarks. Actions: diagnostics (run health checks), benchmarks (run performance tests), report (full diagnostics + benchmarks).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: diagnostics, benchmarks, report."},
+                    "verbose": {"type": "BOOLEAN", "description": "Verbose diagnostic output."},
+                }),
+            ),
         ])
     ]
 
@@ -1991,6 +2122,12 @@ TOOL_MAP = {
     "dashboard_api_tool": dashboard_api_tool,
     "capabilities_tool": capabilities_tool,
     "ironman_tool": ironman_tool,
+
+    # Phase 16 module tools
+    "memory_tree_tool": memory_tree_tool,
+    "model_router_tool": model_router_tool,
+    "extension_registry_tool": extension_registry_tool,
+    "diagnostics_tool": diagnostics_tool,
 }
 
 

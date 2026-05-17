@@ -527,10 +527,14 @@ class DashboardAPI:
             return {"error": str(e)}
 
     def stop(self):
-        """Stop the API server."""
+        """Stop the API server and clean up socket."""
         if self._server:
             self._server.shutdown()
+            self._server.server_close()
             self._server = None
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=3)
+            self._thread = None
 
     def is_running(self) -> bool:
         return self._server is not None
