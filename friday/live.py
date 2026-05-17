@@ -120,6 +120,16 @@ from friday.tools import (
 
 # vector_memory_tool now re-exported through friday_tools
 
+# ─── New Phase 14/15 module imports ───
+from friday.tool_registry import tool_registry_tool
+from friday.authority import authority_tool
+from friday.snapshots import snapshot_tool
+from friday.sidecar import sidecar_tool
+from friday.autonomy import autonomy_tool
+from friday.dashboard_api import dashboard_api_tool
+from friday.capabilities import capabilities_tool
+from friday.ironman import ironman_tool
+
 load_dotenv()
 console = Console()
 
@@ -132,6 +142,9 @@ for _mod_name in [
     "friday.tools", "friday.vision", "friday.browser_history",
     "friday.filegen", "friday.security", "friday.database",
     "friday.automation", "friday.monitor", "friday.scheduler",
+    "friday.tool_registry", "friday.authority", "friday.snapshots",
+    "friday.sidecar", "friday.autonomy", "friday.dashboard_api",
+    "friday.capabilities", "friday.ironman",
 ]:
     try:
         importlib.import_module(_mod_name)
@@ -1968,6 +1981,16 @@ TOOL_MAP = {
     "protector_tool": protector_tool,
     "deep_code_review": deep_code_review,
     "code_review_report": code_review_report,
+
+    # Phase 14/15 module tools
+    "tool_registry_tool": tool_registry_tool,
+    "authority_tool": authority_tool,
+    "snapshot_tool": snapshot_tool,
+    "sidecar_tool": sidecar_tool,
+    "autonomy_tool": autonomy_tool,
+    "dashboard_api_tool": dashboard_api_tool,
+    "capabilities_tool": capabilities_tool,
+    "ironman_tool": ironman_tool,
 }
 
 

@@ -122,3 +122,35 @@ if __name__ == "__main__":
 
     # Or use simple method
     # print(add_to_startup_simple())
+
+
+# ─── Dashboard Auto-Start on Friday Launch ──────────────────
+
+def launch_dashboard_background() -> bool:
+    """Launch the Dashboard API and HTML dashboard in background threads.
+    
+    Returns True if dashboard was successfully started.
+    """
+    try:
+        from friday.dashboard import auto_start_dashboard
+        auto_start_dashboard()
+        return True
+    except Exception:
+        return False
+
+
+def launch_all_background_services() -> dict:
+    """Launch all background services: dashboard, sidecar heartbeats, etc.
+    
+    Returns dict with status of each service.
+    """
+    results = {}
+    results["dashboard"] = launch_dashboard_background()
+    try:
+        from friday.sidecar import sidecar_tool
+        sidecar_tool("register", name="friday_main", type_="desktop")
+        sidecar_tool("heartbeat")
+        results["sidecar"] = True
+    except Exception:
+        results["sidecar"] = False
+    return results

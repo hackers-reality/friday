@@ -11,7 +11,7 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/hackers-reality/friday)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)]()
-[![Version](https://img.shields.io/badge/Version-1.4.0-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases/tag/v1.4.0)
+[![Version](https://img.shields.io/badge/Version-2.0.0--alpha-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases)
 
 ---
 
@@ -34,7 +34,11 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
   - [🤖 AI & LLM](#-ai--llm)
   - [🧠 Memory & User Understanding](#-memory--user-understanding)
   - [🚀 System & Startup](#-system--startup)
-  - [🖼️ Dashboard & UI](#-dashboard--ui)
+   - [🖼️ Dashboard & UI](#-dashboard--ui)
+   - [📷 Camera CV (LLM-Only)](#-camera-cv-llm-only)
+   - [🔌 Sidecar Network](#-sidecar-network)
+   - [🛡️ Authority & Safety](#️-authority--safety)
+   - [🧩 Tool Registry](#-tool-registry)
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
@@ -195,10 +199,53 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 🖼️ Dashboard & UI
 | Feature | Status | Details |
 |---------|--------|---------|
-| Desktop UI | 🔧 In Progress | `desktop_app.py` — PyQt6/Tkinter |
-| Dark neon theme | 🔧 In Progress | Navy/cyan/teal aesthetic |
-| Memory/knowledge panel | 📋 Planned | Shows goals, active LLM, memory |
-| Settings panel | 📋 Planned | LLM switching, API keys, toggles |
+| HTML Dashboard | ✅ Stable | Port 8080, 12+ panels, dark theme, scanline overlay, animations, 10s auto-refresh |
+| REST API | ✅ Stable | Port 8090, 19 endpoints (health, state, tools, tasks, memory, authority, snapshots, sidecars, goals, system, logs, capabilities, mission, briefing, workspace, diagnostic, CV context) |
+| POST endpoint | ✅ Stable | `/api/sidecars/register`, `/api/sidecars/heartbeat` for remote sidecar auth |
+| Desktop UI | 🔧 In Progress | PyQt6/Tkinter |
+| Dark neon theme | ✅ Done | Navy/cyan/teal, scanline CRT overlay, glow text |
+
+### 📷 Camera CV (LLM-Only)
+| Feature | Status | Details |
+|---------|--------|---------|
+| Background camera capture | ✅ Stable | OpenCV VideoCapture in daemon thread, configurable interval |
+| Object detection | ✅ Stable | MobileNet-SSD (COCO 80 classes) via OpenCV DNN, auto-downloads model |
+| People detection | ✅ Stable | HOG descriptor (built into OpenCV, no download) |
+| Motion detection | ✅ Stable | Frame differencing with Gaussian blur |
+| Scene analysis | ✅ Stable | Brightness, contrast, lighting, dominant colors (K-means) |
+| Gemini Vision integration | ✅ Optional | Rich scene description when API key available |
+| LLM-only | ✅ By design | Results consumed via `cv_tool("context")` — never shown to user |
+| Wired into awareness | ✅ Done | `situational_awareness()` includes CV context automatically |
+
+### 🔌 Sidecar Network
+| Feature | Status | Details |
+|---------|--------|---------|
+| Remote sidecar dispatch | ✅ Stable | HTTP POST to sidecar endpoint, timeout handling |
+| Local command execution | ✅ Stable | ping, capabilities, exec (shell), system_info, shutdown |
+| UDP multicast discovery | ✅ Stable | `239.255.42.69:42069`, listener + announcer threads |
+| JWT token auth | ✅ Stable | HMAC-SHA256, no PyJWT dependency, no-expiry token support |
+| Token management | ✅ Stable | generate, list, revoke, verify via `sidecar_network_tool()` |
+| Installable sidecar package | ✅ Stable | `sidecar_package/` — `pip install .` → `friday-sidecar` CLI |
+| Sidecar CLI | ✅ Stable | `--install-token`, `--server URL --token TOKEN`, auto-registration, heartbeat loop |
+
+### 🛡️ Authority & Safety
+| Feature | Status | Details |
+|---------|--------|---------|
+| Risk classification | ✅ Stable | 9 levels: read_only → background_autonomy |
+| Configurable policy | ✅ Stable | Disk-persisted, modes: auto, ask, dry_run, block_all |
+| Decision engine | ✅ Stable | `should_allow_tool()` with audit logging |
+| Hook enforcement | ✅ Stable | Pre-hook runs on every tool call in live.py |
+| Auto-snapshot | ✅ Stable | Snapshot created before destructive operations (delete, write, move, copy) |
+| Blocked tools list | ✅ Stable | Per-tool blocking via `authority_tool("block", tool=...)` |
+
+### 🧩 Tool Registry
+| Feature | Status | Details |
+|---------|--------|---------|
+| Central metadata | ✅ Stable | 150+ tools with category, risk, description |
+| Introspection API | ✅ Stable | `get_tool_metadata()`, `list_tool_registry()`, `check_tool_registry_consistency()` |
+| Capability matrix | ✅ Stable | 40+ systems with status/dependencies/notes |
+| Capability report | ✅ Stable | Auto-generated markdown at `friday_reports/capability_report.md` |
+| Iron Man features | ✅ Stable | `damage_report()`, `suit_check()`, `morning_plan()`, `evening_review()` with history |
 
 ---
 
@@ -210,44 +257,36 @@ E:\F.R.I.D.A.Y\
 ├── friday.py               ← PRIMARY ENTRY POINT (with 5x auto-restart loop)
 │
 ├── friday/                 ← CORE PACKAGE (all modules)
-│   ├── live.py             ← Main engine: Gemini Live session, 120+ tool declarations, TOOL_MAP
+│   ├── live.py             ← Main engine: Gemini Live session, 150+ tool declarations, TOOL_MAP
 │   │   ├── Gemini Live audio/video (native WebSocket)
 │   │   ├── keepalive_task() — prevents GOAWAY timeout
 │   │   ├── _build_session_config() — system prompt with FRIDAY identity
+│   │   ├── Phase 14/15/16 module imports (tool_registry, authority, snapshots, sidecar, autonomy, dashboard_api, capabilities, ironman)
 │   │   └── Audio playback (jitter buffer, 4800 frames_per_buffer)
 │   │
-│   ├── tools.py            ← 120+ tool implementations (bridge to all modules)
+│   ├── tools.py            ← 150+ tool implementations (bridge to all modules)
 │   │   ├── Desktop automation (mouse, keyboard, apps)
 │   │   ├── Browser control (OpenCLI bind approach)
 │   │   ├── File operations (generate, search, open)
 │   │   ├── Spotify, Netflix, email, Instagram, Roblox, MS Store
-│   │   └── GitHub (9+ operations), Clock, Goals, KYU, Research
+│   │   ├── GitHub (20+ operations), Clock, Goals, KYU, Research
+│   │   └── situational_awareness() includes CV camera context
 │   │
 │   ├── opencli.py          ← OpenCLI v1.7.18 wrapper (session-based browser automation)
-│   │   ├── browser: navigate (bind), click, type, fill, extract, screenshot, scroll
-│   │   ├── tabs: list, new, select, close
-│   │   ├── site adapters: hackernews, reddit, twitter, 100+ more
-│   │   └── bind/unbind to existing Chrome tab
 │   │
 │   ├── github.py           ← GitHub API + OAuth Device Flow
-│   │   ├── 20+ operations (read/write files, branches, PRs, issues, search, repos)
-│   │   ├── Device Flow OAuth (no redirect server needed)
-│   │   └── PR review with Gemini AI
 │   │
 │   ├── goals.py            ← Goal/OKR system
-│   │   ├── OKR scoring: progress*0.5 + streak*0.3 + time_factor*0.2
-│   │   ├── 4-level progressive enforcement (L1-L4)
-│   │   └── Morning plan + evening review
 │   │
-│   ├── clock.py            ← Windows Clock (alarms, timers, stopwatch, reminders, focus)
+│   ├── clock.py            ← Windows Clock
 │   │
-│   ├── stayfree.py         ← StayFree screen time (4 extension IDs, Edge/Brave, process fallback)
+│   ├── stayfree.py         ← StayFree screen time
 │   │
-│   ├── gmail.py            ← Gmail + Calendar (unified OAuth via google_authorize)
+│   ├── gmail.py            ← Gmail + Calendar
 │   │
-│   ├── web.py              ← Browser history search (3650 days, 10000 limit)
+│   ├── web.py              ← Browser history search
 │   │
-│   ├── kyu.py              ← KYU personality adaptation (4-stage interview)
+│   ├── kyu.py              ← KYU personality adaptation
 │   │
 │   ├── knowledge_graph.py  ← Auto-extracts entities + relationships post-tool
 │   │
@@ -257,7 +296,7 @@ E:\F.R.I.D.A.Y\
 │   │
 │   ├── reasoning.py        ← Multi-step reasoning engine
 │   │
-│   ├── hooks.py            ← Pre/post/error tool hooks (KG extraction, logging)
+│   ├── hooks.py            ← Pre/post/error tool hooks (authority enforcement, auto-snapshot, logging, KG, KYU, episodic, skills)
 │   │
 │   ├── notify.py           ← Desktop toast notifications
 │   │
@@ -265,28 +304,39 @@ E:\F.R.I.D.A.Y\
 │   │
 │   ├── _paths.py           ← Centralized path resolution
 │   │
-│   └── workflow.py         ← Workflow engine
-│       └── plugin.py       ← Plugin system
+│   ├── memory_import.py    ← Full memory pipeline + doctor/review/pin actions
+│   │
+│   ├── tool_registry.py    ← Central metadata for 150+ tools
+│   ├── authority.py        ← 9-level risk classification + policy + audit
+│   ├── snapshots.py        ← File/directory snapshot/restore/diff
+│   ├── sidecar.py          ← Sidecar registry + HTTP remote dispatch
+│   ├── sidecar_network.py  ← UDP multicast discovery + JWT token auth
+│   ├── autonomy.py         ← Durable task queue with retry/reflection
+│   ├── dashboard_api.py    ← REST API (19 endpoints, port 8090)
+│   ├── dashboard.py        ← HTML dashboard (12+ panels, port 8080)
+│   ├── capabilities.py     ← Capability matrix (40+ systems)
+│   ├── ironman.py          ← Damage report, suit check, morning/evening review
+│   ├── cv_engine.py        ← Background camera CV (DNN object detection, HOG, motion)
+│   ├── profile_schema.py   ← JSON Schema validation for user_profile
+│   └── startup.py          ← Windows startup + background service launcher
 │
-├── archive/                ← 23 experiment modules (available for promotion)
+├── sidecar_package/        ← Installable sidecar for remote devices
+│   ├── setup.py
+│   └── friday_sidecar/
+│       ├── __init__.py
+│       └── client.py       ← CLI: friday-sidecar --server URL --token TOKEN
+│
+├── archive/                ← 23 experiment modules
 │
 ├── friday_memory/          ← RUNTIME DATA (gitignored)
-│   ├── goals.json
-│   ├── clock_state.json
-│   ├── kyu_profile.json
-│   ├── knowledge_graph.json
-│   ├── chroma_db/
-│   ├── workflow/
-│   └── .gitkeep
-│
-├── friday.py               ← Root launcher
-├── friday.cmd              ← Windows Command Prompt launcher
-├── friday.ps1              ← PowerShell launcher
-│
-├── .env                    ← API keys (gitignored)
-├── credentials.json        ← Google OAuth client (gitignored)
-├── .gmail_token.json       ← Gmail+Calendar token (gitignored)
-└── .github_token.json      ← GitHub OAuth token (gitignored)
+│   ├── user_profile.json
+│   ├── authority_policy.json
+│   ├── sidecars.json
+│   ├── snapshots.json
+│   ├── cv/
+│   ├── sidecar_network/
+│   ├── ironman_reports/
+│   └── ...
 ```
 
 ---
@@ -510,8 +560,8 @@ Friday responds to natural language. No rigid syntax required.
 | File | Purpose |
 |------|---------|
 | `friday.py` | Root entry point. Gemini Live session launch with 5x auto-restart |
-| `friday/live.py` | Main engine. 120+ tool declarations, TOOL_MAP, audio playback, system prompt |
-| `friday/tools.py` | 120+ tool bridge functions — desktop, browser, files, GitHub, clock, goals, etc. |
+| `friday/live.py` | Main engine. 150+ tool declarations, TOOL_MAP, audio playback, system prompt, Phase 14-16 integration |
+| `friday/tools.py` | 150+ tool bridge functions — desktop, browser, files, GitHub, clock, goals, CV-aware situational_awareness |
 | `friday/opencli.py` | OpenCLI v1.7.18 wrapper — session-based browser automation + site adapters |
 | `friday/github.py` | GitHub API (20+ ops) + Device Flow OAuth + AI PR review |
 | `friday/goals.py` | Goal tracking, OKR scoring, 4-level progressive enforcement |
@@ -524,7 +574,7 @@ Friday responds to natural language. No rigid syntax required.
 | `friday/multi_agent.py` | 9-role multi-agent delegation system |
 | `friday/research.py` | Autonomous web research + report generation |
 | `friday/reasoning.py` | Multi-step reasoning engine |
-| `friday/hooks.py` | Pre/post/error tool hooks (knowledge graph, logging) |
+| `friday/hooks.py` | Pre/post/error tool hooks (authority enforcement, auto-snapshot, KG, logging, KYU, episodic, skills) |
 | `friday/notify.py` | Desktop toast notifications (PowerShell + plyer) |
 | `friday/dreaming.py` | Dreaming system — session analysis while idle |
 | `friday/scheduler.py` | Cron scheduler for autonomous tasks |
@@ -532,6 +582,20 @@ Friday responds to natural language. No rigid syntax required.
 | `friday/_paths.py` | Centralized path resolution |
 | `friday/workflow.py` | RPA workflow engine |
 | `friday/plugin.py` | Plugin system |
+| `friday/memory_import.py` | Full memory pipeline: import, TF-IDF, audit, clean, confidence, redaction, conflict detection, decay, doctor |
+| `friday/tool_registry.py` | Central metadata for 150+ tools — category, risk, description, consistency checker |
+| `friday/authority.py` | 9-level tool risk classification, configurable policy, decision engine, audit log |
+| `friday/snapshots.py` | File/directory SHA-256 snapshot, restore, diff, indexed registry |
+| `friday/sidecar.py` | Sidecar registry, heartbeat, HTTP remote dispatch, local exec (ping/shutdown/exec) |
+| `friday/sidecar_network.py` | UDP multicast discovery, HMAC-JWT token auth/generate/verify/revoke |
+| `friday/autonomy.py` | Durable task queue — 6 states, retry/backoff, pause/resume, reflection metadata |
+| `friday/dashboard_api.py` | REST API (19 endpoints, port 8090), POST /api/sidecars/register + /heartbeat |
+| `friday/dashboard.py` | HTML dashboard (12+ panels, port 8080), dark theme, auto-refresh, animations |
+| `friday/capabilities.py` | Capability matrix (40+ systems), auto-generated markdown report |
+| `friday/ironman.py` | Iron Man features: damage_report, suit_check, morning_plan, evening_review |
+| `friday/cv_engine.py` | Background camera CV — OpenCV DNN object detection (COCO 80), HOG people, motion, scene analysis (LLM-only) |
+| `friday/profile_schema.py` | JSON Schema validation for user_profile.json |
+| `friday/startup.py` | Windows startup integration + background dashboard/sidecar service launcher |
 
 ---
 
@@ -609,8 +673,23 @@ Friday responds to natural language. No rigid syntax required.
 - [x] Windows startup registration — `protector_tool` with HKCU Run key, install/remove/status
 
 ### v2.0 — Desktop App 🌟
+- [x] Tool registry — central metadata for 150+ tools
+- [x] Authority & action policy — 9-level risk classification, configurable policy, audit log
+- [x] File/directory snapshots — SHA-256, restore, diff, indexed registry
+- [x] Sidecar system — registry, heartbeat, capability reporting, HTTP remote dispatch
+- [x] Autonomy engine — durable task queue with retry/backoff/reflection
+- [x] Capability matrix — 40+ systems with status and dependencies
+- [x] Dashboard REST API — 19 endpoints, port 8090, POST support for sidecar registration
+- [x] Advanced HTML dashboard — 12+ panels, dark theme, CRT overlay, animations, 10s auto-refresh
+- [x] Memory upgrades — redaction, conflict detection, decay, review queue, doctor diagnostic
+- [x] Iron Man features — damage report, suit check, morning briefing, evening review
+- [x] Profile schema validation — JSON Schema for user_profile.json
+- [x] Authority + auto-snapshot hooks — enforced on every tool call
+- [x] Background camera CV — object detection, people counting, motion, scene analysis (LLM-only)
+- [x] Sidecar network — UDP multicast discovery, HMAC-JWT token auth, no-expiry tokens
+- [x] Installable sidecar package — `pip install .` → `friday-sidecar` CLI for remote devices
+- [x] CV context wired into `situational_awareness()` — LLM sees camera without user knowing
 - [ ] Native Windows app (PyQt6 or Tauri)
-- [ ] Dark neon dashboard UI
 - [ ] Settings panel with key vault
 - [ ] Plugin system
 - [ ] Packaged installer (.exe)
@@ -658,6 +737,9 @@ git push origin feature/your-feature-name
 | SDK bug: `send_realtime_input` raises `ValueError` with >1 arg | Known | Only passes one argument at a time |
 | SyncMutex lock_async log noise | Cosmetic | Non-fatal, safe to ignore |
 | Audio crackling on long sessions | Fixed | Larger jitter buffer (12 chunks), smoother drain, exception_on_underflow=True |
+| CV engine MobileNet-SSD model download on first use | First-run delay | ~7MB download, cached after that |
+| Sidecar UDP discovery limited to LAN | By design | Use `--server URL` flag for WAN connections |
+| JWT tokens stored in plaintext on disk | Known | Encrypted storage planned for v2.1 |
 
 ---
 

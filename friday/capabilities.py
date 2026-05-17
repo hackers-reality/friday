@@ -417,3 +417,33 @@ def list_capabilities(status: str = "") -> list:
 
 if __name__ == "__main__":
     print(generate_capability_report())
+
+
+# ─── Tool handler for live.py integration ──────────────────
+
+def capabilities_tool(action: str = "list", capability: str = "", status: str = "") -> str:
+    """FRIDAY tool: query the capability matrix.
+    
+    Actions:
+        list     - List all capabilities (optionally filtered by status)
+        get      - Get status of a specific capability
+        report   - Generate and return the full capability report
+    """
+    if action == "list":
+        results = list_capabilities(status)
+        if not results:
+            return f"No capabilities found{(' with status ' + status) if status else ''}."
+        lines = [f"[OK] {len(results)} capabilities:"]
+        for name, info in results:
+            lines.append(f"  - {name}: {info.get('status', 'unknown')} — {info.get('description', '')}")
+        return "\n".join(lines)
+    elif action == "get":
+        if not capability:
+            return "[FAIL] 'capability' argument required for 'get' action."
+        st = get_capability_status(capability)
+        if st is None:
+            return f"[FAIL] Unknown capability: {capability}"
+        return f"[OK] {capability}: {st}"
+    elif action == "report":
+        return generate_capability_report()
+    return "[FAIL] Unknown action. Use: list, get, report"

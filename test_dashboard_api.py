@@ -24,6 +24,7 @@ from friday.dashboard_api import (
     _get_mission,
     _get_briefing,
     _get_workspace,
+    _get_diagnostic,
 )
 
 
@@ -105,6 +106,13 @@ class TestDashboardEndpoints(unittest.TestCase):
         w = _get_workspace()
         self.assertIn("path", w)
         self.assertIn("modules_count", w)
+
+    def test_diagnostic(self):
+        d = _get_diagnostic()
+        self.assertIn("systems", d)
+        self.assertIn("all_systems_operational", d)
+        self.assertIn("system_count", d)
+        self.assertGreater(d["system_count"], 5)
 
 
 class TestDashboardAPIServer(unittest.TestCase):

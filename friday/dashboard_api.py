@@ -157,7 +157,23 @@ def _get_memory_doctor() -> dict:
     try:
         from friday.memory_import import memory_import_tool
         report_text = memory_import_tool("doctor")
-        return {"report": report_text}
+        # Parse into structured sections
+        sections = {}
+        current_section = "header"
+        sections["header"] = report_text[:200]
+        for line in report_text.split("\n"):
+            line_s = line.strip()
+            if line_s.startswith("[OK]") or line_s.startswith("[ISSUE]") or line_s.startswith("[WARN]") or line_s.startswith("[CONFLICT]") or line_s.startswith("[DECAY]") or line_s.startswith("[REVIEW]"):
+                sections.setdefault("findings", []).append(line_s)
+            elif "Validation" in line_s:
+                current_section = "validation"
+            elif "Conflict" in line_s:
+                current_section = "conflicts"
+            elif "Decay" in line_s:
+                current_section = "decay"
+            elif "Review" in line_s:
+                current_section = "review"
+        return {"report": report_text, "sections": sections, "findings_count": len(sections.get("findings", []))}
     except Exception as e:
         return {"error": str(e)}
 
@@ -334,7 +350,48 @@ def _get_workspace() -> dict:
     return info
 
 
-# ─── HTTP Handler ──────────────────────────────────────────
+def _get_diagnostic() -> dict:
+    """Comprehensive FRIDAY diagnostic."""
+    diagnostic = {
+        "timestamp": datetime.now().isoformat(),
+        "systems": {},
+    }
+    # Health
+    diagnostic["systems"]["health"] = _get_health()
+    # State
+    diagnostic["systems"]["state"] = _get_state()
+    # Memory
+    diagnostic["systems"]["memory"] = _get_memory_status()
+    # Authority
+    diagnostic["systems"]["authority"] = _get_authority()
+    # Tools
+    diagnostic["systems"]["tools"] = _get_tools()
+    # Tasks
+    diagnostic["systems"]["tasks"] = _get_tasks()
+    # System
+    diagnostic["systems"]["system"] = _get_system()
+    # Capabilities
+    diagnostic["systems"]["capabilities"] = _get_capabilities()
+    # Workspace
+    diagnostic["systems"]["workspace"] = _get_workspace()
+
+    # Overall status
+    all_ok = True
+    for name, sys_data in diagnostic["systems"].items():
+        if isinstance(sys_data, dict) and "error" in sys_data:
+            all_ok = False
+    diagnostic["all_systems_operational"] = all_ok
+    diagnostic["system_count"] = len(diagnostic["systems"])
+    return diagnostic
+
+
+def _get_cv_context() -> dict:
+    """Get CV engine context for dashboard."""
+    try:
+        from friday.cv_engine import get_cv_status
+        return get_cv_status()
+    except Exception as e:
+        return {"error": str(e)}
 
 
 class _APIHandler(BaseHTTPRequestHandler):
@@ -359,6 +416,44 @@ class _APIHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self._respond({})
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        # Read body
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body) if body else {}
+        except Exception:
+            self._respond({"error": "Invalid request"}, 400)
+            return
+
+        if path == "/api/sidecars/register":
+            try:
+                from friday.sidecar_network import handle_sidecar_registration
+                result = handle_sidecar_registration(data)
+                if "error" in result:
+                    self._respond(result, 400)
+                else:
+                    self._respond(result)
+            except Exception as e:
+                self._respond({"error": str(e)}, 500)
+        elif path == "/api/sidecars/heartbeat":
+            name = data.get("name", "")
+            status = data.get("status", "alive")
+            if not name:
+                self._respond({"error": "name required"}, 400)
+                return
+            try:
+                from friday.sidecar import sidecar_tool
+                result = sidecar_tool("heartbeat", id=name, status=status)
+                self._respond({"success": True, "name": name, "status": status})
+            except Exception as e:
+                self._respond({"error": str(e)}, 500)
+        else:
+            self._respond({"error": f"Unknown POST endpoint: {path}"}, 404)
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
@@ -382,6 +477,8 @@ class _APIHandler(BaseHTTPRequestHandler):
             "/api/mission": ("mission", _get_mission),
             "/api/briefing": ("briefing", _get_briefing),
             "/api/workspace": ("workspace", _get_workspace),
+            "/api/diagnostic": ("diagnostic", _get_diagnostic),
+            "/api/cv": ("cv", _get_cv_context),
         }
 
         if path == "/" or path == "":

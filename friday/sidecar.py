@@ -16,7 +16,11 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import json
 import os
+import sys
 import copy
+import urllib.request
+import urllib.error
+import urllib.parse
 
 from friday._paths import FRIDAY_MEMORY
 
@@ -180,12 +184,77 @@ def dispatch_sidecar_command(sidecar_id: int, command: str, params: dict = None)
     if entry["status"] == "shutdown":
         return {"error": f"Sidecar {sidecar_id} is shut down"}
 
-    # Remote dispatch placeholder
+    # Remote dispatch via HTTP
     if entry.get("endpoint"):
-        return {"info": f"Remote dispatch to {entry['endpoint']} - not yet implemented", "command": command, "params": params}
+        try:
+            payload = json.dumps({"command": command, "params": params or {}}).encode("utf-8")
+            req = urllib.request.Request(
+                entry["endpoint"],
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = resp.read().decode("utf-8")
+                result = json.loads(body) if body else {}
+            # Log to sidecar
+            entry.setdefault("logs", []).append({
+                "timestamp": datetime.now().isoformat(),
+                "message": f"Dispatch: {command} -> {result.get('status', 'ok')}",
+            })
+            _save_sidecars(data)
+            return {"success": True, "command": command, "result": result}
+        except urllib.error.URLError as e:
+            return {"error": f"Remote dispatch failed: {e.reason}", "command": command}
+        except json.JSONDecodeError:
+            return {"error": "Remote dispatch failed: invalid JSON response", "command": command}
+        except Exception as e:
+            return {"error": f"Remote dispatch error: {str(e)}", "command": command}
 
-    # Local dispatch placeholder
-    return {"info": f"Local dispatch to {entry['name']} - not yet implemented", "command": command, "params": params}
+    # Local dispatch - execute as subprocess command
+    if command == "ping":
+        return {"success": True, "command": "ping", "result": "pong"}
+    elif command == "capabilities":
+        return {"success": True, "command": "capabilities", "result": entry.get("capabilities", [])}
+    elif command == "shutdown":
+        heartbeat_sidecar(sidecar_id, status="shutdown", log="Shutdown requested")
+        return {"success": True, "command": "shutdown", "result": "Shutting down"}
+    elif command == "exec":
+        import subprocess
+        import shlex
+        cmd_str = (params or {}).get("cmd", "")
+        if not cmd_str:
+            return {"error": "No cmd in params"}
+        try:
+            use_shell = sys.platform == "win32"
+            if use_shell:
+                proc = subprocess.run(
+                    cmd_str,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    shell=True,
+                )
+            else:
+                proc = subprocess.run(
+                    shlex.split(cmd_str),
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            result = {
+                "stdout": proc.stdout[-1000:],
+                "stderr": proc.stderr[-1000:],
+                "returncode": proc.returncode,
+            }
+            heartbeat_sidecar(sidecar_id, status="busy", log=f"Exec: {cmd_str[:50]}")
+            return {"success": True, "command": "exec", "result": result}
+        except subprocess.TimeoutExpired:
+            return {"error": "Command timed out"}
+        except Exception as e:
+            return {"error": str(e)}
+    else:
+        return {"info": f"Unknown local command '{command}' for {entry['name']}", "command": command}
 
 
 def sidecar_tool(action: str = "status", **kwargs) -> str:

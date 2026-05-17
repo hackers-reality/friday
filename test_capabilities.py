@@ -9,6 +9,7 @@ from friday.capabilities import (
     generate_capability_report,
     get_capability_status,
     list_capabilities,
+    capabilities_tool,
     CAPABILITY_REPORT_FILE,
 )
 
@@ -61,6 +62,30 @@ class TestCapabilities(unittest.TestCase):
 
     def test_minimum_capability_count(self):
         self.assertGreaterEqual(len(CAPABILITIES), 40)
+
+    def test_capabilities_tool_list(self):
+        result = capabilities_tool("list")
+        self.assertTrue(result.startswith("[OK]"))
+        self.assertIn("capabilities", result)
+        self.assertIn("voice", result)
+        self.assertIn("authority", result)
+
+    def test_capabilities_tool_get(self):
+        result = capabilities_tool("get", capability="voice")
+        self.assertIn("voice", result)
+        self.assertIn("stable", result)
+
+    def test_capabilities_tool_get_unknown(self):
+        result = capabilities_tool("get", capability="nonexistent")
+        self.assertTrue(result.startswith("[FAIL]"))
+
+    def test_capabilities_tool_report(self):
+        result = capabilities_tool("report")
+        self.assertIn("FRIDAY Capability Report", result)
+
+    def test_capabilities_tool_unknown_action(self):
+        result = capabilities_tool("bogus")
+        self.assertTrue(result.startswith("[FAIL]"))
 
 
 if __name__ == "__main__":

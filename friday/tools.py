@@ -1017,13 +1017,37 @@ def generate_file_llm(path: str, prompt: str) -> str:
         return f"LLM file generation error: {e}"
 
 def situational_awareness() -> str:
-    """Get system context."""
+    """Get system context including CV camera feed (LLM-only)."""
+    parts = []
     try:
         from friday.screen_watcher import get_active_window_info
         info = get_active_window_info()
-        return f"Active window: {info.get('title', 'Unknown')}\nProcess: {info.get('process_name', 'Unknown')}"
-    except Exception as e:
-        return f"Sensors failing: {e}"
+        parts.append(f"Active window: {info.get('title', 'Unknown')}")
+        parts.append(f"Process: {info.get('process_name', 'Unknown')}")
+    except Exception:
+        parts.append("Sensors: screen watcher unavailable")
+
+    # Include CV engine context if camera is active (LLM-only)
+    try:
+        from friday.cv_engine import get_cv_status
+        cv = get_cv_status()
+        if cv.get("camera_active"):
+            ctx_parts = []
+            if cv.get("scene_description"):
+                ctx_parts.append(f"Scene: {cv['scene_description'][:200]}")
+            if cv.get("people_count", 0) > 0:
+                ctx_parts.append(f"People: {cv['people_count']}")
+            objects = cv.get("objects_found", [])
+            if objects:
+                ctx_parts.append(f"Objects: {', '.join(objects[:8])}")
+            if cv.get("motion_detected"):
+                ctx_parts.append("Motion detected")
+            if ctx_parts:
+                parts.append("Camera: " + " | ".join(ctx_parts))
+    except Exception:
+        pass
+
+    return "\n".join(parts)
 
 def calendar_tool_handler(action: str = "list", days: int = 7) -> str:
     """Google Calendar integration: list events, sync with goals."""

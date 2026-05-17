@@ -119,9 +119,56 @@ class TestSidecar(unittest.TestCase):
     def test_sidecar_tool_dispatch(self):
         r = register_sidecar("dispatch-tool-test", "desktop")
         sid = r["id"]
-        result = sidecar_tool("dispatch", id=sid, command="exec")
+        result = sidecar_tool("dispatch", id=sid, command="ping")
         self.assertIn("command", result)
-        self.assertIn("exec", result)
+        self.assertIn("ping", result)
+
+    def test_dispatch_ping(self):
+        r = register_sidecar("ping-test", "desktop")
+        sid = r["id"]
+        result = dispatch_sidecar_command(sid, "ping")
+        self.assertEqual(result.get("command"), "ping")
+        self.assertEqual(result.get("result"), "pong")
+
+    def test_dispatch_shutdown(self):
+        r = register_sidecar("shutdown-test", "desktop")
+        sid = r["id"]
+        result = dispatch_sidecar_command(sid, "shutdown")
+        self.assertEqual(result.get("command"), "shutdown")
+        # Verify sidecar status changed
+        s = sidecar_status(sid)
+        self.assertEqual(s["status"], "shutdown")
+
+    def test_dispatch_capabilities(self):
+        r = register_sidecar("cap-test", "desktop", capabilities=["click", "type"])
+        sid = r["id"]
+        result = dispatch_sidecar_command(sid, "capabilities")
+        self.assertEqual(result.get("command"), "capabilities")
+        self.assertEqual(result.get("result"), ["click", "type"])
+
+    def test_dispatch_remote_endpoint(self):
+        """Dispatch to a remote endpoint should fail gracefully (connection refused)."""
+        r = register_sidecar("remote-test", "desktop", endpoint="http://127.0.0.1:1")
+        sid = r["id"]
+        result = dispatch_sidecar_command(sid, "ping")
+        # Should have error key (connection refused)
+        self.assertIn("error", result)
+
+    def test_dispatch_remote_timeout(self):
+        """Dispatch to a non-responsive host should time out gracefully."""
+        r = register_sidecar("timeout-test", "desktop", endpoint="http://10.255.255.1:1")
+        sid = r["id"]
+        result = dispatch_sidecar_command(sid, "ping")
+        self.assertIn("error", result)
+
+    def test_dispatch_exec_with_params(self):
+        """Dispatch exec with proper cmd param."""
+        import subprocess, sys
+        r = register_sidecar("exec-test", "desktop")
+        sid = r["id"]
+        result = dispatch_sidecar_command(sid, "exec", params={"cmd": "echo hello"})
+        self.assertIn("success", result)
+        self.assertIn("stdout", result.get("result", {}))
 
     def test_sidecar_tool_dispatch_no_id(self):
         result = sidecar_tool("dispatch", command="ping")

@@ -270,3 +270,40 @@ def _episodic_post_hook(name: str, args: dict, result: str, session=None) -> Non
 
 
 register_post_hook(_episodic_post_hook)
+
+# ─── Authority Pre-Hook ────────────────────────────────────────
+
+def _authority_pre_hook(name: str, args: dict, session=None) -> Optional[Dict]:
+    """Check authority policy before allowing a tool call."""
+    try:
+        from friday.authority import should_allow_tool, log_authority_decision
+        decision = should_allow_tool(name, args)
+        log_authority_decision(name, args, decision, str(session))
+        if not decision.get("allowed", True):
+            return None  # Block execution
+        if decision.get("needs_approval"):
+            return None  # Block until approval (simplified: block for safety)
+    except ImportError:
+        pass
+    return args
+
+register_pre_hook(_authority_pre_hook)
+
+
+# ─── Auto-Snapshot Pre-Hook ────────────────────────────────────
+
+_DESTRUCTIVE_TOOLS = {"delete_file", "write_file", "move_file", "copy_file"}
+
+def _auto_snapshot_pre_hook(name: str, args: dict, session=None) -> Optional[Dict]:
+    """Auto-create snapshots before destructive file operations."""
+    if name not in _DESTRUCTIVE_TOOLS:
+        return args
+    try:
+        from friday.snapshots import snapshot_tool
+        target = args.get("path") or args.get("source") or args.get("destination") or ""
+        snapshot_tool("auto_create", description=f"Auto-snapshot before {name}({target})")
+    except Exception:
+        pass
+    return args
+
+register_pre_hook(_auto_snapshot_pre_hook)
