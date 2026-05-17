@@ -131,7 +131,24 @@ if not exist "friday_memory" (
 REM Add friday command to PATH
 echo.
 echo [7/7] Adding friday command to PATH...
-echo @python "%~dp0friday_master.py" %* > "%PWD%\friday.cmd"
+(
+echo @echo off
+echo cd /d "%%~dp0"
+echo set PYTHONUTF8=1
+echo set "FRIDAY_PY=python"
+echo if exist ".venv\Scripts\python.exe" set "FRIDAY_PY=.venv\Scripts\python.exe"
+echo if exist "venv\Scripts\python.exe" set "FRIDAY_PY=venv\Scripts\python.exe"
+echo if "%%~1"=="" goto start_friday
+echo if /I "%%~1"=="start" goto start_friday
+echo if /I "%%~1"=="live" goto start_friday
+echo %%FRIDAY_PY%% -m friday.cli %%*
+echo exit /b %%ERRORLEVEL%%
+echo :start_friday
+echo echo [STARK INDUSTRIES] Bootstrapping F.R.I.D.A.Y. Sovereign Agent...
+echo echo [+] Starting dashboard, sidecar heartbeat, memory, monitor, and live voice loop...
+echo echo.
+echo %%FRIDAY_PY%% friday.py
+) > "%PWD%\friday.cmd"
 echo   ✅ Created friday.cmd wrapper
 
 REM Add to user PATH using setx
@@ -160,8 +177,8 @@ if "%all_good%"=="true" (
     echo.
     echo   Next steps:
     echo     1. Edit .env with your API keys
-    echo     2. Run: friday status
-    echo     3. Start Friday: friday multi-agent
+    echo     2. Start everything: friday
+    echo     3. Management commands: friday status, friday doctor, friday dashboard start
 ) else (
     echo   ⚠️  Some files are missing. Please check the errors above.
 )
@@ -173,12 +190,7 @@ set /p run_now="  Run Friday now? (y/n): "
 if /i "%run_now%"=="y" (
     echo.
     echo   Starting Friday...
-    python friday_master.py status
-    echo.
-    set /p start_friday="  Start Friday multi-agent? (y/n): "
-    if /i "%start_friday%"=="y" (
-        python friday_master.py multi-agent
-    )
+    call "%PWD%\friday.cmd"
 )
 
 echo.

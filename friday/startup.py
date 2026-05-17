@@ -1,156 +1,255 @@
 """
-Friday Startup Integration - Phase 6.1
-Add Friday to Windows startup folder for automatic launch.
-"""
-from __future__ import annotations
+FRIDAY Startup — supervisor for background services.
 
+Launches Dashboard API, Dashboard UI, sidecar heartbeat, memory checks,
+and the live engine. All services are tracked via runtime_state.json
+so they survive process boundaries.
+"""
+
+from __future__ import annotations
+from typing import Dict, Optional, Any
 import os
 import sys
-import shutil
-from pathlib import Path
+import time
+import threading
 
-STARTUP_FOLDER = os.path.expandvars(
-    r"%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+from friday._paths import FRIDAY_MEMORY
+from friday._singletons import (
+    set_service_state, clear_service_state, get_service_state,
+    check_http_endpoint, check_port_open, find_free_port,
 )
 
-def get_friday_exe_path() -> str:
-    """Get the path to the Friday executable or script."""
-    # Check if we're running as a frozen exe
-    if getattr(sys, 'frozen', False):
-        return sys.executable
 
-    # Otherwise, return the path to friday.py
-    return os.path.abspath("friday.py")
+def _log(msg: str):
+    print(f"[FRIDAY] {msg}")
 
-def get_startup_shortcut_path() -> str:
-    """Get the path where the startup shortcut would be."""
-    return os.path.join(STARTUP_FOLDER, "Friday.lnk")
 
-def add_to_startup(exe_path: Optional[str] = None) -> str:
+def _get_pid() -> int:
+    return os.getpid()
+
+
+# ─── Dashboard API ──────────────────────────────────────
+
+def _start_dashboard_api(host: str = "127.0.0.1", port: int = 8090) -> dict:
+    """Start the Dashboard API server. Returns structured result."""
+    from friday.dashboard_api import DashboardAPI
+
+    # Check if port is in use — could be our own from a previous launch
+    port_check = check_port_open(host, port)
+    if port_check["open"]:
+        # Check if it's a healthy FRIDAY API
+        health = check_http_endpoint(f"http://{host}:{port}/api/health")
+        if health.get("reachable"):
+            set_service_state("dashboard_api", url=f"http://{host}:{port}", port=port, pid=0, status="already_running")
+            return {"success": True, "url": f"http://{host}:{port}", "port": port, "status": "already_running"}
+        # Port is occupied but not FRIDAY — find a free one
+        port = find_free_port(8091, 20)
+        _log(f"Port 8090 busy, using {port}")
+
+    api = DashboardAPI(host=host, port=port)
+    result = api.start()
+
+    if "error" in result:
+        return {"success": False, "error": result["error"]}
+
+    # Store in runtime state
+    set_service_state("dashboard_api",
+        url=result.get("url", f"http://{host}:{port}"),
+        port=port,
+        pid=_get_pid(),
+        started_at=time.time(),
+        status="running",
+    )
+    return {"success": True, "url": f"http://{host}:{port}", "port": port, "status": "started"}
+
+
+def _stop_dashboard_api() -> dict:
+    """Stop the Dashboard API server."""
+    from friday.dashboard_api import DashboardAPI
+    # We can't import the module's _dashboard_instance from here.
+    # Instead, we check runtime state for services that need stopping.
+    # Since DashboardAPI runs in this process's thread, we manage via module var.
+    return {"success": True, "message": "Dashboard API will stop when supervisor exits"}
+
+
+# ─── Dashboard UI ───────────────────────────────────────
+
+def _start_dashboard_ui(api_url: str = "http://127.0.0.1:8090", host: str = "127.0.0.1", port: int = 8080) -> dict:
+    """Start the HTML Dashboard server. Returns structured result."""
+    from friday.dashboard import DashboardServer
+
+    port_check = check_port_open(host, port)
+    if port_check["open"]:
+        # Check if a FRIDAY dashboard is already serving
+        health = check_http_endpoint(f"http://{host}:{port}/")
+        if health.get("reachable"):
+            set_service_state("dashboard_ui", url=f"http://{host}:{port}", port=port, pid=0, status="already_running")
+            return {"success": True, "url": f"http://{host}:{port}", "port": port, "status": "already_running"}
+        port = find_free_port(8081, 20)
+        _log(f"Port 8080 busy, using {port}")
+
+    ds = DashboardServer(port=port)
+    result = ds.start()
+    if "error" in result:
+        return {"success": False, "error": result.get("error", "Unknown error")}
+
+    set_service_state("dashboard_ui",
+        url=result.get("url", f"http://{host}:{port}"),
+        port=port,
+        pid=_get_pid(),
+        started_at=time.time(),
+        api_url=api_url,
+        status="running",
+    )
+    return {"success": True, "url": result.get("url", f"http://{host}:{port}"), "port": port, "status": "started"}
+
+
+# ─── Sidecar Heartbeat ──────────────────────────────────
+
+_sidecar_heartbeat_thread: Optional[threading.Thread] = None
+
+
+def _start_sidecar_heartbeat() -> dict:
+    """Start the sidecar heartbeat in a daemon thread."""
+    global _sidecar_heartbeat_thread
+
+    def _heartbeat_loop():
+        while True:
+            try:
+                from friday.sidecar import sidecar_tool
+                sidecar_tool("heartbeat")
+            except Exception:
+                pass
+            time.sleep(30)
+
+    _sidecar_heartbeat_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
+    _sidecar_heartbeat_thread.start()
+    set_service_state("sidecar_heartbeat", status="running", pid=_get_pid())
+    return {"success": True, "status": "started"}
+
+
+# ─── Memory Check ───────────────────────────────────────
+
+def _run_memory_check() -> dict:
+    """Check that memory/profile is loaded. Returns structured result."""
+    profile_path = os.path.join(FRIDAY_MEMORY, "user_profile.json")
+    memory_tree_path = os.path.join(FRIDAY_MEMORY, "memory_tree")
+
+    profile_exists = os.path.exists(profile_path)
+    memory_tree_exists = os.path.exists(memory_tree_path)
+
+    status = "loaded" if profile_exists else "no_profile"
+    set_service_state("memory", status=status, profile_exists=profile_exists, memory_tree_exists=memory_tree_exists)
+
+    return {
+        "success": True,
+        "profile_exists": profile_exists,
+        "memory_tree_exists": memory_tree_exists,
+        "status": status,
+    }
+
+
+# ─── Full Launch ────────────────────────────────────────
+
+def launch_all(api_port: int = 8090, ui_port: int = 8080,
+               start_live: bool = False, log_fn=None) -> Dict[str, Any]:
     """
-    Add Friday to Windows startup folder.
-    Creates a shortcut (.lnk) that launches Friday on login.
+    Launch all background services in the current process.
+
+    Args:
+        api_port: Preferred port for dashboard API
+        ui_port: Preferred port for dashboard UI
+        start_live: If True, also start the live engine (blocks)
+        log_fn: Optional logging function
+
+    Returns:
+        Dict with status of each service
     """
-    try:
-        import pythoncom
-        import win32com.client
-    except ImportError:
-        return (
-            "[FAIL] pywin32 not installed. Install with: pip install pywin32\n"
-            "Then run this function again."
-        )
+    if log_fn:
+        global _log
+        _log = log_fn
 
-    if not exe_path:
-        exe_path = get_friday_exe_path()
+    results: Dict[str, Any] = {}
 
-    try:
-        # Ensure startup folder exists
-        os.makedirs(STARTUP_FOLDER, exist_ok=True)
+    _log("Starting FRIDAY services...")
 
-        shortcut_path = get_startup_shortcut_path()
+    # 1. Memory check
+    _log("[CHECK] Memory...")
+    mem_result = _run_memory_check()
+    results["memory"] = mem_result
+    if mem_result.get("profile_exists"):
+        _log(f"[OK] Memory loaded: {FRIDAY_MEMORY}")
+    else:
+        _log(f"[WARN] No user profile at {FRIDAY_MEMORY}/user_profile.json")
 
-        # Create shortcut
-        shell = win32com.client.Dispatch("WScript.Shell")
-        shortcut = shell.CreateShortcut(shortcut_path)
+    # 2. Dashboard API
+    _log("[START] Dashboard API...")
+    api_result = _start_dashboard_api(port=api_port)
+    results["dashboard_api"] = api_result
+    if api_result.get("success"):
+        _log(f"[OK] Dashboard API: {api_result['url']}")
+    else:
+        _log(f"[FAIL] Dashboard API: {api_result.get('error', 'unknown')}")
 
-        # If it's a Python script, set the arguments
-        if exe_path.endswith(".py"):
-            shortcut.Targetpath = sys.executable
-            shortcut.Arguments = f'"{exe_path}"'
-        else:
-            shortcut.Targetpath = exe_path
+    # 3. Dashboard UI
+    api_url = api_result.get("url", f"http://127.0.0.1:{api_port}")
+    _log("[START] Dashboard UI...")
+    ui_result = _start_dashboard_ui(api_url=api_url, port=ui_port)
+    results["dashboard_ui"] = ui_result
+    if ui_result.get("success"):
+        _log(f"[OK] Dashboard UI: {ui_result['url']}")
+    else:
+        _log(f"[FAIL] Dashboard UI: {ui_result.get('error', 'unknown')}")
 
-        shortcut.WorkingDirectory = os.path.dirname(exe_path) or os.getcwd()
-        shortcut.Description = "Friday - Sovereign AI Assistant"
-        shortcut.save()
+    # 4. Sidecar heartbeat
+    _log("[START] Sidecar heartbeat...")
+    sc_result = _start_sidecar_heartbeat()
+    results["sidecar_heartbeat"] = sc_result
+    if sc_result.get("success"):
+        _log("[OK] Sidecar heartbeat running")
+    else:
+        _log(f"[FAIL] Sidecar heartbeat: {sc_result.get('error', 'unknown')}")
 
-        return f"[OK] Friday added to startup! Shortcut: {shortcut_path}"
+    # Print summary
+    _log("")
+    _log("=" * 50)
+    _log("FRIDAY is running")
+    if ui_result.get("success"):
+        _log(f"  Dashboard UI:  {ui_result['url']}")
+    if api_result.get("success"):
+        _log(f"  Dashboard API: {api_result['url']}")
+    _log("  Say 'FRIDAY' to activate voice (if live engine started)")
+    _log("=" * 50)
+    _log("")
 
-    except Exception as e:
-        return f"[FAIL] Failed to add to startup: {str(e)}"
-
-def remove_from_startup() -> str:
-    """Remove Friday from Windows startup."""
-    shortcut_path = get_startup_shortcut_path()
-
-    if os.path.exists(shortcut_path):
+    # 5. Live engine (optional, blocks)
+    if start_live:
+        _log("[START] Live engine...")
         try:
-            os.remove(shortcut_path)
-            return "[OK] Friday removed from startup."
+            import asyncio
+            from friday.live import friday_live_engine
+            asyncio.run(friday_live_engine())
+        except KeyboardInterrupt:
+            _log("Shutting down...")
         except Exception as e:
-            return f"[FAIL] Failed to remove: {str(e)}"
-    return "Friday was not in startup."
+            _log(f"[FAIL] Live engine: {e}")
+        results["live_engine"] = {"success": True, "status": "stopped"}
 
-def check_startup_status() -> str:
-    """Check if Friday is in startup."""
-    shortcut_path = get_startup_shortcut_path()
+    return results
 
-    if os.path.exists(shortcut_path):
-        return f"[OK] Friday is in startup. Shortcut: {shortcut_path}"
-    return "[FAIL] Friday is NOT in startup."
-
-def add_to_startup_simple() -> str:
-    """
-    Simpler method: just copy a batch file to startup.
-    This is a fallback if COM objects fail.
-    """
-    try:
-        exe_path = get_friday_exe_path()
-        bat_content = f'@echo off\n"{sys.executable}" "{exe_path}"\n'
-
-        bat_path = os.path.join(STARTUP_FOLDER, "Friday.bat")
-
-        with open(bat_path, "w") as f:
-            f.write(bat_content)
-
-        return f"[OK] Friday added to startup (batch method). File: {bat_path}"
-
-    except Exception as e:
-        return f"[FAIL] Failed: {str(e)}"
-
-
-if __name__ == "__main__":
-    # Test
-    print("Friday Startup Integration Test")
-    print("=" * 40)
-
-    # Check status
-    print(check_startup_status())
-
-    # Add to startup
-    # print(add_to_startup())
-
-    # Or use simple method
-    # print(add_to_startup_simple())
-
-
-# ─── Dashboard Auto-Start on Friday Launch ──────────────────
 
 def launch_dashboard_background() -> bool:
-    """Launch the Dashboard API and HTML dashboard in background threads.
-    
-    Returns True if dashboard was successfully started.
-    """
-    try:
-        from friday.dashboard import auto_start_dashboard
-        auto_start_dashboard()
-        return True
-    except Exception:
-        return False
+    """Legacy: start API + UI in this process thread. Returns True on success."""
+    results = launch_all(api_port=8090, ui_port=8080, start_live=False)
+    api_ok = results.get("dashboard_api", {}).get("success", False)
+    ui_ok = results.get("dashboard_ui", {}).get("success", False)
+    return api_ok or ui_ok
 
 
 def launch_all_background_services() -> dict:
-    """Launch all background services: dashboard, sidecar heartbeats, etc.
-    
-    Returns dict with status of each service.
-    """
-    results = {}
-    results["dashboard"] = launch_dashboard_background()
-    try:
-        from friday.sidecar import sidecar_tool
-        sidecar_tool("register", name="friday_main", type_="desktop")
-        sidecar_tool("heartbeat")
-        results["sidecar"] = True
-    except Exception:
-        results["sidecar"] = False
-    return results
+    """Legacy: return dict of service name → bool."""
+    results = launch_all(api_port=8090, ui_port=8080, start_live=False)
+    return {
+        "dashboard": results.get("dashboard_api", {}).get("success", False) or results.get("dashboard_ui", {}).get("success", False),
+        "sidecar": results.get("sidecar_heartbeat", {}).get("success", False),
+    }

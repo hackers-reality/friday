@@ -56,7 +56,7 @@ if ($useVenv -eq "y") {
 
 # Install dependencies
 Write-Host "`n[4/6] Installing Python packages..." -ForegroundColor Yellow
-Write-Host "  This may take a few minutes..." -ForegroundColor Yellow
+Write-Host "  Progress is printed package-by-package. Already installed packages are skipped." -ForegroundColor Yellow
 
 $packages = @(
     "google-genai>=1.0",
@@ -90,6 +90,53 @@ $packages = @(
     "colorama>=0.4.6"
 )
 
+function Get-PackageNameFromRequirement {
+    param([string]$Requirement)
+    return (($Requirement -split '[<>=!~]')[0]).Trim()
+}
+
+function Test-PythonPackageInstalled {
+    param([string]$DistributionName)
+    python -c "import importlib.metadata as m, sys; m.version(sys.argv[1])" $DistributionName *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Install-PythonRequirement {
+    param(
+        [string]$Requirement,
+        [bool]$Optional = $false
+    )
+
+    $name = Get-PackageNameFromRequirement $Requirement
+    if (Test-PythonPackageInstalled $name) {
+        Write-Host "  [SKIP] $Requirement already installed" -ForegroundColor DarkGray
+        return
+    }
+
+    if ($Optional) {
+        Write-Host "  [INSTALL] $Requirement (optional)..." -ForegroundColor Cyan
+    } else {
+        Write-Host "  [INSTALL] $Requirement..." -ForegroundColor Cyan
+    }
+
+    python -m pip install $Requirement --quiet --disable-pip-version-check
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  [OK] $Requirement installed" -ForegroundColor Green
+    } elseif ($Optional) {
+        Write-Host "  [WARN] Optional package failed: $Requirement" -ForegroundColor Yellow
+    } else {
+        Write-Host "  [WARN] Failed to install $Requirement (continuing)" -ForegroundColor Yellow
+    }
+}
+
+$count = 0
+foreach ($pkg in $packages) {
+    $count += 1
+    Write-Host "  [$count/$($packages.Count)] Checking $pkg" -ForegroundColor Gray
+    Install-PythonRequirement $pkg $false
+}
+
+if ($false) {
 foreach ($pkg in $packages) {
     Write-Host "  Installing $pkg..." -ForegroundColor Cyan
     python -m pip install $pkg --quiet
@@ -98,6 +145,8 @@ foreach ($pkg in $packages) {
     } else {
         Write-Host "    ⚠️  Failed to install $pkg (will try to continue)" -ForegroundColor Yellow
     }
+}
+
 }
 
 # Optional packages
@@ -109,6 +158,11 @@ $optional = @(
 )
 
 foreach ($pkg in $optional) {
+    Install-PythonRequirement $pkg $true
+}
+
+if ($false) {
+foreach ($pkg in $optional) {
     Write-Host "  Installing $pkg (optional)..." -ForegroundColor Cyan
     python -m pip install $pkg --quiet 2>$null
     if ($LASTEXITCODE -eq 0) {
@@ -116,6 +170,8 @@ foreach ($pkg in $optional) {
     } else {
         Write-Host "    ⚠️  $pkg not installed (optional)" -ForegroundColor Yellow
     }
+}
+
 }
 
 # Setup .env file
@@ -159,11 +215,26 @@ if (-not (Test-Path "friday_memory")) {
 # Add friday command to PATH
 Write-Host "`n[7/7] Adding friday command to PATH..." -ForegroundColor Yellow
 
-# Create a friday.cmd wrapper script
+# Create a friday.cmd wrapper script. With no args, `friday` starts the full
+# assistant. With args, it routes to the management CLI (`friday status`, etc.).
 $wrapperPath = Join-Path $PWD "friday.cmd"
 @"
 @echo off
-python "$PWD\friday_master.py" %*
+cd /d "%~dp0"
+set PYTHONUTF8=1
+set "FRIDAY_PY=python"
+if exist ".venv\Scripts\python.exe" set "FRIDAY_PY=.venv\Scripts\python.exe"
+if exist "venv\Scripts\python.exe" set "FRIDAY_PY=venv\Scripts\python.exe"
+if "%~1"=="" goto start_friday
+if /I "%~1"=="start" goto start_friday
+if /I "%~1"=="live" goto start_friday
+%FRIDAY_PY% -m friday.cli %*
+exit /b %ERRORLEVEL%
+:start_friday
+echo [STARK INDUSTRIES] Bootstrapping F.R.I.D.A.Y. Sovereign Agent...
+echo [+] Starting dashboard, sidecar heartbeat, memory, monitor, and live voice loop...
+echo.
+%FRIDAY_PY% friday.py
 "@ | Out-File -FilePath $wrapperPath -Encoding ASCII
 Write-Host "  ✅ Created friday.cmd wrapper" -ForegroundColor Green
 
@@ -183,29 +254,21 @@ Write-Host "  Verifying installation..." -ForegroundColor Yellow
 Write-Host "=============================================================" -ForegroundColor Cyan
 
 $testFiles = @(
-    "friday_live.py",
-    "friday_tools.py",
-    "friday_master.py",
-    "friday_vision.py",
-    "friday_automation.py",
-    "opencli_integration.py",
-    "browser_history_tools.py",
-    "goal_memory.py",
-    "stayfree_bridge.py",
-    "friday_gmail.py",
-    "friday_github.py",
-    "friday_notify.py",
-    "multi_agent.py",
-    "message_channels.py",
-    "workflow_automation.py",
-    "plugin_system.py",
-    "knowledge_graph.py",
-    "vector_memory.py",
-    "file_generator.py",
-    "startup_integration.py",
-    "friday_scheduler.py",
-    "friday_config.py",
-    "friday_security.py"
+    "friday.py",
+    "friday.cmd",
+    "friday.ps1",
+    "friday\live.py",
+    "friday\tools.py",
+    "friday\cli.py",
+    "friday\dashboard.py",
+    "friday\dashboard_api.py",
+    "friday\memory_import.py",
+    "friday\memory_context.py",
+    "friday\sidecar.py",
+    "friday\authority.py",
+    "friday\snapshots.py",
+    "friday\autonomy.py",
+    "friday\ironman.py"
 )
 
 $allGood = $true
@@ -223,8 +286,8 @@ if ($allGood) {
     Write-Host "  ✅ Installation complete!" -ForegroundColor Green
     Write-Host "`n  Next steps:" -ForegroundColor Yellow
     Write-Host "    1. Edit .env with your API keys" -ForegroundColor Yellow
-    Write-Host "    2. Run: friday status" -ForegroundColor Yellow
-    Write-Host "    3. Start Friday: friday multi-agent" -ForegroundColor Yellow
+    Write-Host "    2. Start everything: friday" -ForegroundColor Yellow
+    Write-Host "    3. Management commands: friday status, friday doctor, friday dashboard start" -ForegroundColor Yellow
 } else {
     Write-Host "  ⚠️  Some files are missing. Please check the errors above." -ForegroundColor Yellow
 }
@@ -235,12 +298,7 @@ Write-Host ""
 $runNow = Read-Host "  Run Friday now? (y/n)"
 if ($runNow -eq "y") {
     Write-Host "`n  Starting Friday..." -ForegroundColor Green
-    python friday_master.py status
-    Write-Host ""
-    $startFriday = Read-Host "  Start Friday multi-agent? (y/n)"
-    if ($startFriday -eq "y") {
-        python friday_master.py multi-agent
-    }
+    & $wrapperPath
 }
 
 Write-Host ""

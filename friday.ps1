@@ -1,9 +1,21 @@
 # Friday AI Assistant - PowerShell Launcher
-Write-Host "[STARK INDUSTRIES] Bootstrapping F.R.I.D.A.Y. Sovereign Agent..." -ForegroundColor Cyan
-Write-Host "[+] Loading Neural Uplink..." -ForegroundColor Green
-Write-Host "[+] Features: Voice AI, Screen Awareness, GitHub Integration, Multi-LLM, Command Chaining" -ForegroundColor Cyan
-Write-Host ""
-
-# Run Friday
 Set-Location -LiteralPath $PSScriptRoot
-python friday.py @args
+$env:PYTHONUTF8 = "1"
+
+$python = "python"
+if (Test-Path ".venv\Scripts\python.exe") {
+    $python = ".venv\Scripts\python.exe"
+} elseif (Test-Path "venv\Scripts\python.exe") {
+    $python = "venv\Scripts\python.exe"
+}
+
+if ($args.Count -eq 0 -or $args[0] -ieq "start" -or $args[0] -ieq "live") {
+    Write-Host "[STARK INDUSTRIES] Bootstrapping F.R.I.D.A.Y. Sovereign Agent..." -ForegroundColor Cyan
+    Write-Host "[+] Starting dashboard, sidecar heartbeat, memory, monitor, and live voice loop..." -ForegroundColor Green
+    Write-Host ""
+    & $python friday.py
+    exit $LASTEXITCODE
+}
+
+& $python -m friday.cli @args
+exit $LASTEXITCODE

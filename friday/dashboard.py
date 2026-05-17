@@ -449,21 +449,29 @@ setInterval(loadAll, 10000);  // Every 10s
 class DashboardServer:
     """Advanced FRIDAY Dashboard Server (port 8080)."""
 
-    def __init__(self, port: int = DASHBOARD_PORT):
+    def __init__(self, port: int = DASHBOARD_PORT, api_url: str = f"http://127.0.0.1:{API_PORT}"):
         self.port = port
+        self.api_url = api_url
         self._server: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self.running = False
+        # Pre-render HTML with the actual API URL
+        self._html = DASHBOARD_HTML.replace(
+            "const API = 'http://127.0.0.1:8090';",
+            f"const API = '{api_url}';"
+        )
 
     def start(self) -> dict:
         try:
+            html = self._html  # capture in closure
+
             class Handler(BaseHTTPRequestHandler):
                 def do_GET(self):
                     if self.path == '/' or self.path == '/index.html':
                         self.send_response(200)
                         self.send_header('Content-type', 'text/html; charset=utf-8')
                         self.end_headers()
-                        self.wfile.write(DASHBOARD_HTML.encode('utf-8'))
+                        self.wfile.write(html.encode('utf-8'))
                     else:
                         self.send_error(404)
 
@@ -489,7 +497,11 @@ class DashboardServer:
     def stop(self):
         if self._server:
             self._server.shutdown()
+            self._server.server_close()
             self._server = None
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=3)
+            self._thread = None
         self.running = False
 
 
@@ -555,6 +567,7 @@ def dashboard_tool(action: str = "status", params: dict = None) -> str:
 def auto_start_dashboard(api_port: int = 8090) -> dict:
     """Start both the Dashboard API and the HTML dashboard. Called from startup."""
     from friday.dashboard_api import DashboardAPI, _dashboard_instance as api_instance
+    from friday._singletons import get_service_state
     results = {}
 
     # Start API first
@@ -562,12 +575,14 @@ def auto_start_dashboard(api_port: int = 8090) -> dict:
         api = DashboardAPI(port=api_port)
         api_result = api.start()
         results["api"] = api_result
+        api_url = api_result.get("url", f"http://127.0.0.1:{api_port}")
     except Exception as e:
         results["api"] = {"error": str(e)}
+        api_url = f"http://127.0.0.1:{api_port}"
 
-    # Start HTML dashboard
+    # Start HTML dashboard with the actual API URL
     try:
-        ds = DashboardServer(DASHBOARD_PORT)
+        ds = DashboardServer(DASHBOARD_PORT, api_url=api_url)
         ds_result = ds.start()
         results["dashboard"] = ds_result
         global _dashboard_instance
