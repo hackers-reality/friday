@@ -1,4 +1,4 @@
-<div align="center">
+ <div align="center">
 
 # F.R.I.D.A.Y.
 ### *Female Replacement Intelligent Digital Assistant Youth*
@@ -751,7 +751,7 @@ Friday responds to natural language. No rigid syntax required.
 
 ## Contributing
 
-Friday is an open source project built solely by Arnav, shared publicly through [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community in Pune, India[...]
+Friday is an open source project built solely by Arnav Phulari, shared publicly through [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community in Pune, India[...]
 
 Pull requests are welcome. For major changes, open an issue first.
 
