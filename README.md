@@ -11,7 +11,8 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/hackers-reality/friday)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)]()
-[![Version](https://img.shields.io/badge/Version-2.0.0--alpha-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases)
+[![Version](https://img.shields.io/badge/Version-2.0.0--beta-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases)
+[![Tests](https://img.shields.io/badge/Tests-281%20passing-success?style=flat-square)]()
 
 ---
 
@@ -39,16 +40,17 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
    - [🔌 Sidecar Network](#-sidecar-network)
    - [🛡️ Authority & Safety](#️-authority--safety)
    - [🧩 Tool Registry](#-tool-registry)
+   - [🧠 Memory Tree](#-memory-tree)
+   - [🔀 Model Router](#-model-router)
+   - [🧩 Extension Registry](#-extension-registry)
+   - [🩺 Diagnostics & CLI](#-diagnostics--cli)
 - [Architecture](#architecture)
 - [Documentation](#documentation)
 - [Quick Start](#quick-start)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-    - [Fully Automatic Installation](#fully-automatic-installation)
-    - [Manual](#manual)
-  - [Environment Variables](#environment-variables)
-  - [Launch Friday](#launch-friday)
-  - [Add to Windows Startup](#add-to-windows-startup)
+   - [Quick Install](#quick-install)
+   - [Usage](#usage)
+   - [Environment Variables](#environment-variables)
+   - [Add to Windows Startup](#add-to-windows-startup)
 - [Voice Commands](#voice-commands)
 - [Module Reference](#module-reference)
 - [Development Roadmap](#development-roadmap)
@@ -396,148 +398,65 @@ E:\F.R.I.D.A.Y\
 
 ## Quick Start
 
-### Prerequisites
+### Quick Install
 
-- Windows 10 or 11
-- Python 3.11+
-- Node.js 21+ (for OpenCLI)
-- [Google API key (Gemini Live)](https://ai.google.dev/) — required
-- [Picovoice Access Key](https://console.picovoice.ai/) — required
-- [Spotify API credentials](https://developer.spotify.com/dashboard) — required
-- [Groq API key](https://console.groq.com/) (optional, for Whisper STT)
-
-Other LLM providers (Claude, OpenAI, Groq text, Ollama) are coming soon — use your Gemini API key for now.
-
-## Installation
-
-
-### Fully Automatic Installation
 ```powershell
-
-# One-liner (PowerShell — installs everything needed)
-powershell -ExecutionPolicy Bypass -NoProfile -Command "& { git clone https://github.com/hackers-reality/friday.git; Set-Location friday; pip install -r requirements.txt; npm install -g @jackwener/opencli; opencli browser install; .\install.ps1 }"
+# PowerShell — installs everything, one command
+powershell -ExecutionPolicy Bypass -NoProfile -File install.ps1
 ```
-### Manual
+
+The installer checks Python, installs dependencies (skips already-installed), creates `.env`, adds `friday` to PATH, and verifies all modules.
+
+After install, edit `.env` with your API keys, then run:
+
+```
+friday
+```
+
+That's it. FRIDAY starts the dashboard, API, sidecar heartbeat, memory checks, and live voice engine with structured terminal output.
+
+### Usage
 
 ```bash
-
-# Clone the repo
-git clone https://github.com/hackers-reality/friday.git
-cd friday
-
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Install OpenCLI (browser automation)
-npm install -g @jackwener/opencli
-
-# Install Chrome bridge extension
-opencli browser install
-
-# Set up environment variables
-copy .env.example .env
-# Edit .env and add your API keys
-
-# Run the Windows setup script (recommended)
-# PowerShell:
-.\install.ps1
-
-# OR Command Prompt:
-install.cmd
-
+friday                          # Full supervisor: dashboard + voice engine
+friday dashboard start          # Start dashboard services (background)
+friday dashboard stop           # Stop dashboard services
+friday dashboard status         # Dashboard health + URLs + latency
+friday dashboard open           # Open dashboard in browser
+friday status                   # System health: dashboard, sidecar, memory
+friday doctor                   # Diagnostics: modules, ports, configs
+friday doctor --verbose         # Full diagnostic report
+friday fix                      # Auto-repair common issues
+friday memory-tree read people  # Read from memory tree
+friday sidecar status           # Sidecar network status
 ```
 
 ### Environment Variables
 
-Gemini Live is the only supported LLM right now. Other LLM keys are stored for coming-soon support.
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `GOOGLE_API_KEY` | Yes | Gemini Live (brain + vision) |
+| `PICOVOICE_ACCESS_KEY` | Yes | Wake word detection |
+| `SPOTIFY_CLIENT_ID` | Yes | Spotify control |
+| `SPOTIFY_CLIENT_SECRET` | Yes | Spotify auth |
+| `GROQ_API_KEY` | No | Fast inference |
+| `ANTHROPIC_API_KEY` | No | Claude (coming) |
+| `OPENAI_API_KEY` | No | GPT (coming) |
 
-Get your keys/URLs here:
-- Gemini API: https://ai.google.dev/
-- Picovoice: https://console.picovoice.ai/
-- Spotify: https://developer.spotify.com/dashboard
-- Groq: https://console.groq.com/
-- Anthropic: https://console.anthropic.com/ (coming soon)
-- OpenAI: https://platform.openai.com/ (coming soon)
-- Ollama: https://ollama.com/ (coming soon)
-- Home Assistant: https://www.home-assistant.io/
-
-Create a `.env` file in the root directory:
-
-```env
-# Required
-GOOGLE_API_KEY=your_gemini_api_key_here
-PICOVOICE_ACCESS_KEY=your_porcupine_key_here
-
-# Spotify (required) — https://developer.spotify.com/dashboard
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
-
-# Optional — enables additional features
-GROQ_API_KEY=your_groq_api_key_here
-ANTHROPIC_API_KEY=your_claude_key_here
-OPENAI_API_KEY=your_openai_key_here
-
-# Ollama (coming soon; never localhost — use actual IP or hostname)
-OLLAMA_BASE_URL=http://192.168.1.x:11434
-
-# Smart home
-ALEXA_WEBHOOK_URL=your_alexa_webhoOK_url
-
-# Home Assistant (alternative to Alexa)
-HOME_ASSISTANT_URL=http://homeassistant.local:8123
-HA_TOKEN=your_long_lived_access_tOKen
-
-# GitHub (optional) — enables code/PR tools
-# NOTE: Client ID is HARDCODED — you don't need to add it to .env
-# Just run github_authorize() and authorize the app.
-GITHUB_REPO=owner/repo_name
-```
-
-### Google Calendar Setup (optional)
-
-For `calendar_tool_handler` to work:
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project → Enable **Google Calendar API**
-3. Go to **Credentials** → Create OAuth 2.0 Client ID (Desktop app)
-4. Download the JSON and save as `credentials.json` in the project root
-5. First run auto-generates the tOKen at `friday_memory/calendar_tOKen.json`
-
-```env
-# In .env (not strictly required, Calendar uses credentials.json OAuth flow)
-# But you still need GOOGLE_API_KEY for Gemini
-```
-
-### Launch Friday
+Create `.env` from `.env.example`:
 
 ```bash
-# Option 1: Windows command (after install.ps1)
-friday
-
-# Option 2: Direct Python
-python friday_live.py
-
-# Option 3: PowerShell script
-.\friday.ps1
+copy .env.example .env
 ```
 
 ### Add to Windows Startup
 
-Friday can auto-start with Windows via the built-in `protector_tool`:
+FRIDAY can auto-start with Windows:
 
 ```bash
-# Install Friday in Windows startup
-python -c "from friday.protector import install_startup; print(install_startup())"
-
-# Check status
-python -c "from friday.protector import is_startup_installed; print('Startup:', is_startup_installed())"
-
-# Remove from startup
-python -c "from friday.protector import remove_startup; print(remove_startup())"
+python -m friday.cli config
+# Or ask: "Friday, add yourself to Windows startup"
 ```
-
-Or ask Friday: *"Friday, add yourself to Windows startup"* — she will call `protector_tool(action="startup", startup_action="install")`.
 
 ---
 

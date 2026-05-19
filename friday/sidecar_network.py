@@ -465,3 +465,108 @@ def sidecar_network_tool(action: str = "status", **kwargs) -> str:
         return "[FAIL] Token invalid or expired."
 
     return f"[FAIL] Unknown action: {action}. Available: status, start_discovery, stop_discovery, discovered, generate_token, list_tokens, revoke_token, verify_token"
+
+
+# ─── WebSocket Sidecar Server ───────────────────────────────
+
+_ws_server: Optional[threading.Thread] = None
+_ws_running = False
+_connected_sidecars: Dict[str, dict] = {}
+_ws_lock = threading.Lock()
+
+
+def start_ws_server(port: int = 42070) -> bool:
+    """Start a lightweight WebSocket server for sidecar connections."""
+    global _ws_server, _ws_running
+    if _ws_running:
+        return True
+
+    try:
+        import asyncio
+        import websockets
+    except ImportError:
+        print("[WS] websockets library not available. Sidecars will use HTTP fallback.")
+        return False
+
+    async def handler(websocket):
+        """Handle a single sidecar WebSocket connection."""
+        remote = websocket.remote_address
+        sidecar_info: Optional[dict] = None
+        try:
+            async for message in websocket:
+                try:
+                    data = json.loads(message)
+                    msg_type = data.get("type", "")
+
+                    if msg_type == "auth":
+                        token = data.get("token", "")
+                        name = data.get("name", "unknown")
+                        caps = data.get("capabilities", [])
+                        payload = verify_token(token)
+                        if not payload:
+                            await websocket.send(json.dumps({"type": "auth_error", "error": "Invalid token"}))
+                            continue
+                        sidecar_info = {"name": name, "addr": remote, "caps": caps, "connected_at": datetime.now().isoformat()}
+                        with _ws_lock:
+                            _connected_sidecars[name] = sidecar_info
+                        print(f"[WS] Sidecar '{name}' connected from {remote}")
+                        await websocket.send(json.dumps({"type": "auth_ok", "name": name}))
+
+                    elif msg_type == "ping":
+                        await websocket.send(json.dumps({"type": "pong"}))
+
+                    elif "command" in data:
+                        cmd_id = data.get("id", "")
+                        command = data.get("command", "")
+                        params = data.get("params", {})
+
+                        from friday.sidecar import sidecar_tool
+                        result = sidecar_tool(command, **params)
+                        response = {"id": cmd_id, "success": True, "result": result} if isinstance(result, dict) and "error" not in result else {"id": cmd_id, "success": False, "error": str(result)}
+                        await websocket.send(json.dumps(response))
+
+                    elif msg_type == "binary_capture":
+                        # Sidecar wants to stream a screenshot
+                        if sidecar_info:
+                            with _ws_lock:
+                                _connected_sidecars[sidecar_info["name"]]["last_capture"] = datetime.now().isoformat()
+
+                except json.JSONDecodeError:
+                    await websocket.send(json.dumps({"type": "error", "error": "Invalid JSON"}))
+        except Exception as e:
+            print(f"[WS] Sidecar error: {e}")
+        finally:
+            if sidecar_info:
+                with _ws_lock:
+                    _connected_sidecars.pop(sidecar_info["name"], None)
+                print(f"[WS] Sidecar '{sidecar_info['name']}' disconnected")
+
+    async def serve():
+        try:
+            async with websockets.serve(handler, "0.0.0.0", port):
+                print(f"[WS] Sidecar WebSocket server on port {port}")
+                await asyncio.Future()
+        except Exception as e:
+            print(f"[WS] Server error: {e}")
+
+    def run():
+        asyncio.run(serve())
+
+    _ws_running = True
+    _ws_server = threading.Thread(target=run, daemon=True)
+    _ws_server.start()
+    return True
+
+
+def stop_ws_server():
+    """Stop the WebSocket server."""
+    global _ws_running
+    _ws_running = False
+    with _ws_lock:
+        _connected_sidecars.clear()
+
+
+def get_ws_sidecars() -> dict:
+    """Get connected sidecars."""
+    with _ws_lock:
+        return dict(_connected_sidecars)

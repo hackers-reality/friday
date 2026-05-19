@@ -1,0 +1,38 @@
+nim:
+  api_base: https://integrate.api.nvidia.com/v1
+  rate_limit_rpm: 40
+  model_map:
+    code_gen:
+      - nvidia/llama-3.1-nemotron-70b-instruct
+      - deepseek/deepseek-v3
+      - meta/llama-3.3-70b-instruct
+    image_analysis:
+      - nvidia/neva-22b
+      - microsoft/phi-3-vision-128k-instruct
+    research:
+      - meta/llama-3.1-405b-instruct
+      - meta/llama-3.3-70b-instruct
+    summarization:
+      - mistralai/mixtral-8x22b-instruct-v0.1
+      - meta/llama-3.3-70b-instruct
+    reasoning:
+      - minimax/minimax-01
+      - nvidia/nemotron-4-340b-instruct
+      - meta/llama-3.1-405b-instruct
+    general:
+      - meta/llama-3.3-70b-instruct
+      - nvidia/llama-3.1-nemotron-70b-instruct
+
+agents:
+  - id: research_agent
+    name: Veronica
+    task_types: [research, summarization]
+    nim_model: meta/llama-3.1-405b-instruct
+    tools: [web_search, deep_research]
+    enabled: false
+  - id: code_agent
+    name: Forge
+    task_types: [code_gen, reasoning]
+    nim_model: nvidia/llama-3.1-nemotron-70b-instruct
+    tools: [read_file, write_file, git_ops]
+    enabled: false

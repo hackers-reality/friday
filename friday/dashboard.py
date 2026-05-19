@@ -13,6 +13,7 @@ import json
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Dict, Any, Optional
 from functools import lru_cache
@@ -447,7 +448,7 @@ setInterval(loadAll, 10000);  // Every 10s
 
 
 class DashboardServer:
-    """Advanced FRIDAY Dashboard Server (port 8080)."""
+    """Advanced FRIDAY Dashboard Server (port 8080). Serves built React dashboard."""
 
     def __init__(self, port: int = DASHBOARD_PORT, api_url: str = f"http://127.0.0.1:{API_PORT}"):
         self.port = port
@@ -455,28 +456,92 @@ class DashboardServer:
         self._server: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self.running = False
-        # Pre-render HTML with the actual API URL
-        self._html = DASHBOARD_HTML.replace(
-            "const API = 'http://127.0.0.1:8090';",
-            f"const API = '{api_url}';"
-        )
+        # Look for built React dashboard
+        self._dist_dir = Path(__file__).parent.parent / "dashboard" / "dist"
+        self._use_react = self._dist_dir.exists() and (self._dist_dir / "index.html").exists()
+        if not self._use_react:
+            # Fallback to old inline HTML
+            self._html = DASHBOARD_HTML.replace(
+                "const API = 'http://127.0.0.1:8090';",
+                f"const API = '{api_url}';"
+            )
 
     def start(self) -> dict:
         try:
-            html = self._html  # capture in closure
+            if self._use_react:
+                # Serve the React dashboard
+                dist_dir = self._dist_dir
+                html = (dist_dir / "index.html").read_text(encoding="utf-8")
 
-            class Handler(BaseHTTPRequestHandler):
-                def do_GET(self):
-                    if self.path == '/' or self.path == '/index.html':
-                        self.send_response(200)
-                        self.send_header('Content-type', 'text/html; charset=utf-8')
-                        self.end_headers()
-                        self.wfile.write(html.encode('utf-8'))
-                    else:
-                        self.send_error(404)
+                class Handler(BaseHTTPRequestHandler):
+                    def do_GET(self):
+                        try:
+                            if self.path == '/' or self.path.startswith('/assets/'):
+                                if self.path == '/':
+                                    filepath = dist_dir / "index.html"
+                                else:
+                                    filepath = dist_dir / self.path.lstrip('/')
+                                if not filepath.exists():
+                                    self.send_error(404)
+                                    return
+                                ext = filepath.suffix.lower()
+                                mime_map = {'.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png',
+                                            '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+                                            '.html': 'text/html'}
+                                mime = mime_map.get(ext, 'application/octet-stream')
+                                content = filepath.read_bytes()
+                                self.send_response(200)
+                                self.send_header('Content-type', mime)
+                                self.send_header('Cache-Control', 'no-cache')
+                                self.send_header('Content-Length', str(len(content)))
+                                self.end_headers()
+                                self.wfile.write(content)
+                            else:
+                                # SPA fallback: serve index.html for all routes
+                                filepath = dist_dir / "index.html"
+                                content = filepath.read_bytes()
+                                self.send_response(200)
+                                self.send_header('Content-type', 'text/html')
+                                self.send_header('Cache-Control', 'no-cache')
+                                self.end_headers()
+                                self.wfile.write(content)
+                        except ConnectionAbortedError:
+                            pass  # Client disconnected, ignore
+                        except BrokenPipeError:
+                            pass  # Client disconnected, ignore
+                        except OSError:
+                            try:
+                                self.send_error(404)
+                            except Exception:
+                                pass
+                        except Exception:
+                            try:
+                                self.send_error(500)
+                            except Exception:
+                                pass
 
-                def log_message(self, fmt, *args):
-                    pass  # Suppress
+                    def log_message(self, fmt, *args):
+                        pass
+            else:
+                html = self._html
+
+                class Handler(BaseHTTPRequestHandler):
+                    def do_GET(self):
+                        try:
+                            if self.path == '/' or self.path == '/index.html':
+                                self.send_response(200)
+                                self.send_header('Content-type', 'text/html; charset=utf-8')
+                                self.end_headers()
+                                self.wfile.write(html.encode('utf-8'))
+                            else:
+                                self.send_error(404)
+                        except (ConnectionAbortedError, BrokenPipeError):
+                            pass
+                        except Exception:
+                            pass
+
+                    def log_message(self, fmt, *args):
+                        pass
 
             self._server = HTTPServer(('127.0.0.1', self.port), Handler)
             self.running = True

@@ -1033,15 +1033,36 @@ def situational_awareness() -> str:
         cv = get_cv_status()
         if cv.get("camera_active"):
             ctx_parts = []
-            if cv.get("scene_description"):
+            if cv.get("human_readable_scene"):
+                ctx_parts.append(f"Scene: {cv['human_readable_scene'][:300]}")
+            elif cv.get("scene_description"):
                 ctx_parts.append(f"Scene: {cv['scene_description'][:200]}")
             if cv.get("people_count", 0) > 0:
                 ctx_parts.append(f"People: {cv['people_count']}")
             objects = cv.get("objects_found", [])
             if objects:
                 ctx_parts.append(f"Objects: {', '.join(objects[:8])}")
+            hands = cv.get("hands_detected", [])
+            if hands:
+                hand_strs = []
+                for h in hands:
+                    s = h.get("handedness", "?") + " hand"
+                    if h.get("fingers_up", 0) > 0:
+                        s += f" ({h['fingers_up']} up)"
+                    if h.get("holding_object"):
+                        s += " holding"
+                    hand_strs.append(s)
+                ctx_parts.append(f"Hands: {', '.join(hand_strs)}")
+            if cv.get("faces_detected", 0) > 0:
+                ctx_parts.append(f"Faces: {cv['faces_detected']}")
+            animals = cv.get("animals_detected", [])
+            if animals:
+                ctx_parts.append(f"Animals: {', '.join(a.get('label', '?') for a in animals[:3])}")
             if cv.get("motion_detected"):
                 ctx_parts.append("Motion detected")
+            latency = cv.get("pipeline_latency_ms", {})
+            if latency:
+                ctx_parts.append(f"Pipeline latency: {latency.get('total', '?')}ms")
             if ctx_parts:
                 parts.append("Camera: " + " | ".join(ctx_parts))
     except Exception:
@@ -1330,26 +1351,52 @@ def memory_store(key: str, value: str, category: str = "general") -> str:
         return f"[FAIL] Memory store error: {e}"
 
 
+def _search_profile(profile, query):
+    """Search user profile for matching fields."""
+    results = []
+    q = query.lower()
+    for key, value in profile.items():
+        if isinstance(value, str) and q in value.lower():
+            results.append({"key": f"profile.{key}", "value": value, "category": "profile"})
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, str) and q in item.lower():
+                    results.append({"key": f"profile.{key}", "value": item, "category": "profile"})
+    return results
+
+
 def memory_retrieve(query: str) -> str:
-    """Retrieve memories matching query."""
+    """Retrieve memories. Queries both key-value memory store AND the user profile."""
     try:
         import json, os
         from pathlib import Path
 
+        results = []
+
         memory_file = Path(FRIDAY_MEMORY) / "memory.json"
-        if not memory_file.exists():
-            return "No memories stored yet."
+        if memory_file.exists():
+            with open(memory_file, "r", encoding="utf-8") as f:
+                memories = json.load(f)
+            for m in memories:
+                if query.lower() in m["key"].lower() or query.lower() in m["value"].lower():
+                    results.append(m)
 
-        with open(memory_file, "r", encoding="utf-8") as f:
-            memories = json.load(f)
+        # ALSO query user profile
+        profile_file = Path(FRIDAY_MEMORY) / "user_profile.json"
+        if profile_file.exists():
+            with open(profile_file, "r", encoding="utf-8") as f:
+                profile = json.load(f)
+            profile_results = _search_profile(profile, query)
+            results.extend(profile_results)
 
-        results = [m for m in memories if query.lower() in m["key"].lower() or query.lower() in m["value"].lower()]
         if not results:
             return f"No memories found matching '{query}'"
 
         lines = [f"### MEMORIES ({len(results)} found)"]
         for m in results[:10]:
-            lines.append(f"- {m['key']}: {m['value'][:50]}...")
+            key = m.get("key", m.get("category", "memory"))
+            value = m.get("value", str(m))
+            lines.append(f"- {key}: {str(value)[:50]}...")
         return "\n".join(lines)
     except Exception as e:
         return f"[FAIL] Memory retrieve error: {e}"
@@ -2730,8 +2777,48 @@ def vector_memory_tool(action: str = "stats", query: str = None, text: str = Non
 def multi_agent_delegate(action: str = "list", task: str = None, agent: str = None) -> str:
     """Delegate tasks to specialist sub-agents. Actions: list (show agents), delegate (assign task)."""
     try:
-        from friday.multi_agent import multi_agent_delegate as _ma_delegate
-        return _ma_delegate(action=action, task=task, agent=agent)
+        from friday.orchestrator import get_orchestrator, run_delegate_sync
+
+        orchestrator = get_orchestrator()
+
+        if action == "list":
+            agents = orchestrator.registry.list_all()
+            if not agents:
+                return "No agents configured."
+            lines = ["### Friday Agents\n"]
+            for profile in agents:
+                lines.append(
+                    f"- **{profile.display_name}** ({profile.agent_id}) — model: {profile.nim_model}, tasks: {', '.join(profile.task_types)}"
+                )
+            return "\n".join(lines)
+
+        if action == "delegate":
+            result = run_delegate_sync(task or "", context={"requester": "tool", "source": "multi_agent_delegate"}, preferred_agent=agent)
+            if result.get("status") == "scheduled":
+                return result["prompt"]
+            return result.get("summary") or result.get("prompt") or "[OK] Delegation complete."
+
+        if action == "parallel":
+            result = run_delegate_sync(task or "", context={"requester": "tool", "source": "multi_agent_delegate"})
+            return result.get("summary") or "[OK] Parallel delegation complete."
+
+        if action == "results":
+            return "[OK] Results are published on the context bus."
+
+        if action == "agent_info":
+            profile = orchestrator.registry.get_by_name(agent or "") if agent else None
+            if profile is None:
+                return f"[FAIL] Agent '{agent}' not found."
+            return (
+                f"### Agent Info\n\n"
+                f"**Name**: {profile.display_name}\n"
+                f"**ID**: {profile.agent_id}\n"
+                f"**Tasks**: {', '.join(profile.task_types)}\n"
+                f"**Model**: {profile.nim_model}\n"
+                f"**Tools**: {', '.join(profile.tools)}"
+            )
+
+        return f"[FAIL] Unknown action: {action}"
     except ImportError:
         return "[FAIL] multi_agent.py not available."
     except Exception as e:
@@ -2958,6 +3045,98 @@ def mcp_tool(action: str = "list", **kwargs) -> str:
         return f"[FAIL] MCP error: {e}"
 
 
+#  OpenCode Agent Tools #
+
+def agent_spawn(name: str, task: str) -> str:
+    """Spawn a named agent for a task via opencode. Returns agent status."""
+    try:
+        from friday.agents_manager import spawn_agent as _sa
+        result = _sa(name=name, task=task)
+        return (
+            f"### Agent Spawned\n\n"
+            f"**Name**: {result['name']}\n"
+            f"**ID**: {result['id']}\n"
+            f"**Status**: {result['status']}\n\n"
+            f"{result['message']}"
+        )
+    except ImportError:
+        return "[FAIL] agents_manager.py not available."
+    except Exception as e:
+        return f"[FAIL] Agent spawn error: {e}"
+
+
+def agent_list() -> str:
+    """List all agents and their status."""
+    try:
+        from friday.agents_manager import list_agents as _la
+        agents = _la()
+        if not agents:
+            return "No agents have been spawned yet."
+        lines = ["### OpenCode Agents\n"]
+        for a in agents:
+            status_icon = "RUNNING" if a["status"] == "running" else a["status"].upper()
+            lines.append(f"- **{a['name']}**: {status_icon}")
+            lines.append(f"  Task: {a['task'][:100]}")
+            if a.get("result"):
+                lines.append(f"  Result: {a['result'][:200]}")
+            lines.append("")
+        return "\n".join(lines)
+    except ImportError:
+        return "[FAIL] agents_manager.py not available."
+    except Exception as e:
+        return f"[FAIL] Agent list error: {e}"
+
+
+def agent_status(name: str) -> str:
+    """Get status of a specific agent by name."""
+    try:
+        from friday.agents_manager import agent_status as _as
+        result = _as(name=name)
+        if "error" in result:
+            return f"[FAIL] {result['error']}"
+        status_emoji = {
+            "spawning": "spawning...",
+            "running": "running",
+            "completed": "completed",
+            "failed": "failed",
+        }.get(result["status"], result["status"])
+        lines = [
+            f"### Agent: {result['name']}",
+            f"**Status**: {status_emoji}",
+            f"**Task**: {result['task']}",
+        ]
+        if result.get("result"):
+            lines.append(f"**Result**: {result['result'][:500]}")
+        if result.get("created_at"):
+            lines.append(f"**Created**: {result['created_at']}")
+        if result.get("completed_at"):
+            lines.append(f"**Completed**: {result['completed_at']}")
+        return "\n".join(lines)
+    except ImportError:
+        return "[FAIL] agents_manager.py not available."
+    except Exception as e:
+        return f"[FAIL] Agent status error: {e}"
+
+
+def agent_delegate_team(tasks: list) -> str:
+    """Spawn multiple agents in parallel for a team effort. Each task is [name, description]."""
+    try:
+        from friday.agents_manager import spawn_team as _st
+        if isinstance(tasks, str):
+            import json
+            tasks = json.loads(tasks)
+        task_tuples = [(t[0], t[1]) if isinstance(t, list) else (t["name"], t["task"]) for t in tasks]
+        results = _st(tasks=task_tuples)
+        lines = ["### Team Spawned\n"]
+        for r in results:
+            lines.append(f"- **{r['name']}** (ID: {r['id']}): {r['status']}")
+        return "\n".join(lines)
+    except ImportError:
+        return "[FAIL] agents_manager.py not available."
+    except Exception as e:
+        return f"[FAIL] Team spawn error: {e}"
+
+
 #  Export list for friday.live #
 
 # ── Deep Code Review ──
@@ -3041,6 +3220,10 @@ __all__ = [
     "protector_tool",
     "deep_code_review",
     "code_review_report",
+    "agent_spawn",
+    "agent_list",
+    "agent_status",
+    "agent_delegate_team",
 ]
 
 if __name__ == "__main__":

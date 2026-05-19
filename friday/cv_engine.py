@@ -22,6 +22,7 @@ import urllib.error
 import shutil
 
 from friday._paths import FRIDAY_MEMORY
+from friday.vision_pipeline import VisionPipeline, reset_motion_detection
 
 _CV_DIR = os.path.join(FRIDAY_MEMORY, "cv")
 _MODELS_DIR = os.path.join(_CV_DIR, "models")
@@ -67,14 +68,23 @@ _cv_state: Dict[str, Any] = {
     "detections": [],
     "motion_detected": False,
     "scene_description": "",
+    "human_readable_scene": "",
     "people_count": 0,
     "objects_found": [],
+    "hands_detected": [],
+    "faces_detected": [],
+    "animals_detected": [],
+    "scene_stats": {},
+    "pipeline_latency_ms": {},
     "error": None,
     "stats": {},
 }
 _cv_thread: Optional[threading.Thread] = None
 _cv_stop_event = threading.Event()
 _camera_cap = None
+_vision_pipeline: Optional[VisionPipeline] = None
+_vision_results: Dict[str, Any] = {}
+_vision_lock = threading.Lock()
 
 
 # ─── Model Management ──────────────────────────────────────
@@ -303,7 +313,7 @@ def _describe_scene_gemini(frame_b64: str) -> str:
 
 def _camera_loop(camera_index: int, interval: float):
     """Background thread: captures frames, runs detection, updates state."""
-    global _camera_cap, _cv_state, _previous_frame_gray, _dnn_net
+    global _camera_cap, _cv_state, _previous_frame_gray, _dnn_net, _vision_pipeline, _vision_results
     _previous_frame_gray = None  # Reset motion detection
 
     try:
@@ -328,6 +338,12 @@ def _camera_loop(camera_index: int, interval: float):
     # Try to load DNN in background
     _ensure_models()
     _init_dnn()
+
+    # Initialize VisionPipeline
+    try:
+        _vision_pipeline = VisionPipeline()
+    except Exception:
+        _vision_pipeline = None
 
     while not _cv_stop_event.is_set():
         ret, frame = cap.read()
@@ -355,6 +371,16 @@ def _camera_loop(camera_index: int, interval: float):
         # HOG people detection
         people = _detect_people_hog(frame)
 
+        # Run VisionPipeline (parallel MediaPipe + YOLO) in background
+        vision_result = {}
+        if _vision_pipeline is not None:
+            try:
+                vision_result = _vision_pipeline.analyze_frame(frame)
+                with _vision_lock:
+                    _vision_results = vision_result
+            except Exception:
+                pass
+
         # Merge detections (dedupe by label+bbox proximity)
         all_detections = []
         seen_labels = set()
@@ -367,15 +393,46 @@ def _camera_loop(camera_index: int, interval: float):
             all_detections.append(p)
             seen_labels.add("person")
 
-        people_count = len(people) if people else sum(1 for d in dnn_detections if d["label"] == "person")
+        # Add vision pipeline detections
+        for obj in vision_result.get("objects", []):
+            all_detections.append(obj)
+        for animal in vision_result.get("animals", []):
+            all_detections.append(animal)
+        for person_obj in vision_result.get("people", []):
+            if person_obj.get("bbox"):
+                all_detections.append({
+                    "label": "person",
+                    "confidence": person_obj.get("face_confidence") or 0.5,
+                    "bbox": person_obj["bbox"],
+                })
+                seen_labels.add("person")
+
+        people_count = max(
+            len(people) if people else 0,
+            sum(1 for d in dnn_detections if d["label"] == "person"),
+            len(vision_result.get("people", [])),
+            len(vision_result.get("faces", [])),
+        )
 
         # Build scene description
         desc_parts = []
         if people_count > 0:
             desc_parts.append(f"{people_count} person(s) detected")
         objects_found = [d["label"] for d in all_detections if d["label"] not in ("background", "person")]
+
+        # Hands info from vision pipeline
+        hands = vision_result.get("hands", [])
+        for h in hands:
+            hand_desc = f"{h.get('handedness', 'Unknown')} hand"
+            fingers = h.get("fingers_up", 0)
+            if fingers > 0:
+                hand_desc += f" ({fingers} fingers up)"
+            if h.get("holding_object"):
+                hand_desc += " holding something"
+            desc_parts.append(hand_desc)
+            objects_found.append(hand_desc)
+
         if objects_found:
-            # Count unique objects
             from collections import Counter
             obj_counts = Counter(objects_found)
             obj_str = ", ".join(f"{n} {c}" if c > 1 else n for n, c in obj_counts.most_common(5))
@@ -387,23 +444,40 @@ def _camera_loop(camera_index: int, interval: float):
 
         scene_desc = ". ".join(desc_parts) if desc_parts else "No significant objects detected"
 
+        # Human-readable scene description from vision pipeline
+        human_readable = ""
+        if vision_result:
+            try:
+                human_readable = _vision_pipeline.get_human_readable(vision_result)
+            except Exception:
+                pass
+
         # Try Gemini description (once if api available)
         gemini_desc = _describe_scene_gemini(frame_b64)
 
         with _cv_lock:
             _cv_state["last_capture"] = datetime.now().isoformat()
-            _cv_state["last_frame_data"] = frame_b64  # for LLM to forward to Gemini
+            _cv_state["last_frame_data"] = frame_b64
             _cv_state["last_analysis"] = analysis
             _cv_state["detections"] = all_detections
             _cv_state["motion_detected"] = motion
             _cv_state["motion_magnitude"] = round(float(motion_mag), 4)
             _cv_state["people_count"] = people_count
             _cv_state["objects_found"] = list(set(objects_found))
-            _cv_state["scene_description"] = gemini_desc or scene_desc
+            _cv_state["scene_description"] = gemini_desc or human_readable or scene_desc
+            _cv_state["human_readable_scene"] = human_readable
+            _cv_state["hands_detected"] = [
+                {"handedness": h.get("handedness"), "fingers_up": h.get("fingers_up"),
+                 "holding_object": h.get("holding_object")}
+                for h in hands
+            ]
+            _cv_state["faces_detected"] = len(vision_result.get("faces", []))
+            _cv_state["animals_detected"] = vision_result.get("animals", [])
+            _cv_state["scene_stats"] = vision_result.get("scene", {})
+            _cv_state["pipeline_latency_ms"] = vision_result.get("latency_ms", {})
             _cv_state["stats"] = stats
             _cv_state["error"] = None
 
-        # Save state periodically
         try:
             with open(_CV_STATE_FILE, "w") as f:
                 state_save = {k: v for k, v in _cv_state.items() if k != "last_frame_data"}
@@ -448,6 +522,7 @@ def start_camera(camera_index: int = 0, interval: float = 2.0) -> str:
     _cv_stop_event.clear()
     _previous_frame_gray = None
     _dnn_net = None
+    reset_motion_detection()
 
     with _cv_lock:
         _cv_state["camera_index"] = camera_index
@@ -506,6 +581,11 @@ def get_cv_status() -> Dict[str, Any]:
             ],
             "motion_detected": _cv_state.get("motion_detected", False),
             "scene_description": _cv_state.get("scene_description", ""),
+            "human_readable_scene": _cv_state.get("human_readable_scene", ""),
+            "hands_detected": _cv_state.get("hands_detected", []),
+            "faces_detected": _cv_state.get("faces_detected", 0),
+            "animals_detected": _cv_state.get("animals_detected", []),
+            "pipeline_latency_ms": _cv_state.get("pipeline_latency_ms", {}),
             "stats": _cv_state.get("stats", {}),
             "error": _cv_state.get("error"),
         }
@@ -592,5 +672,15 @@ def cv_tool(action: str = "status", **kwargs) -> str:
             return "[FAIL] No cameras detected"
         except Exception as e:
             return f"[FAIL] {e}"
+
+    if action == "describe_scene":
+        with _cv_lock:
+            human = _cv_state.get("human_readable_scene", "")
+            if human:
+                return f"[SCENE] {human}"
+            desc = _cv_state.get("scene_description", "")
+            if desc:
+                return f"[SCENE] {desc}"
+            return "[SCENE] Camera feed not available."
 
     return f"[FAIL] Unknown action: {action}"

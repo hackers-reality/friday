@@ -133,6 +133,7 @@ from friday.memory_tree import memory_tree_tool
 from friday.model_router import model_router_tool
 from friday.extension_registry import extension_registry_tool
 from friday.diagnostics import diagnostics_tool
+from friday.cv_engine import cv_tool
 
 load_dotenv()
 console = Console()
@@ -620,6 +621,17 @@ def _build_tools():
                 parameters=types.Schema(type="OBJECT", properties={
                     "question": {"type": "STRING", "description": "Specific question about screen."}
                 }),
+            ),
+            types.FunctionDeclaration(
+                name="cv_tool",
+                description="Access the camera: start/stop the camera, get scene context, list available cameras, describe what the camera sees in real-time. Use 'describe_scene' action for a full description.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {
+                        "type": "STRING",
+                        "description": "Action to perform on the camera",
+                        "enum": ["start", "stop", "status", "list_cameras", "describe_scene"],
+                    }
+                }, required=["action"]),
             ),
             types.FunctionDeclaration(
                 name="open_url",
@@ -2112,6 +2124,9 @@ TOOL_MAP = {
     "protector_tool": protector_tool,
     "deep_code_review": deep_code_review,
     "code_review_report": code_review_report,
+
+    # Camera tool
+    "cv_tool": cv_tool,
 
     # Phase 14/15 module tools
     "tool_registry_tool": tool_registry_tool,

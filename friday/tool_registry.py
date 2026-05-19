@@ -82,6 +82,7 @@ TOOL_META: Dict[str, dict] = {
     # ── Vision / Screen ──
     "see_screen": {"category": "vision", "risk": "read_only", "description": "Capture and analyze screen"},
     "vision_click": {"category": "vision", "risk": "local_write", "description": "Click at vision-detected coordinates"},
+    "cv_tool": {"category": "vision", "risk": "read_only", "description": "Camera: start/stop/list cameras, get scene context, describe scene"},
 
     # ── Memory ──
     "memory_store": {"category": "memory", "risk": "local_write", "description": "Store a fact into memory"},

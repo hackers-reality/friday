@@ -5,6 +5,7 @@ Foreground supervisor: launches dashboard, sidecar, memory, and live engine.
 """
 
 from __future__ import annotations
+import argparse
 import os
 import sys
 import signal
@@ -30,8 +31,48 @@ def _signal_handler(sig, frame):
 def main():
     os.environ.setdefault("PYTHONUTF8", "1")
 
+    parser = argparse.ArgumentParser(description="FRIDAY Sovereign Agent", add_help=False)
+    parser.add_argument("--sidecar", action="store_true", help="Enable sidecar WebSocket server")
+    parser.add_argument("--jarvis", action="store_true", help="Jarvis-compatibility mode (sidecar only)")
+    parser.add_argument("--help", action="store_true", dest="show_help", help="Show this help")
+    args, unknown = parser.parse_known_args()
+
+    if args.show_help or (unknown and unknown[0] in ("-h", "--help")):
+        print("FRIDAY Sovereign Agent")
+        print()
+        print("Usage:  friday [--sidecar] [--jarvis]")
+        print()
+        print("  (no args)    Start full FRIDAY daemon (dashboard + services)")
+        print("  --sidecar    Also start sidecar WebSocket server")
+        print("  --jarvis     Start in Jarvis-compatibility mode (sidecar only)")
+        print()
+        print("FRIDAY is running at http://127.0.0.1:8080")
+        return
+
+    if unknown:
+        print("FRIDAY is running at http://127.0.0.1:8080")
+        print()
+        print("Unknown option(s): %s" % " ".join(unknown))
+        print("Usage: friday [--sidecar] [--jarvis]")
+        return
+
     # Handle Ctrl+C gracefully
     signal.signal(signal.SIGINT, _signal_handler)
+
+    if args.jarvis:
+        _log("Jarvis-compatibility mode — sidecar server only")
+        _log("Starting sidecar WebSocket server...")
+        from friday.sidecar_network import start_ws_server
+        start_ws_server()
+        _log("Sidecar WebSocket server running on ws://0.0.0.0:42070")
+        _log("Waiting for sidecar connections...")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            _log("Shutting down.")
+        clear_all_state()
+        return
 
     _log("")
     _log("=" * 50)
@@ -42,7 +83,8 @@ def main():
 
     # Start all background services
     from friday.startup import launch_all
-    results = launch_all(api_port=8090, ui_port=8080, start_live=False, log_fn=_log)
+    results = launch_all(api_port=8090, ui_port=8080, start_live=False,
+                         start_sidecar_ws=args.sidecar, log_fn=_log)
 
     api_ok = results.get("dashboard_api", {}).get("success", False)
     ui_ok = results.get("dashboard_ui", {}).get("success", False)

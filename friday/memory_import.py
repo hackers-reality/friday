@@ -1690,6 +1690,12 @@ def save_profile(profile: Dict[str, Any]) -> None:
             pass
         raise
 
+    # Regenerate markdown after every save
+    try:
+        generate_profile_markdown(profile)
+    except Exception:
+        pass
+
 
 # ─── Profile Validation & Cleaning ──────────────────────
 
@@ -2235,9 +2241,10 @@ def update_profile_with_audit(audit_result: Dict[str, Any]) -> Dict[str, Any]:
     save_profile(profile)
     return changes
 
-def generate_profile_markdown() -> str:
+def generate_profile_markdown(profile: Optional[Dict[str, Any]] = None) -> str:
     """Generate a detailed user profile markdown from all accumulated data."""
-    profile = load_profile()
+    if profile is None:
+        profile = load_profile()
 
     md = f"""# User Profile - Friday Memory System
 
@@ -2508,7 +2515,7 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
         skills = p.get("skills", [])
         langs = p.get("languages", [])
         traits = p.get("personality_traits", [])
-        return (
+        status_msg = (
             f"### MEMORY IMPORT STATUS\n\n"
             f"Profile Version: {p.get('version', 1)}\n"
             f"Total Audits Run: {len(audits)}\n"
@@ -2526,8 +2533,18 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
             f"Challenges: {len(p.get('challenges', []))}\n"
             f"Personality: {', '.join(traits) if traits else 'Not yet known'}\n"
             f"Relationships: {len(p.get('relationships', []))}\n"
-            f"Profile MD: {_PROFILE_MD}"
+            f"Profile MD: {_PROFILE_MD}\n"
         )
+        # Show last 10 imported source files
+        source_files = []
+        imports_dir = Path(_RAW_IMPORTS_DIR)
+        if imports_dir.exists():
+            source_files = sorted(f.name for f in imports_dir.iterdir() if f.suffix == '.json')
+        if source_files:
+            status_msg += "\n### Imported Source Files:\n"
+            for f in source_files[-10:]:
+                status_msg += f"- {f}\n"
+        return status_msg
 
     if action == "import_file":
         filepath = kwargs.get("path") or kwargs.get("filepath") or kwargs.get("file")

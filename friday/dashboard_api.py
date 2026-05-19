@@ -394,6 +394,38 @@ def _get_cv_context() -> dict:
         return {"error": str(e)}
 
 
+def _get_agents() -> list:
+    """Get all spawned agents and their status."""
+    # Prefer orchestrator/registry status when available, fall back to agents_manager
+    try:
+        from friday.orchestrator import get_orchestrator
+        from friday.agent_registry import get_registry
+        orch = get_orchestrator()
+        registry = get_registry()
+        agents = []
+        for profile in registry.list_all():
+            status = orch.get_status(profile.agent_id)
+            agents.append(
+                {
+                    "name": profile.display_name,
+                    "id": profile.agent_id,
+                    "tasks": profile.task_types,
+                    "model": profile.nim_model,
+                    "status": status.get("status", "idle"),
+                    "current_task": status.get("current_task"),
+                    "last_result": status.get("last_result"),
+                    "last_seen": status.get("last_seen"),
+                }
+            )
+        return agents
+    except Exception:
+        try:
+            from friday.agents_manager import list_agents
+            return list_agents()
+        except Exception:
+            return []
+
+
 class _APIHandler(BaseHTTPRequestHandler):
     """Simple HTTP request handler for the dashboard API."""
 
@@ -410,6 +442,9 @@ class _APIHandler(BaseHTTPRequestHandler):
     def _respond_html(self, html: str, status: int = 200):
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(html.encode("utf-8"))
 
@@ -451,6 +486,44 @@ class _APIHandler(BaseHTTPRequestHandler):
                 self._respond({"success": True, "name": name, "status": status})
             except Exception as e:
                 self._respond({"error": str(e)}, 500)
+        elif path == "/api/agents/spawn":
+            try:
+                name = data.get("name", "")
+                task = data.get("task", "")
+                role = data.get("role", "general")
+                if not name or not task:
+                    self._respond({"error": "name and task required"}, 400)
+                    return
+
+                # Prefer orchestrator-backed delegation for configured agents
+                try:
+                    from friday.orchestrator import get_orchestrator, run_delegate_sync
+                    from friday.agent_registry import get_registry
+                    registry = get_registry()
+                    # If the name matches a configured agent, delegate via orchestrator
+                    profile = registry.get_by_id(name) or registry.get_by_name(name)
+                    if profile:
+                        result = run_delegate_sync(task, context={"requester": "dashboard", "role": role}, preferred_agent=profile.agent_id)
+                        self._respond({"success": True, "via": "orchestrator", "result": result})
+                        return
+                except Exception:
+                    # Fall through to legacy spawn if orchestrator not available
+                    pass
+
+                # Fallback: use legacy agents_manager spawn (opencode bridge)
+                from friday.agents_manager import spawn_agent
+                result = spawn_agent(name, task, role)
+                self._respond(result)
+            except Exception as e:
+                self._respond({"error": str(e)}, 500)
+        elif path == "/api/fix":
+            try:
+                from friday.diagnostics import run_diagnostics, run_fixes
+                diag = run_diagnostics()
+                result = run_fixes(diag)
+                self._respond({"success": True, "fixes": result})
+            except Exception as e:
+                self._respond({"error": str(e)}, 500)
         else:
             self._respond({"error": f"Unknown POST endpoint: {path}"}, 404)
 
@@ -479,6 +552,7 @@ class _APIHandler(BaseHTTPRequestHandler):
             "/api/workspace": ("workspace", _get_workspace),
             "/api/diagnostic": ("diagnostic", _get_diagnostic),
             "/api/cv": ("cv", _get_cv_context),
+            "/api/agents": ("agents", lambda: {"agents": _get_agents()}),
         }
 
         if path == "/" or path == "":
@@ -496,6 +570,25 @@ class _APIHandler(BaseHTTPRequestHandler):
                 self._respond(result)
             except Exception as e:
                 self._respond({"error": str(e)}, 500)
+        elif path.startswith("/api/agents/"):
+            # Support /api/agents/{id}/status or /api/agents/{id}
+            parts = path.split("/")
+            if len(parts) >= 4:
+                agent_id = parts[3]
+                try:
+                    from friday.orchestrator import get_orchestrator
+                    orch = get_orchestrator()
+                    status = orch.get_status(agent_id)
+                    self._respond({"agent_id": agent_id, "status": status})
+                    return
+                except Exception:
+                    try:
+                        from friday.agents_manager import agent_status
+                        self._respond(agent_status(agent_id))
+                        return
+                    except Exception:
+                        self._respond({"error": "Agent not found"}, 404)
+                        return
         else:
             self._respond({"error": f"Unknown endpoint: {path}"}, 404)
 

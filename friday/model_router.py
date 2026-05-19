@@ -98,6 +98,26 @@ PRESET_MODELS: Dict[str, ModelInfo] = {
         capabilities=["chat", "code"],
         max_output_tokens=4096,
     ),
+    "opencode/big-pickle": ModelInfo(
+        id="opencode/big-pickle",
+        provider="opencode_zen",
+        family="opencode",
+        cost_per_1k_input=0.0,
+        cost_per_1k_output=0.0,
+        context_window=200_000,
+        capabilities=["code", "research", "analysis"],
+        max_output_tokens=128000,
+    ),
+    "nvidia/nim-vision": ModelInfo(
+        id="microsoft/Florence-2-large",
+        provider="nvidia_nim",
+        family="nvidia",
+        cost_per_1k_input=0.0,
+        cost_per_1k_output=0.0,
+        context_window=128_000,
+        capabilities=["vision", "object_detection", "scene_understanding"],
+        max_output_tokens=4096,
+    ),
 }
 
 
@@ -278,6 +298,33 @@ def list_models(filter_provider: Optional[str] = None) -> List[dict]:
             "capabilities": info.capabilities,
         })
     return models
+
+
+def auto_route_task(task_type: str, task_description: str) -> str:
+    """
+    Automatically route a task to the best free model.
+    - vision/object detection -> NVIDIA NIM
+    - coding/complex reasoning -> opencode/big-pickle
+    - research -> opencode with explore agent
+    - simple queries -> current LLM (Gemini Live)
+    """
+    vision_keywords = ["see", "look", "image", "picture", "photo", "object", "detect",
+                        "animal", "person", "face", "hand", "scene", "what is this"]
+    code_keywords = ["code", "function", "class", "implement", "debug", "fix", "write a",
+                     "algorithm", "api", "endpoint", "database", "refactor"]
+    research_keywords = ["research", "find", "search", "look up", "analyze", "compare",
+                         "investigate", "what is the latest", "how does"]
+
+    desc_lower = task_description.lower()
+
+    if task_type == "vision" or any(k in desc_lower for k in vision_keywords):
+        return "nvidia/nim-vision"
+    elif task_type == "code" or any(k in desc_lower for k in code_keywords):
+        return "opencode/big-pickle"
+    elif task_type == "research" or any(k in desc_lower for k in research_keywords):
+        return "opencode/big-pickle"
+
+    return "default"
 
 
 def resolve_model(task_type: str = "chat", preferences: Optional[dict] = None) -> str:

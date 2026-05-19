@@ -152,7 +152,8 @@ def _run_memory_check() -> dict:
 # ─── Full Launch ────────────────────────────────────────
 
 def launch_all(api_port: int = 8090, ui_port: int = 8080,
-               start_live: bool = False, log_fn=None) -> Dict[str, Any]:
+               start_live: bool = False, start_sidecar_ws: bool = False,
+               log_fn=None) -> Dict[str, Any]:
     """
     Launch all background services in the current process.
 
@@ -160,6 +161,7 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
         api_port: Preferred port for dashboard API
         ui_port: Preferred port for dashboard UI
         start_live: If True, also start the live engine (blocks)
+        start_sidecar_ws: If True, start the sidecar WebSocket server
         log_fn: Optional logging function
 
     Returns:
@@ -210,6 +212,20 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
     else:
         _log(f"[FAIL] Sidecar heartbeat: {sc_result.get('error', 'unknown')}")
 
+    # 5. Sidecar WebSocket server (optional)
+    if start_sidecar_ws:
+        try:
+            from friday.sidecar_network import start_ws_server
+            ws_started = start_ws_server()
+            results["sidecar_ws"] = {"success": ws_started}
+            if ws_started:
+                _log("[OK] Sidecar WebSocket server running on port 42070")
+            else:
+                _log("[WARN] Sidecar WebSocket server not available (install websockets)")
+        except Exception as e:
+            _log(f"[WARN] Sidecar WebSocket: {e}")
+            results["sidecar_ws"] = {"success": False, "error": str(e)}
+
     # Print summary
     _log("")
     _log("=" * 50)
@@ -218,6 +234,8 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
         _log(f"  Dashboard UI:  {ui_result['url']}")
     if api_result.get("success"):
         _log(f"  Dashboard API: {api_result['url']}")
+    if results.get("sidecar_ws", {}).get("success"):
+        _log("  Sidecar WS:    ws://127.0.0.1:42070")
     _log("  Say 'FRIDAY' to activate voice (if live engine started)")
     _log("=" * 50)
     _log("")

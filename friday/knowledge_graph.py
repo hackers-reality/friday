@@ -281,6 +281,55 @@ def extract_knowledge_from_text(text: str) -> Dict[str, Any]:
     }
 
 
+# ─── Cleanup ────────────────────────────#
+
+def cleanup_graph(max_entity_length=100):
+    """Remove garbage entities: errors, test data, overly long strings."""
+    graph = get_knowledge_graph()
+
+    # Load raw data to filter
+    import json
+    from pathlib import Path
+    storage_path = Path("friday_memory/knowledge_graph.json")
+    if not storage_path.exists():
+        return {"removed": 0, "entities": []}
+
+    with open(storage_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    removed = []
+    error_patterns = ["Error", "HRESULT", "exception", "traceback"]
+    test_patterns = ["TestEntity", "test_value", "test_key"]
+
+    new_nodes = {}
+    for node_id, node in data.get("nodes", {}).items():
+        name = node.get("name", "")
+        if any(p in name for p in error_patterns):
+            removed.append(name)
+            continue
+        if any(p in name for p in test_patterns):
+            removed.append(name)
+            continue
+        if len(name) > max_entity_length:
+            removed.append(name)
+            continue
+        new_nodes[node_id] = node
+
+    data["nodes"] = new_nodes
+    valid_ids = set(new_nodes.keys())
+    data["edges"] = [e for e in data.get("edges", []) if e.get("source") in valid_ids and e.get("target") in valid_ids]
+
+    with open(storage_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+
+    # Reload graph instance
+    graph.nodes.clear()
+    graph.edges.clear()
+    graph._load()
+
+    return {"removed": len(removed), "entities": removed}
+
+
 # ─── Simple helpers for auto-extraction hooks ──────────────
 
 def kg_exists() -> bool:
@@ -443,6 +492,17 @@ def knowledge_graph_tool(
         lines.append(f"**Relations**: {len(result['relations'])}")
         for source, target, rel in result["relations"][:20]:
             lines.append(f"  - {source} -[{rel}]-> {target}")
+        return "\n".join(lines)
+    
+    if action == "cleanup":
+        max_len = int(kwargs.get("max_entity_length", 100))
+        result = cleanup_graph(max_entity_length=max_len)
+        lines = ["### KNOWLEDGE GRAPH CLEANUP", ""]
+        lines.append(f"**Removed**: {result['removed']} entities")
+        for name in result["entities"][:20]:
+            lines.append(f"  - Removed: {name}")
+        if len(result["entities"]) > 20:
+            lines.append(f"  ... and {len(result['entities']) - 20} more")
         return "\n".join(lines)
     
     return f"Unknown action: {action}"

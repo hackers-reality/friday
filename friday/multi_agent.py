@@ -2,6 +2,7 @@
 Friday Multi-Agent Delegation System (v2 — Peer-to-Peer).
 Delegates complex tasks to specialist sub-agents, splits work across them,
 and merges results. Supports parallel execution and cross-agent handoff.
+Integrates with opencode for actual parallel sub-agent execution.
 """
 from __future__ import annotations
 
@@ -12,6 +13,8 @@ import threading
 from typing import Dict, Any, List, Optional, Callable, Tuple
 from datetime import datetime
 from pathlib import Path
+
+from friday.opencode_bridge import OpencodeBridge, SubAgent
 
 
 #  Agent Roles  #
@@ -208,6 +211,64 @@ class MultiAgentSystem:
         lines.append("Execute each subtask independently and merge results when all complete.")
         return "\n".join(lines)
 
+    def spawn_agent(self, name: str, role: str, task: str) -> str:
+        """Create a new agent with a custom name and delegate the task. Returns agent ID."""
+        if name not in self.agents:
+            agent = Agent(name=name, role=role)
+            self.add_agent(agent)
+        result = self.delegate(task, preferred_agent=name)
+        return f"agent_{name}_{int(time.time())}"
+
+    def list_agents_status(self) -> list[dict]:
+        """Returns all active and completed agents with their status."""
+        return [
+            {
+                "name": a.name,
+                "role": a.role,
+                "status": a.status,
+                "description": a.description,
+                "tasks_completed": len(a.task_history),
+                "capabilities": a.capabilities,
+            }
+            for a in self.agents.values()
+        ]
+
+    def get_agent_progress(self, name: str) -> dict:
+        """Returns status, current task, elapsed time for a named agent."""
+        agent = self.agents.get(name)
+        if not agent:
+            return {"error": f"Agent '{name}' not found"}
+        last_task = agent.task_history[-1] if agent.task_history else None
+        elapsed = 0
+        if last_task:
+            assigned = datetime.fromisoformat(last_task["assigned_at"])
+            elapsed = (datetime.now() - assigned).total_seconds()
+        return {
+            "name": agent.name,
+            "role": agent.role,
+            "status": agent.status,
+            "current_task": last_task["description"] if last_task else None,
+            "elapsed_seconds": elapsed,
+            "tasks_completed": len(agent.task_history),
+        }
+
+    def delegate_background(self, name: str, task: str) -> str:
+        """Delegates a task to run in background. FRIDAY can check progress later."""
+        self._task_counter += 1
+        task_id = f"task_{int(time.time())}_{self._task_counter}"
+        if name not in self.agents:
+            return f"[FAIL] Agent '{name}' not found. Use spawn_agent first."
+        agent = self.agents[name]
+        agent.assign_task(task_id, task, {})
+        return (
+            f"### BACKGROUND DELEGATION\n\n"
+            f"**Task**: {task}\n"
+            f"**Agent**: {name} ({agent.description})\n"
+            f"**Task ID**: {task_id}\n"
+            f"**Status**: Running in background\n\n"
+            f"Use `check on {name}` to get progress."
+        )
+
     def get_peer_results(self, task_id: str) -> str:
         """Get merged results from a peer-to-peer delegation."""
         results = self._results.get(task_id)
@@ -276,6 +337,97 @@ def multi_agent_delegate(
         return a.get_summary()
 
     return f"Unknown action: {action}"
+
+
+# ─── OpenCode Agent Manager ─────────────────────────────────
+
+class OpencodeAgentManager:
+    """Manages sub-agents via opencode for actual parallel execution."""
+
+    def __init__(self):
+        self.bridge = OpencodeBridge()
+        self._agent_map: dict[str, str] = {}
+
+    def spawn(self, name: str, task: str) -> str:
+        """Spawn a named agent."""
+        agent = self.bridge.spawn_agent(name, task)
+        self._agent_map[name.lower()] = agent.id
+        return agent.id
+
+    def delegate(self, name: str, task: str) -> str:
+        """Alias for spawn — delegate a task to an agent."""
+        return self.spawn(name, task)
+
+    def status(self, name: str) -> Optional[dict]:
+        """Get agent status by name."""
+        agent_id = self._agent_map.get(name.lower())
+        if not agent_id:
+            return None
+        agent = self.bridge.get_agent_result(agent_id)
+        if not agent:
+            return None
+        elapsed = 0
+        if agent.status == "running":
+            elapsed = (datetime.now() - datetime.fromisoformat(agent.created_at)).total_seconds()
+        elif agent.completed_at:
+            elapsed = (datetime.fromisoformat(agent.completed_at) - datetime.fromisoformat(agent.created_at)).total_seconds()
+        return {
+            "name": agent.name,
+            "status": agent.status,
+            "task": agent.task,
+            "result": agent.result,
+            "created_at": agent.created_at,
+            "completed_at": agent.completed_at,
+            "is_running": agent.status == "running",
+            "elapsed_seconds": elapsed,
+        }
+
+    def all_agents(self) -> list[dict]:
+        return self.bridge.get_all_results()
+
+    def spawn_team(self, tasks: list[tuple[str, str]]) -> list[str]:
+        """Spawn multiple agents in parallel. Returns list of names."""
+        agents_data = self.bridge.spawn_parallel(tasks)
+        names = []
+        for agent in agents_data:
+            self._agent_map[agent.name.lower()] = agent.id
+            names.append(agent.name)
+        return names
+
+
+# ─── Auto-select between simulated and opencode delegation ──
+
+_opencode_manager: Optional[OpencodeAgentManager] = None
+
+
+def get_opencode_manager() -> OpencodeAgentManager:
+    global _opencode_manager
+    if _opencode_manager is None:
+        _opencode_manager = OpencodeAgentManager()
+    return _opencode_manager
+
+
+def delegate_with_opencode(name: str, task: str, use_opencode: bool = True) -> str:
+    """
+    Delegate a task. If opencode bridge is available and use_opencode=True,
+    use actual parallel execution. Otherwise fall back to simulated delegation.
+    """
+    if use_opencode:
+        try:
+            manager = get_opencode_manager()
+            agent_id = manager.spawn(name, task)
+            return (
+                f"### OPENCODE DELEGATION\n\n"
+                f"**Agent**: {name}\n"
+                f"**Task**: {task}\n"
+                f"**ID**: {agent_id}\n"
+                f"**Engine**: opencode/big-pickle\n\n"
+                f"Agent is working in the background. Check status anytime."
+            )
+        except Exception:
+            pass
+    system = get_multi_agent_system()
+    return system.delegate(task, preferred_agent=name)
 
 
 if __name__ == "__main__":
