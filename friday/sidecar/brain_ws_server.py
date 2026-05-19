@@ -10,18 +10,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 import jwt
 from datetime import datetime
-from typing import Any
+from typing import Dict
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse
 
 from friday.orchestration_config import ensure_config
-from friday.sidecar.device_registry import get_registry
+from friday.sidecar.device_registry import SidecarCommand, get_registry
 
 
 router = APIRouter()
+_PONG_WAITERS: Dict[str, asyncio.Event] = {}
 
 
 @router.get("/sidecar/health")
@@ -36,27 +38,27 @@ async def sidecar_ws(websocket: WebSocket, token: str = Query(None)):
         return
 
     config = ensure_config()
-    secret = config.get("sidecar", {}).get("secret_key")
+    secret = config.get("SECRET_KEY") or config.get("sidecar", {}).get("secret_key")
     if not secret:
-        await websocket.close(code=4002)
+        await websocket.close(code=4001)
         return
 
     try:
         payload = jwt.decode(token, secret, algorithms=["HS256"])
     except Exception:
-        await websocket.close(code=4003)
+        await websocket.close(code=4001)
         return
 
     device_name = payload.get("device_name")
     device_id = payload.get("device_id")
     capabilities = payload.get("capabilities", [])
     if not device_name or not device_id:
-        await websocket.close(code=4004)
+        await websocket.close(code=4001)
         return
 
     await websocket.accept()
     registry = get_registry()
-    rec = await registry.register(device_name, device_id, capabilities, websocket)
+    await registry.register(device_name, capabilities, websocket, device_id=device_id)
 
     ping_task = asyncio.create_task(_ping_loop(device_name, websocket))
     try:
@@ -77,6 +79,11 @@ async def sidecar_ws(websocket: WebSocket, token: str = Query(None)):
                 # command result
                 command_id = msg.get("command_id")
                 await registry.handle_command_result(command_id, msg.get("payload", {}))
+            elif mtype == "pong":
+                registry.mark_pong(device_name)
+                ping_id = msg.get("ping_id")
+                if ping_id and ping_id in _PONG_WAITERS:
+                    _PONG_WAITERS[ping_id].set()
             elif mtype == "event":
                 # ignored for now - could publish to event bus
                 pass
@@ -91,10 +98,27 @@ async def _ping_loop(device_name: str, websocket: WebSocket):
     try:
         while True:
             try:
-                await websocket.send_json({"type": "ping", "ts": datetime.utcnow().isoformat()})
+                ping_id = f"ping_{uuid.uuid4().hex[:8]}"
+                event = asyncio.Event()
+                _PONG_WAITERS[ping_id] = event
+                await websocket.send_json({"type": "ping", "ts": datetime.utcnow().isoformat(), "ping_id": ping_id})
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    registry.mark_stale(device_name)
+                    await websocket.close(code=4008)
+                    break
+                finally:
+                    _PONG_WAITERS.pop(ping_id, None)
             except Exception:
                 break
             await asyncio.sleep(30)
     finally:
-        # mark offline
         await registry.deregister(device_name)
+
+
+async def send_command(device_name: str, capability: str, action: str, params: dict, timeout: int = 30) -> dict:
+    """Convenience API for brain callers to send commands to a sidecar."""
+    registry = get_registry()
+    cmd = SidecarCommand(capability=capability, action=action, params=params)
+    return await registry.send_command(device_name, cmd, timeout=timeout)

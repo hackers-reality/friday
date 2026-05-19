@@ -50,6 +50,16 @@ class FridayAPI:
             from fastapi import FastAPI
             
             app = FastAPI(title="Friday API", version="2.0.0")
+            try:
+                from friday.sidecar.brain_ws_server import router as sidecar_router
+                app.include_router(sidecar_router)
+            except Exception:
+                pass
+            try:
+                from api.dashboard_routes import router as dashboard_router
+                app.include_router(dashboard_router)
+            except Exception:
+                pass
             
             # Add routes
             for path, config in self.routes.items():

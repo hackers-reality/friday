@@ -37,8 +37,12 @@ langchain-google-genai>=1.0.0
 langgraph>=1.0.0
 mcp>=1.0.0
 
+# YouTube analysis helpers
+keybert>=0.6.0
+
 # Vision Pipeline
 mediapipe>=0.10.0
+ultralytics>=8.2.0
 onnxruntime>=1.15.0
 
 # Web

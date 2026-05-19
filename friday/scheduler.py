@@ -10,11 +10,69 @@ from datetime import datetime, timedelta
 from typing import Optional, Callable
 
 from friday._paths import FRIDAY_MEMORY
+from friday.orchestration_config import ensure_config
 
 _SCHEDULE_FILE = os.path.join(FRIDAY_MEMORY, "schedules.json")
 _scheduler_thread: Optional[threading.Thread] = None
 _scheduler_stop = threading.Event()
 _scheduler_lock = threading.Lock()
+
+
+def _ensure_youtube_jobs_registered() -> None:
+    """Ensure YouTube daily jobs are present when enabled, or disabled when off."""
+    cfg = ensure_config().get("youtube", {})
+    enabled = bool(cfg.get("enabled", False))
+    ingest_time = str(cfg.get("ingest_time", "06:00"))
+    briefing_time = str(cfg.get("briefing_time", "08:00"))
+
+    schedules = _load()
+
+    def _upsert(name: str, schedule: str, action: str, params: dict):
+        for task in schedules:
+            if task.get("name") == name:
+                task["schedule"] = schedule
+                task["action"] = action
+                task["params"] = params
+                task["enabled"] = True
+                return
+        import uuid
+        schedules.append({
+            "id": f"task_{uuid.uuid4().hex[:8]}",
+            "name": name,
+            "schedule": schedule,
+            "action": action,
+            "params": params,
+            "enabled": True,
+            "created": datetime.now().isoformat(),
+            "last_run": "",
+            "run_count": 0,
+            "last_run_ts": 0,
+        })
+
+    # normalize schedule expressions for existing scheduler parser
+    ingest_schedule = f"daily at {ingest_time}"
+    briefing_schedule = f"daily at {briefing_time}"
+
+    if enabled:
+        channel_id = str(cfg.get("channel_id", "")).strip()
+        _upsert(
+            name="youtube_daily_ingestion",
+            schedule=ingest_schedule,
+            action="youtube_ingest",
+            params={"channel_id": channel_id},
+        )
+        _upsert(
+            name="youtube_morning_briefing",
+            schedule=briefing_schedule,
+            action="youtube_briefing",
+            params={"channel_id": channel_id},
+        )
+    else:
+        for task in schedules:
+            if task.get("action") in {"youtube_ingest", "youtube_briefing"}:
+                task["enabled"] = False
+
+    _save(schedules)
 
 
 def _load() -> list:
@@ -62,6 +120,34 @@ def _parse_interval(expr: str) -> int:
     return 86400  # default daily
 
 
+def _is_daily_time_due(task: dict, now_dt: datetime) -> bool:
+    """Handle `daily at HH:MM` schedules with one run per day."""
+    expr = str(task.get("schedule", "")).lower().strip()
+    if not expr.startswith("daily at "):
+        return False
+
+    hhmm = expr.replace("daily at ", "").strip()
+    try:
+        hour_s, minute_s = hhmm.split(":", 1)
+        target_hour = int(hour_s)
+        target_minute = int(minute_s)
+    except Exception:
+        return False
+
+    if now_dt.hour != target_hour or now_dt.minute != target_minute:
+        return False
+
+    # Prevent repeated executions during the same minute/day.
+    last_run = str(task.get("last_run", ""))
+    if last_run.startswith(now_dt.date().isoformat()):
+        try:
+            prev = datetime.fromisoformat(last_run)
+            return not (prev.hour == now_dt.hour and prev.minute == now_dt.minute)
+        except Exception:
+            return False
+    return True
+
+
 def _execute_task(task: dict):
     """Execute a scheduled task's action."""
     action = task.get("action", "")
@@ -87,6 +173,21 @@ def _execute_task(task: dict):
         elif action == "custom":
             from friday.tools import run_cmd
             result = run_cmd(params.get("command", "echo no command"))
+        elif action == "youtube_ingest":
+            from friday.daily_ingestion_job import run_ingest
+            run_ingest(params.get("channel_id"))
+            result = "[OK] YouTube daily ingestion completed"
+        elif action == "youtube_briefing":
+            from friday.morning_briefing import publish_briefing
+            ch = params.get("channel_id")
+            if not ch:
+                cfg = ensure_config().get("youtube", {})
+                ch = cfg.get("channel_id", "")
+            if ch:
+                publish_briefing(ch)
+                result = "[OK] YouTube morning briefing published"
+            else:
+                result = "[WARN] YouTube briefing skipped: channel_id missing"
         else:
             result = f"[Scheduler] Unknown action: {action}"
 
@@ -106,8 +207,21 @@ def _scheduler_loop():
         try:
             schedules = _load()
             now = time.time()
+            now_dt = datetime.now()
             for task in schedules:
                 if not task.get("enabled", True):
+                    continue
+                schedule_expr = str(task.get("schedule", "")).lower().strip()
+                if schedule_expr.startswith("daily at "):
+                    if _is_daily_time_due(task, now_dt):
+                        task["last_run_ts"] = now
+                        _execute_task(task)
+                        _save(schedules)
+                    continue
+                if _is_daily_time_due(task, now_dt):
+                    task["last_run_ts"] = now
+                    _execute_task(task)
+                    _save(schedules)
                     continue
                 interval = _parse_interval(task.get("schedule", "daily"))
                 last_run = task.get("last_run_ts", 0)
@@ -139,7 +253,8 @@ def scheduler_tool(action: str = "list", **kwargs) -> str:
         lines = ["### SCHEDULED TASKS"]
         for t in tasks:
             status = "ACTIVE" if t.get("enabled", True) else "PAUSED"
-            last = t.get("last_run", "never")[:16]
+            last_raw = t.get("last_run") or "never"
+            last = str(last_raw)[:16]
             lines.append(
                 f"  [{t['id']}] {t.get('name', 'Unnamed')} - {status}\n"
                 f"       Schedule: {t.get('schedule', 'daily')}\n"
@@ -215,6 +330,11 @@ def scheduler_tool(action: str = "list", **kwargs) -> str:
     elif action == "start":
         if _scheduler_thread and _scheduler_thread.is_alive():
             return "[INFO] Scheduler already running."
+        # Sync default YouTube jobs before scheduler loop starts.
+        try:
+            _ensure_youtube_jobs_registered()
+        except Exception:
+            pass
         _scheduler_stop.clear()
         _scheduler_thread = threading.Thread(target=_scheduler_loop, daemon=True)
         _scheduler_thread.start()

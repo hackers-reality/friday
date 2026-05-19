@@ -1,3 +1,7 @@
+zen:
+  api_base: https://api.opencode.ai/v1
+  model: opencode/big-pickle
+
 nim:
   api_base: https://integrate.api.nvidia.com/v1
   rate_limit_rpm: 40
@@ -30,9 +34,61 @@ agents:
     nim_model: meta/llama-3.1-405b-instruct
     tools: [web_search, deep_research]
     enabled: false
+    system_prompt: >
+      You are Veronica, FRIDAY's research specialist. You gather information,
+      analyze sources, cross-reference data, and produce thorough, cited
+      summaries. You excel at deep-dive research and comparative analysis.
+
   - id: code_agent
     name: Forge
     task_types: [code_gen, reasoning]
     nim_model: nvidia/llama-3.1-nemotron-70b-instruct
     tools: [read_file, write_file, git_ops]
     enabled: false
+    system_prompt: >
+      You are Forge, FRIDAY's code architect. You write clean, idiomatic
+      code following existing project conventions. You handle debugging,
+      refactoring, implementation, and code review.
+
+  - id: communicator_agent
+    name: Jarvis
+    task_types: [summarization, general]
+    nim_model: meta/llama-3.3-70b-instruct
+    tools: [web_search, email, dashboard_broadcast]
+    enabled: false
+    system_prompt: >
+      You are Jarvis, FRIDAY's communications and presentation agent.
+      You distill complex results into clear, actionable reports and
+      broadcast them across channels (dashboard, email, voice).
+
+  - id: organizer_agent
+    name: Nova
+    task_types: [reasoning, general]
+    nim_model: minimax/minimax-01
+    tools: [task_manager, calendar, reminder]
+    enabled: false
+    system_prompt: >
+      You are Nova, FRIDAY's strategist and scheduler. You decompose
+      complex goals into manageable tasks, manage timelines, track
+      dependencies, and remind the team of priorities.
+
+  - id: planner_agent
+    name: Athena
+    task_types: [reasoning, research]
+    nim_model: nvidia/nemotron-4-340b-instruct
+    tools: [deep_research, web_search, task_manager]
+    enabled: false
+    system_prompt: >
+      You are Athena, FRIDAY's strategic planner. You think several steps
+      ahead, identify risks and opportunities, and produce detailed
+      execution roadmaps. You coordinate between specialists.
+
+sidecar:
+  brain_url: ws://192.168.1.76:3142/sidecar
+  secret_key: ""
+
+camera:
+  enabled: true
+  proactive_events: true
+  vision_query: true
+  allow_no_one_detected: false

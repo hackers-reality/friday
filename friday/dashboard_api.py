@@ -526,6 +526,23 @@ class _APIHandler(BaseHTTPRequestHandler):
                 self._respond({"error": str(e)}, 500)
         else:
             self._respond({"error": f"Unknown POST endpoint: {path}"}, 404)
+        
+        # YouTube metadata generation endpoint
+        if path == "/api/youtube/generate-metadata":
+            try:
+                from friday.metadata_generator import generate_metadata
+                title = data.get("title")
+                draft = data.get("description", "")
+                topic = data.get("topic", "")
+                if not title:
+                    self._respond({"error": "title is required"}, 400)
+                    return
+                meta = generate_metadata(title, draft, topic)
+                self._respond(meta)
+                return
+            except Exception as e:
+                self._respond({"error": str(e)}, 500)
+                return
 
     def do_GET(self):
         parsed = urlparse(self.path)

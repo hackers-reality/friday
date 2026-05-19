@@ -212,6 +212,18 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
     else:
         _log(f"[FAIL] Sidecar heartbeat: {sc_result.get('error', 'unknown')}")
 
+    # 4.5 Scheduler
+    _log("[START] Scheduler...")
+    try:
+        from friday.scheduler import scheduler_tool
+        scheduler_status = scheduler_tool("start")
+        set_service_state("scheduler", status="running", pid=_get_pid())
+        results["scheduler"] = {"success": True, "message": scheduler_status}
+        _log("[OK] Scheduler running")
+    except Exception as e:
+        results["scheduler"] = {"success": False, "error": str(e)}
+        _log(f"[WARN] Scheduler failed to start: {e}")
+
     # 5. Sidecar WebSocket server (optional)
     if start_sidecar_ws:
         try:
@@ -225,6 +237,46 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
         except Exception as e:
             _log(f"[WARN] Sidecar WebSocket: {e}")
             results["sidecar_ws"] = {"success": False, "error": str(e)}
+
+    # 6. Camera manager + proactive monitor (optional, guarded by config)
+    try:
+        from friday.orchestration_config import ensure_config
+        cam_cfg = ensure_config().get("camera", {})
+        if cam_cfg.get("enabled", False):
+            try:
+                from friday.camera_manager import CameraManager
+                cam_manager = CameraManager()
+                cam_manager.start()
+                set_service_state("camera_manager", status="running", pid=_get_pid())
+                results["camera_manager"] = {"success": True}
+            except Exception as e:
+                _log(f"[WARN] Camera manager failed to start: {e}")
+                results["camera_manager"] = {"success": False, "error": str(e)}
+
+            try:
+                from friday.proactive_monitor import ProactiveMonitor
+
+                def _monitor_thread_target():
+                    try:
+                        import asyncio
+                        monitor = ProactiveMonitor()
+                        asyncio.run(monitor.run())
+                    except Exception:
+                        pass
+
+                t = threading.Thread(target=_monitor_thread_target, name="FridayProactiveMonitor", daemon=True)
+                t.start()
+                set_service_state("proactive_monitor", status="running", pid=_get_pid())
+                results["proactive_monitor"] = {"success": True}
+            except Exception as e:
+                _log(f"[WARN] Proactive monitor failed to start: {e}")
+                results["proactive_monitor"] = {"success": False, "error": str(e)}
+        else:
+            results["camera_manager"] = {"success": False, "reason": "disabled"}
+            results["proactive_monitor"] = {"success": False, "reason": "disabled"}
+    except Exception as e:
+        _log(f"[WARN] Camera startup: {e}")
+        results["camera_manager"] = {"success": False, "error": str(e)}
 
     # Print summary
     _log("")

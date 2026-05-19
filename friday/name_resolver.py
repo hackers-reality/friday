@@ -1,130 +1,89 @@
-"""Fuzzy name resolution for Friday's agent invocation parser.
-
-Recognizes direct mentions, short aliases, and fuzzy speech-to-text
-variants such as "ask Veronica to..." or "the research agent".
 """
+FRIDAY Name Resolver — fuzzy matches agent names using rapidfuzz WRatio.
+Supports @mention exact match and partial name resolution.
+
+Examples:
+    resolve("veronica")           -> AgentDef for "Veronica"
+    resolve("@Veronica")          -> exact match
+    resolve("code guy")           -> fuzzy match for Forge (WRatio >= 70)
+    extract_mentions("ask @Veronica and Forge to help")
+                                  -> ["@Veronica", "Forge"]
+"""
+
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from difflib import SequenceMatcher
-from typing import List, Optional, Sequence, Tuple
+from typing import Optional
 
-try:
-    from rapidfuzz import fuzz
-except ImportError:  # pragma: no cover - fallback for minimal environments
-    class _FallbackFuzz:
-        @staticmethod
-        def WRatio(left: str, right: str) -> int:
-            return int(SequenceMatcher(None, left, right).ratio() * 100)
+from rapidfuzz import fuzz
 
-    fuzz = _FallbackFuzz()
-
-from friday.agent_registry import AgentProfile, get_registry
-from friday.logging_utils import configure_logging
+from friday.agent_registry import AgentDef
 
 
-logger = configure_logging(__name__)
+def resolve(name: str, agents: list[AgentDef], threshold: int = 70) -> Optional[AgentDef]:
+    """
+    Resolve a name string to an AgentDef via:
+    1. Exact match (case-insensitive) on display_name or id
+    2. Fuzzy WRatio match (threshold 70 by default)
+
+    Returns None if no match or threshold not met.
+    """
+    clean = name.lstrip("@").strip()
+    clean_lower = clean.lower()
+
+    # Exact match on name or id
+    for agent in agents:
+        if agent.name.lower() == clean_lower or agent.id.lower() == clean_lower:
+            return agent
+
+    # Fuzzy match
+    best_score = 0
+    best_agent: Optional[AgentDef] = None
+    for agent in agents:
+        score = fuzz.WRatio(clean, agent.name)
+        if score > best_score:
+            best_score = score
+            best_agent = agent
+
+    if best_score >= threshold and best_agent is not None:
+        return best_agent
+
+    return None
 
 
-@dataclass(slots=True)
-class NameMatch:
-    """Fuzzy match result for a registered agent."""
-
-    agent_id: str
-    confidence: float
+def resolve_multi(names: list[str], agents: list[AgentDef],
+                  threshold: int = 70) -> list[tuple[str, Optional[AgentDef]]]:
+    """Resolve multiple names at once. Returns (input_name, agent_or_None) pairs."""
+    return [(n, resolve(n, agents, threshold)) for n in names]
 
 
-_LEADING_PHRASES = (
-    "ask ",
-    "tell ",
-    "get ",
-    "have ",
-    "please ",
-    "can you ",
-    "could you ",
-    "the ",
-)
+def extract_mentions(text: str) -> list[str]:
+    """
+    Extract @mentions and agent names from utterance text.
 
+    Handles:
+      - @ExplicitMention
+      - "ask AgentName to ..."
+      - "tell AgentName and AgentName2"
+    """
+    mentions: list[str] = []
 
-def _clean_utterance(text: str) -> str:
-    cleaned = re.sub(r"[^\w@\s-]", " ", text.lower())
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    for phrase in _LEADING_PHRASES:
-        if cleaned.startswith(phrase):
-            cleaned = cleaned[len(phrase):].strip()
-    return cleaned
+    # @mentions
+    at_mentions = re.findall(r"@(\w+)", text)
+    mentions.extend(at_mentions)
 
+    # "ask/tell/instruct/delegate {Name} to ..."
+    for prefix in r"(?:ask|tell|instruct|delegate|capture|broadcast)":
+        pattern = re.compile(rf"{prefix}\s+(\w[\w\s]{{0,30}}?)(?:\s+to|\s+and|\s*[,\.!?]|$)", re.IGNORECASE)
+        for match in pattern.finditer(text):
+            name = match.group(1).strip()
+            if name and name not in mentions:
+                mentions.append(name)
 
-def _aliases_for(profile: AgentProfile) -> List[str]:
-    aliases = set(profile.aliases())
-    aliases.add(profile.display_name.lower())
-    aliases.add(profile.agent_id.lower())
-    aliases.add(profile.display_name.lower().replace(" ", ""))
-    aliases.add(profile.agent_id.lower().replace("_", " "))
-    return sorted(alias for alias in aliases if alias)
+    # Split combined mentions like "Veronica and Forge"
+    split_mentions: list[str] = []
+    for m in mentions:
+        parts = re.split(r"\s+and\s+", m)
+        split_mentions.extend(p.strip() for p in parts if p.strip())
 
-
-class AgentNameResolver:
-    """Resolve agent names from raw user utterances."""
-
-    def __init__(self, profiles: Optional[Sequence[AgentProfile]] = None, threshold: int = 70) -> None:
-        self._profiles = list(profiles) if profiles is not None else get_registry().list_all()
-        self._threshold = threshold
-
-    @property
-    def profiles(self) -> List[AgentProfile]:
-        return list(self._profiles)
-
-    def resolve(self, utterance: str) -> Optional[Tuple[str, float]]:
-        """Return the best single agent match or None."""
-        matches = self.resolve_many(utterance)
-        if not matches:
-            return None
-        top = matches[0]
-        return top.agent_id, top.confidence
-
-    def resolve_many(self, utterance: str) -> List[NameMatch]:
-        """Return all matching agents ordered by confidence."""
-        cleaned = _clean_utterance(utterance)
-        if not cleaned:
-            return []
-
-        matches: List[NameMatch] = []
-        direct_mentions = re.findall(r"@([\w-]+)", cleaned)
-        direct_lookup = {mention.lower() for mention in direct_mentions}
-
-        for profile in self._profiles:
-            aliases = _aliases_for(profile)
-            best_score = 0.0
-
-            if profile.display_name.lower() in direct_lookup or profile.agent_id.lower() in direct_lookup:
-                best_score = 100.0
-            else:
-                for alias in aliases:
-                    if not alias:
-                        continue
-                    if alias in cleaned:
-                        best_score = 100.0
-                        break
-                    score = float(fuzz.WRatio(alias, cleaned))
-                    if len(alias) <= 3 and cleaned.startswith(alias):
-                        score = max(score, 90.0)
-                    if score > best_score:
-                        best_score = score
-
-            if best_score >= self._threshold:
-                matches.append(NameMatch(agent_id=profile.agent_id, confidence=best_score))
-
-        matches.sort(key=lambda item: item.confidence, reverse=True)
-        return matches
-
-
-def resolve_agent_name(utterance: str, profiles: Optional[Sequence[AgentProfile]] = None) -> Optional[Tuple[str, float]]:
-    """Convenience wrapper that returns one resolved agent id."""
-    return AgentNameResolver(profiles=profiles).resolve(utterance)
-
-
-def resolve_agent_names(utterance: str, profiles: Optional[Sequence[AgentProfile]] = None) -> List[Tuple[str, float]]:
-    """Convenience wrapper that returns all resolved agents."""
-    return [(match.agent_id, match.confidence) for match in AgentNameResolver(profiles=profiles).resolve_many(utterance)]
+    return split_mentions or mentions

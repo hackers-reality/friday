@@ -1,16 +1,585 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FRIDAY Control Center</title>
-    <style>
-      body { margin: 0; background: #060612; }
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>F.R.I.D.A.Y Dashboard</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    :root {
+      --bg: #0a0a0f;
+      --bg-card: #0f0f1a;
+      --neon-cyan: #00f5ff;
+      --neon-purple: #b400ff;
+      --neon-red: #ff003c;
+      --neon-yellow: #ffe600;
+      --text: #e0e0e0;
+      --text-dim: #666680;
+      --ok: #00ff90;
+      --border: rgba(0, 245, 255, 0.15);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: radial-gradient(1200px 600px at 20% -10%, rgba(180,0,255,.16), transparent), radial-gradient(900px 500px at 90% 0%, rgba(0,245,255,.14), transparent), var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; }
+    body { min-height: 100vh; }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0d0d14; }
+    ::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 10px; }
+
+    .app { padding: 14px; max-width: 1700px; margin: 0 auto; }
+
+    .header {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 14px;
+      background: linear-gradient(140deg, rgba(16,16,28,.9), rgba(12,12,20,.75));
+      border: 1px solid var(--border);
+      box-shadow: 0 0 20px rgba(0,245,255,.05);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .brand { font-family: 'Bebas Neue', sans-serif; font-size: 42px; letter-spacing: 3px; color: var(--neon-cyan); text-shadow: 0 0 10px rgba(0,245,255,.6), 0 0 24px rgba(0,245,255,.3); line-height: 1; }
+    .subline { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
+
+    .status-row { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #666; box-shadow: none; }
+    .dot.active { background: var(--ok); box-shadow: 0 0 14px rgba(0,255,144,.85); animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(1.25)} 100%{transform:scale(1)} }
+
+    .pill { border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px; font-size: 12px; color: var(--text-dim); }
+    .pill.warn { color: var(--neon-yellow); border-color: rgba(255,230,0,.35); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .panel {
+      background: linear-gradient(155deg, rgba(15,15,26,.95), rgba(11,11,20,.92));
+      border: 1px solid var(--border);
+      box-shadow: 0 0 20px rgba(0,245,255,.05);
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 120px;
+    }
+    .panel h3 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--neon-cyan); }
+
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+
+    .agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+    .agent-card { border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 10px; background: rgba(255,255,255,.01); cursor: pointer; transition: all .2s ease; }
+    .agent-card:hover { border-color: rgba(0,245,255,.35); box-shadow: 0 0 14px rgba(0,245,255,.18); }
+    .agent-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .agent-name { font-weight: 700; }
+    .badge { border-radius: 999px; padding: 2px 8px; font-size: 11px; border: 1px solid transparent; }
+    .idle { color: var(--text-dim); background: rgba(120,120,140,.14); border-color: rgba(120,120,140,.25); }
+    .running { color: var(--neon-cyan); background: rgba(0,245,255,.12); border-color: rgba(0,245,255,.35); box-shadow: 0 0 12px rgba(0,245,255,.25); animation: pulse 1.2s infinite; }
+    .error { color: #fff; background: rgba(255,0,60,.16); border-color: rgba(255,0,60,.48); box-shadow: 0 0 12px rgba(255,0,60,.24); }
+    .small { font-size: 12px; color: var(--text-dim); }
+    .model-badge { display: inline-block; margin-top: 6px; font-size: 11px; color: var(--neon-purple); border: 1px solid rgba(180,0,255,.35); border-radius: 999px; padding: 2px 8px; }
+    .expanded { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,.15); font-size: 12px; color: #cfd3ff; white-space: pre-wrap; }
+
+    .device-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+    .device { border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 10px; }
+    .caps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .cap { font-size: 11px; border: 1px solid rgba(0,245,255,.35); color: var(--neon-cyan); padding: 2px 8px; border-radius: 999px; }
+    .bar { height: 6px; background: rgba(255,255,255,.08); border-radius: 999px; overflow: hidden; margin-top: 5px; }
+    .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--neon-purple), var(--neon-cyan)); }
+
+    .feed { max-height: 260px; overflow: auto; font-size: 13px; }
+    .utter { padding: 8px 9px; margin-bottom: 6px; border-radius: 8px; opacity: 1; animation: fadein .2s ease; }
+    .utter.user { background: rgba(180,0,255,.12); border: 1px solid rgba(180,0,255,.25); }
+    .utter.friday { background: rgba(0,245,255,.12); border: 1px solid rgba(0,245,255,.25); }
+    @keyframes fadein { from {opacity:0;} to {opacity:1;} }
+
+    .camera-wrap { position: relative; border: 1px dashed rgba(0,245,255,.25); border-radius: 10px; min-height: 220px; display: grid; place-items: center; overflow: hidden; }
+    .camera-wrap img, .camera-wrap canvas { max-width: 100%; border-radius: 8px; }
+    .camera-wrap canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+    .camera-hidden { color: var(--text-dim); text-align: center; }
+
+    .yt-count { font-family: 'Bebas Neue', sans-serif; font-size: 48px; line-height: 1; color: var(--neon-cyan); text-shadow: 0 0 10px rgba(0,245,255,.35); }
+    .yt-delta.up { color: var(--ok); }
+    .yt-delta.down { color: var(--neon-red); }
+
+    .memory-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+    input, textarea {
+      width: 100%;
+      background: rgba(255,255,255,.02);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 8px;
+      padding: 9px;
+      font-family: 'DM Sans', sans-serif;
+      outline: none;
+    }
+    input:focus, textarea:focus { border-color: rgba(0,245,255,.5); box-shadow: 0 0 0 2px rgba(0,245,255,.12); }
+
+    .memory-list { max-height: 300px; overflow: auto; display: grid; gap: 8px; }
+    .chunk { border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 10px; }
+    .chunk-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .cat { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: rgba(0,245,255,.12); color: var(--neon-cyan); border: 1px solid rgba(0,245,255,.3); }
+
+    .btn {
+      border: 1px solid rgba(0,245,255,.25);
+      color: var(--text);
+      background: rgba(0,245,255,.06);
+      border-radius: 8px;
+      padding: 8px 11px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .btn:hover { box-shadow: 0 0 14px rgba(0,245,255,.22); }
+    .btn-danger { border-color: rgba(255,0,60,.45); background: rgba(255,0,60,.13); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; padding: 8px 6px; }
+    th { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+
+    .log-stream { max-height: 300px; overflow: auto; background: rgba(0,0,0,.25); border-radius: 8px; padding: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    .log-line { white-space: pre-wrap; margin-bottom: 3px; }
+    .log-info { color: #cfd3de; }
+    .log-warning { color: var(--neon-yellow); }
+    .log-error { color: var(--neon-red); }
+
+    .modal-bg { position: fixed; inset: 0; display: none; place-items: center; background: rgba(3,3,8,.73); z-index: 20; }
+    .modal { width: min(700px, 96vw); background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    .modal h4 { margin: 0 0 10px; color: var(--neon-cyan); }
+    .modal-out { margin-top: 10px; max-height: 250px; overflow: auto; font-size: 13px; }
+
+    @media (max-width: 980px) {
+      .header { grid-template-columns: 1fr; }
+      .span-3, .span-4, .span-5, .span-6, .span-7, .span-8, .span-12 { grid-column: span 12; }
+      .priority-mobile-1 { order: -10; }
+    }
+
+    @media (max-width: 375px) {
+      .brand { font-size: 34px; }
+      .panel { padding: 10px; }
+      .yt-count { font-size: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div>
+        <div class="brand">F.R.I.D.A.Y</div>
+        <div class="subline">Neural Operations Dashboard</div>
+      </div>
+      <div class="status-row">
+        <span class="dot" id="liveDot"></span>
+        <span id="liveText" class="pill">Idle</span>
+        <span id="wsState" class="pill">WS connecting...</span>
+      </div>
+      <div class="status-row">
+        <span id="clockIst" class="pill"></span>
+        <span id="hostInfo" class="pill"></span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="panel span-8" id="agentsPanel">
+        <h3>Agent Status Grid</h3>
+        <div class="agent-grid" id="agentsGrid"></div>
+      </section>
+
+      <section class="panel span-4" id="youtubePanel">
+        <h3>YouTube Stats Widget</h3>
+        <div class="yt-count" id="ytSubs">0</div>
+        <div id="ytDelta" class="small">0 over 7d</div>
+        <div class="small" id="ytTop">Top video: n/a</div>
+        <div class="small" id="ytSlot">Next slot: n/a</div>
+        <div style="margin-top:10px; display:flex; gap:8px;">
+          <button class="btn" id="openMetaBtn">Generate Metadata</button>
+        </div>
+      </section>
+
+      <section class="panel span-6" id="devicesPanel">
+        <h3>Connected Devices (Sidecar Map)</h3>
+        <div class="device-list" id="deviceList"></div>
+      </section>
+
+      <section class="panel span-6 priority-mobile-1" id="transcriptionPanel">
+        <h3>Live Transcription Feed</h3>
+        <div id="transcriptionFeed" class="feed"></div>
+      </section>
+
+      <section class="panel span-5" id="cameraPanel">
+        <h3>Camera Snapshot Panel</h3>
+        <div class="camera-wrap" id="cameraWrap">
+          <div class="camera-hidden">Camera Feed Hidden</div>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn" id="snapshotBtn">Request Snapshot</button>
+          <span class="small" id="cvStats">No snapshot yet</span>
+        </div>
+      </section>
+
+      <section class="panel span-7" id="memoryPanel">
+        <h3>Memory Browser (<span id="memoryCount">0</span>)</h3>
+        <div class="memory-actions">
+          <input id="memorySearchInput" placeholder="Search memory chunks..." />
+          <button class="btn" id="memorySearchBtn">Search</button>
+        </div>
+        <div class="memory-list" id="memoryList"></div>
+      </section>
+
+      <section class="panel span-12" id="schedulerPanel">
+        <h3>Task Scheduler</h3>
+        <table>
+          <thead>
+            <tr><th>Job</th><th>Next Run</th><th>Last Run</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="schedulerBody"></tbody>
+        </table>
+      </section>
+
+      <section class="panel span-12" id="logsPanel">
+        <h3>System Log Stream</h3>
+        <div style="margin-bottom:8px;"><button class="btn" id="pauseLogsBtn">Pause</button></div>
+        <div class="log-stream" id="logStream"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="metaModalBg">
+    <div class="modal">
+      <h4>Generate YouTube Metadata</h4>
+      <input id="metaTitle" placeholder="Video title" />
+      <textarea id="metaDesc" rows="4" placeholder="Description draft (optional)"></textarea>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="btn" id="metaGenerateBtn">Generate</button>
+        <button class="btn" id="metaCloseBtn">Close</button>
+      </div>
+      <div class="modal-out" id="metaOut"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    const WS_URL = 'ws://localhost:7070/ws';
+
+    const state = {
+      status: null,
+      ws: null,
+      wsConnected: false,
+      logsPaused: false,
+      logLines: [],
+      transcript: [],
+      expandedAgents: new Set(),
+    };
+
+    function fmtUptime(sec) {
+      const s = Number(sec || 0);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const ss = s % 60;
+      return `${h}h ${m}m ${ss}s`;
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const txt = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', year: 'numeric', month: 'short', day: '2-digit' }).format(now);
+      document.getElementById('clockIst').textContent = `IST ${txt}`;
+    }
+
+    async function fetchJSON(url, options) {
+      const r = await fetch(url, options);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    }
+
+    async function loadStatus() {
+      try {
+        state.status = await fetchJSON(`${API_BASE}/api/status`);
+        renderAll();
+      } catch (e) {
+        document.getElementById('wsState').textContent = 'Status unavailable';
+        document.getElementById('wsState').classList.add('warn');
+      }
+    }
+
+    function renderHeader() {
+      const brain = state.status?.brain || {};
+      const active = !!brain.gemini_live_active;
+      const dot = document.getElementById('liveDot');
+      dot.className = active ? 'dot active' : 'dot';
+      document.getElementById('liveText').textContent = active ? 'Gemini Live Active' : 'Gemini Live Idle';
+      document.getElementById('hostInfo').textContent = `${brain.hostname || 'brain'} | ${fmtUptime(brain.uptime_seconds)}`;
+    }
+
+    function renderAgents() {
+      const agents = state.status?.agents || [];
+      const html = agents.map(a => {
+        const st = a.status || 'idle';
+        const preview = (a.last_result || '').toString().slice(0, 140);
+        const expanded = state.expandedAgents.has(a.agent_id);
+        return `<div class="agent-card" data-agent="${esc(a.agent_id)}">
+          <div class="agent-header"><div class="agent-name">${esc(a.display_name || a.agent_id)}</div><span class="badge ${st === 'running' ? 'running' : st === 'error' ? 'error' : 'idle'}">${esc(st)}</span></div>
+          <div class="small">Task: ${esc((a.current_task || 'none').toString()).slice(0, 54)}</div>
+          <div class="small" style="margin-top:4px;">${esc(preview || 'No result yet')}</div>
+          <span class="model-badge">${esc(a.nim_model || 'n/a')}</span>
+          ${expanded ? `<div class="expanded">${esc(a.last_result || 'No result')}</div>` : ''}
+        </div>`;
+      }).join('') || '<div class="small">No agents registered.</div>';
+      const root = document.getElementById('agentsGrid');
+      root.innerHTML = html;
+      root.querySelectorAll('.agent-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const id = card.getAttribute('data-agent');
+          if (state.expandedAgents.has(id)) state.expandedAgents.delete(id); else state.expandedAgents.add(id);
+          renderAgents();
+        });
+      });
+    }
+
+    function renderDevices() {
+      const devices = state.status?.devices || [];
+      const html = devices.map(d => {
+        const t = d.telemetry || {};
+        const caps = (d.capabilities || []).map(c => `<span class="cap">${esc(c)}</span>`).join('');
+        return `<div class="device">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+            <strong>${esc(d.device_name)}</strong>
+            <span class="badge ${d.status === 'online' ? 'running' : 'idle'}">${esc(d.status)}</span>
+          </div>
+          <div class="small">${esc(d.platform || 'unknown')} | last seen ${esc(d.last_seen || 'n/a')}</div>
+          <div class="caps">${caps || '<span class="small">No capabilities</span>'}</div>
+          <div class="small">CPU ${Number(t.cpu_percent||0).toFixed(0)}%</div><div class="bar"><span style="width:${Math.min(100, Number(t.cpu_percent||0))}%"></span></div>
+          <div class="small">RAM ${Number(t.ram_percent||0).toFixed(0)}%</div><div class="bar"><span style="width:${Math.min(100, Number(t.ram_percent||0))}%"></span></div>
+          <div class="small">Disk ${Number(t.disk_percent||0).toFixed(0)}%</div><div class="bar"><span style="width:${Math.min(100, Number(t.disk_percent||0))}%"></span></div>
+        </div>`;
+      }).join('') || '<div class="small">No sidecars connected.</div>';
+      document.getElementById('deviceList').innerHTML = html;
+    }
+
+    function renderYouTube() {
+      const y = state.status?.youtube || {};
+      document.getElementById('ytSubs').textContent = Number(y.subscriber_count || 0).toLocaleString();
+      const delta = Number(y.delta_7d || 0);
+      const cls = delta >= 0 ? 'up' : 'down';
+      document.getElementById('ytDelta').className = `small yt-delta ${cls}`;
+      document.getElementById('ytDelta').textContent = `${delta >= 0 ? '▲' : '▼'} ${delta} over 7 days`;
+      const top = y.top_video || {};
+      document.getElementById('ytTop').textContent = `Top video: ${top.title || 'n/a'} (${Number(top.views || 0).toLocaleString()} views)`;
+      document.getElementById('ytSlot').textContent = `Next slot: ${y.next_slot || 'n/a'}`;
+    }
+
+    function pushTranscription(item) {
+      const feed = document.getElementById('transcriptionFeed');
+      state.transcript.push(item);
+      if (state.transcript.length > 10) state.transcript.shift();
+      feed.innerHTML = state.transcript.map(x => `<div class="utter ${x.speaker === 'user' ? 'user' : 'friday'}"><strong>${esc(x.speaker || 'msg')}:</strong> ${esc(x.text || '')}</div>`).join('');
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function drawSnapshot(frameB64, labels) {
+      const wrap = document.getElementById('cameraWrap');
+      wrap.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = `data:image/jpeg;base64,${frameB64}`;
+      const canvas = document.createElement('canvas');
+      wrap.appendChild(img);
+      wrap.appendChild(canvas);
+
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.lineWidth = 2;
+        const draw = (bbox, color, label) => {
+          const [x1,y1,x2,y2] = bbox;
+          ctx.strokeStyle = color;
+          ctx.strokeRect(x1, y1, x2-x1, y2-y1);
+          ctx.fillStyle = color;
+          ctx.font = '12px DM Sans';
+          ctx.fillText(label, x1 + 2, Math.max(12, y1 - 4));
+        };
+        (labels.faces || []).forEach((f,i)=> draw(f.bbox, '#00f5ff', `face ${i+1}`));
+        (labels.hands || []).forEach((h,i)=> draw(h.bbox, '#b400ff', `${h.handedness || 'hand'} ${i+1}`));
+        (labels.objects || []).forEach((o)=> draw(o.bbox, '#ffe600', o.class_name || 'obj'));
+      };
+
+      const stats = `faces: ${(labels.faces||[]).length} | hands: ${(labels.hands||[]).length} | objects: ${(labels.objects||[]).map(o=>o.class_name).join(', ') || 'none'}`;
+      document.getElementById('cvStats').textContent = stats;
+    }
+
+    async function requestSnapshot() {
+      try {
+        const d = await fetchJSON(`${API_BASE}/api/camera/snapshot`);
+        drawSnapshot(d.frame_b64, d.cv_labels || {});
+      } catch {
+        document.getElementById('cvStats').textContent = 'Snapshot unavailable';
+      }
+    }
+
+    async function memorySearch() {
+      const q = document.getElementById('memorySearchInput').value.trim();
+      if (!q) return;
+      try {
+        const rows = await fetchJSON(`${API_BASE}/api/memory/search?q=${encodeURIComponent(q)}`);
+        const list = document.getElementById('memoryList');
+        document.getElementById('memoryCount').textContent = String(rows.length);
+        list.innerHTML = rows.map(r => `<div class="chunk"><div class="chunk-head"><span class="cat">${esc(r.category || 'general')}</span><button class="btn btn-danger" data-del="${esc(r.id)}">Delete</button></div><div>${esc(r.content || '')}</div><div class="small" style="margin-top:6px;">${esc(r.source || '')} • ${esc(r.extracted_at || '')}</div></div>`).join('') || '<div class="small">No matches.</div>';
+        list.querySelectorAll('[data-del]').forEach(b => {
+          b.addEventListener('click', async () => {
+            const id = b.getAttribute('data-del');
+            await fetch(`${API_BASE}/api/memory/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            memorySearch();
+          });
+        });
+      } catch {
+        document.getElementById('memoryList').innerHTML = '<div class="small">Memory search unavailable.</div>';
+      }
+    }
+
+    function renderScheduler() {
+      const rows = state.status?.scheduler_jobs || [];
+      const body = document.getElementById('schedulerBody');
+      body.innerHTML = rows.map(r => `<tr><td>${esc(r.job_name)}</td><td>${esc(r.next_run)}</td><td>${esc(r.last_run)}</td><td>${esc(r.status)}</td><td><button class="btn" data-toggle="${esc(r.job_id)}">Toggle</button> <button class="btn" data-run="${esc(r.job_id)}">Run Now</button></td></tr>`).join('') || '<tr><td colspan="5" class="small">No jobs.</td></tr>';
+      body.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', async () => {
+        const id = b.getAttribute('data-toggle');
+        await fetch(`${API_BASE}/api/scheduler/${encodeURIComponent(id)}/toggle`, { method: 'POST' });
+        await loadStatus();
+      }));
+      body.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', async () => {
+        const id = b.getAttribute('data-run');
+        await fetch(`${API_BASE}/api/scheduler/${encodeURIComponent(id)}/run`, { method: 'POST' });
+        await loadStatus();
+      }));
+    }
+
+    function pushLog(line) {
+      if (state.logsPaused) return;
+      state.logLines.push(line);
+      if (state.logLines.length > 200) state.logLines.shift();
+      const root = document.getElementById('logStream');
+      root.innerHTML = state.logLines.map(l => {
+        const cls = (l.level || 'INFO').toLowerCase();
+        return `<div class="log-line log-${cls === 'warning' ? 'warning' : cls === 'error' ? 'error' : 'info'}">[${esc(l.level || 'INFO')}] ${esc(l.message || '')}</div>`;
+      }).join('');
+      root.scrollTop = root.scrollHeight;
+    }
+
+    function renderAll() {
+      renderHeader();
+      renderAgents();
+      renderDevices();
+      renderYouTube();
+      renderScheduler();
+      document.getElementById('memoryCount').textContent = String(state.status?.memory?.total_chunks ?? 0);
+    }
+
+    function connectWS() {
+      const wsState = document.getElementById('wsState');
+      const ws = new WebSocket(WS_URL);
+      state.ws = ws;
+      ws.onopen = () => { state.wsConnected = true; wsState.textContent = 'WS connected'; wsState.classList.remove('warn'); };
+      ws.onclose = () => {
+        state.wsConnected = false;
+        wsState.textContent = 'Reconnecting...';
+        wsState.classList.add('warn');
+        setTimeout(connectWS, 3000);
+      };
+      ws.onerror = () => { wsState.textContent = 'WS error'; wsState.classList.add('warn'); };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'status' && msg.payload) {
+            loadStatus();
+          }
+          if (msg.type === 'transcription' && msg.payload) pushTranscription(msg.payload);
+          if (msg.type === 'log' && msg.payload) pushLog(msg.payload);
+        } catch {}
+      };
+    }
+
+    function connectTranscriptionSSE() {
+      const es = new EventSource('/events/transcription');
+      es.onmessage = (ev) => {
+        try {
+          const d = JSON.parse(ev.data);
+          if (d.type === 'heartbeat') return;
+          if (d.text) pushTranscription(d);
+        } catch {}
+      };
+    }
+
+    function connectLogsSSE() {
+      const es = new EventSource('/events/logs');
+      es.onmessage = (ev) => {
+        try {
+          const d = JSON.parse(ev.data);
+          if (d.message) pushLog(d);
+        } catch {}
+      };
+    }
+
+    function wireModal() {
+      const bg = document.getElementById('metaModalBg');
+      document.getElementById('openMetaBtn').addEventListener('click', () => bg.style.display = 'grid');
+      document.getElementById('metaCloseBtn').addEventListener('click', () => bg.style.display = 'none');
+      document.getElementById('metaGenerateBtn').addEventListener('click', async () => {
+        const title = document.getElementById('metaTitle').value.trim();
+        const description_draft = document.getElementById('metaDesc').value.trim();
+        if (!title) return;
+        const out = document.getElementById('metaOut');
+        out.textContent = 'Generating...';
+        try {
+          const r = await fetch(`${API_BASE}/api/youtube/generate-metadata`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, description_draft })
+          });
+          const d = await r.json();
+          out.textContent = JSON.stringify(d, null, 2);
+        } catch {
+          out.textContent = 'Failed to generate metadata.';
+        }
+      });
+    }
+
+    function wireControls() {
+      document.getElementById('snapshotBtn').addEventListener('click', requestSnapshot);
+      document.getElementById('memorySearchBtn').addEventListener('click', memorySearch);
+      document.getElementById('memorySearchInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') memorySearch();
+      });
+      document.getElementById('pauseLogsBtn').addEventListener('click', (e) => {
+        state.logsPaused = !state.logsPaused;
+        e.target.textContent = state.logsPaused ? 'Resume' : 'Pause';
+      });
+    }
+
+    async function boot() {
+      updateClock();
+      setInterval(updateClock, 1000);
+      wireControls();
+      wireModal();
+      connectWS();
+      connectTranscriptionSSE();
+      connectLogsSSE();
+      await loadStatus();
+      setInterval(loadStatus, 15000);
+    }
+
+    boot();
+  </script>
+</body>
 </html>

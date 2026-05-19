@@ -74,6 +74,20 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "enabled": False,
         },
     ],
+    "camera": {
+        "enabled": True,
+        "proactive_events": True,
+        "vision_query": True,
+        "allow_no_one_detected": False,
+    },
+    "youtube": {
+        "enabled": True,
+        "channel_id": "",
+        "ingest_time": "06:00",
+        "briefing_time": "08:00",
+        "ingest_retention_days": 30,
+        "ingest_max_videos": 20,
+    },
 }
 
 

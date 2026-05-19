@@ -2395,7 +2395,7 @@ async def keepalive_task(session):
 
 
 # AUDIO WORKER
-async def audio_worker(recorder, session, audio_ready, porcupine, winsound):
+async def audio_worker(recorder, session, audio_ready, porcupine, winsound, interaction_event=None):
     await audio_ready.wait()
     while True:
         # Skip sending mic audio while assistant is speaking (echo prevention)
@@ -2406,6 +2406,8 @@ async def audio_worker(recorder, session, audio_ready, porcupine, winsound):
         audio_data = struct.pack("<" + "h" * len(frame), *frame)
         wake_index = porcupine.process(frame)
         if wake_index >= 0:
+            if interaction_event is not None and not interaction_event.is_set():
+                interaction_event.set()
             if winsound:
                 try:
                     winsound.MessageBeep()
@@ -2541,6 +2543,8 @@ async def friday_live_engine():
 
                     shown_input = ""
                     follow_up_mode = False
+                    first_interaction_event = asyncio.Event()
+                    morning_briefing_dispatched = False
 
                     # Start audio playback thread
                     _start_audio_playback(pa)
@@ -2569,6 +2573,42 @@ async def friday_live_engine():
                             await session.send_realtime_input(text=f"[RELEVANT MEMORY CONTEXT]\n{ctx}")
                             await asyncio.sleep(0.2)
                             _last_mem_inject_time = now
+                        except Exception:
+                            pass
+
+                    async def _maybe_deliver_pending_morning_briefing() -> None:
+                        nonlocal morning_briefing_dispatched
+                        if morning_briefing_dispatched:
+                            return
+                        try:
+                            from friday.morning_briefing import (
+                                get_pending_briefing_for_delivery,
+                                mark_briefing_delivered,
+                            )
+                            pending = get_pending_briefing_for_delivery(min_hour=8)
+                            if not pending:
+                                return
+                            brief = str(pending.get("briefing", "")).strip()
+                            if not brief:
+                                return
+                            morning_briefing_dispatched = True
+                            mark_briefing_delivered()
+                            await session.send_realtime_input(
+                                text=(
+                                    "Deliver this as today's proactive morning YouTube briefing in a concise spoken style "
+                                    "before handling other requests.\n\n"
+                                    f"{brief}"
+                                )
+                            )
+                        except Exception:
+                            pass
+
+                    async def _first_interaction_briefing_watcher() -> None:
+                        try:
+                            await first_interaction_event.wait()
+                            await _maybe_deliver_pending_morning_briefing()
+                        except asyncio.CancelledError:
+                            raise
                         except Exception:
                             pass
 
@@ -2604,6 +2644,8 @@ async def friday_live_engine():
                                             txt = sc.input_transcription.text.strip()
                                             if txt and txt != shown_input:
                                                 shown_input = txt
+                                                if not first_interaction_event.is_set():
+                                                    first_interaction_event.set()
                                                 chat.add_user_message(txt)
                                                 # Fire-and-forget memory context injection for audio
                                                 asyncio.create_task(_inject_memory_context(txt))
@@ -2745,8 +2787,9 @@ async def friday_live_engine():
                     # START STREAMS AFTER GREETING
                     recorder.start()
                     audio_task = asyncio.create_task(
-                        audio_worker(recorder, session, audio_ready, porcupine, winsound)
+                        audio_worker(recorder, session, audio_ready, porcupine, winsound, first_interaction_event)
                     )
+                    briefing_task = asyncio.create_task(_first_interaction_briefing_watcher())
                     audio_ready.set()
                     bg_monitor_task = asyncio.create_task(background_monitor(session))
                     video_task = asyncio.create_task(live_video_streamer(session))
@@ -2777,6 +2820,8 @@ async def friday_live_engine():
                             text = await input_queue.get()
                             text = text.strip()
                             if text:
+                                if not first_interaction_event.is_set():
+                                    first_interaction_event.set()
                                 await _inject_memory_context(text)
                                 await session.send_realtime_input(text=text)
                                 chat.add_user_message(text)
@@ -2798,8 +2843,9 @@ async def friday_live_engine():
                         bg_monitor_task.cancel()
                         video_task.cancel()
                         ka_task.cancel()
+                        briefing_task.cancel()
                         reader_task.cancel()
-                        for t in [receive_task, audio_task, bg_monitor_task, video_task, ka_task, reader_task]:
+                        for t in [receive_task, audio_task, bg_monitor_task, video_task, ka_task, briefing_task, reader_task]:
                             try:
                                 await asyncio.wait_for(asyncio.shield(t), timeout=2.0)
                             except (asyncio.CancelledError, asyncio.TimeoutError):

@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import uuid
 import time
-import json
 from datetime import datetime, timedelta
 
 import jwt
@@ -17,11 +16,11 @@ from friday.orchestration_config import ensure_config, save_config
 
 
 def _ensure_secret(cfg: dict) -> str:
-    sidecar_cfg = cfg.get("sidecar", {})
-    secret = sidecar_cfg.get("secret_key")
+    secret = cfg.get("SECRET_KEY") or cfg.get("sidecar", {}).get("secret_key")
     if not secret:
         # generate and persist
         secret = uuid.uuid4().hex + uuid.uuid4().hex
+        cfg["SECRET_KEY"] = secret
         cfg.setdefault("sidecar", {})["secret_key"] = secret
         save_config(cfg)
     return secret
@@ -52,7 +51,9 @@ def main():
     p = argparse.ArgumentParser(description="Generate a JWT token for a Friday sidecar")
     p.add_argument("--device-name", required=True)
     p.add_argument("--capabilities", default="terminal,filesystem,screenshot,system_info")
-    p.add_argument("--brain-url", default="ws://192.168.1.76:3142/sidecar")
+    cfg = ensure_config()
+    default_brain_url = str(cfg.get("sidecar", {}).get("brain_url", "ws://192.168.1.76:3142/sidecar"))
+    p.add_argument("--brain-url", default=default_brain_url)
     p.add_argument("--expires-days", type=int, default=None)
     args = p.parse_args()
 

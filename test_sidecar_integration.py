@@ -1,35 +1,69 @@
-"""Integration test: mock sidecar connects to brain WS, sends telemetry and handles command."""
+"""Integration tests for Friday sidecar brain registry loop."""
+from __future__ import annotations
+
 import asyncio
-import json
-import uuid
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from friday.sidecar.brain_ws_server import router as sidecar_router
-from friday.sidecar.token_generator import generate_token
-from friday.sidecar.device_registry import get_registry
+from friday.sidecar.device_registry import DeviceRegistry, SidecarCommand
+
+
+class FakeWebSocket:
+    def __init__(self):
+        self.sent = []
+
+    async def send_json(self, payload):
+        self.sent.append(payload)
 
 
 @pytest.mark.asyncio
-async def test_sidecar_connect_and_command(loop):
-    app = FastAPI()
-    app.include_router(sidecar_router)
+async def test_registry_register_and_send_command_result():
+    registry = DeviceRegistry()
+    ws = FakeWebSocket()
 
-    client = TestClient(app)
+    await registry.register("test-device", ["system_info"], ws, device_id="dev-1")
+    assert registry.get("test-device") is not None
 
-    # generate a token using config (ensure_config will create secret)
-    token = generate_token("test-device", ["system_info"], "ws://testserver/sidecar")
+    async def resolve_result():
+        await asyncio.sleep(0.05)
+        await registry.handle_command_result("cmd-123", {"ok": True, "value": 42})
 
-    # Use websockets to connect to the test server
-    import websockets
+    task = asyncio.create_task(resolve_result())
+    result = await registry.send_command(
+        "test-device",
+        {
+            "type": "command",
+            "command_id": "cmd-123",
+            "capability": "system_info",
+            "action": "get",
+            "params": {},
+        },
+        timeout=2,
+    )
+    await task
 
-    async with websockets.connect(f"ws://127.0.0.1:8000/sidecar?token={token}") as ws:
-        await ws.send(json.dumps({"type": "telemetry", "payload": {"ping": 1}}))
-        # send a command from brain to sidecar via registry
-        registry = get_registry()
-        # Wait briefly for registration (in a real test use synchronization)
-        await asyncio.sleep(0.1)
-        devices = registry.list_online()
-        assert any(d.device_name == "test-device" for d in devices)
+    assert result == {"ok": True, "value": 42}
+    assert len(ws.sent) == 1
+    assert ws.sent[0]["command_id"] == "cmd-123"
+
+
+@pytest.mark.asyncio
+async def test_registry_broadcast():
+    registry = DeviceRegistry()
+    ws_a = FakeWebSocket()
+    ws_b = FakeWebSocket()
+
+    await registry.register("a", ["system_info"], ws_a, device_id="dev-a")
+    await registry.register("b", ["system_info"], ws_b, device_id="dev-b")
+
+    async def resolve_later(command_id: str):
+        await asyncio.sleep(0.05)
+        await registry.handle_command_result(command_id, {"ok": True})
+
+    command = SidecarCommand(capability="system_info", action="get", params={})
+    waiter = asyncio.create_task(resolve_later(command.command_id))
+    results = await registry.broadcast(command, timeout=2)
+    await waiter
+
+    assert "a" in results
+    assert "b" in results

@@ -1,121 +1,162 @@
-"""Async pub/sub bus for Friday agent and orchestrator events.
-
-Uses in-memory asyncio queues by default and can switch to Redis pub/sub
-when REDIS_URL is present and the redis asyncio client is installed.
 """
+FRIDAY Context Bus — async pub/sub event bus with optional Redis persistence.
+
+Agents emit events:
+  - agent.started      {agent_id, task_id, task_type}
+  - agent.progress     {agent_id, task_id, progress_pct, message}
+  - agent.completed    {agent_id, task_id, output}
+  - agent.failed       {agent_id, task_id, error}
+  - orchestrator.tick  {timestamp, status_summary}
+
+Subscribers receive via asyncio.Queue or (optionally) Redis pub/sub channels.
+"""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import os
+import time
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, DefaultDict, Dict, Optional
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable, Optional
 
-from friday.logging_utils import configure_logging
-
-
-logger = configure_logging(__name__)
+Handler = Callable[[dict[str, Any]], Awaitable[None]]
 
 
-@dataclass(slots=True)
-class BusMessage:
-    """Envelope used for bus payloads and Redis serialization."""
-
+@dataclass
+class Subscription:
     topic: str
-    payload: Dict[str, Any]
-
-    def to_json(self) -> str:
-        return json.dumps({"topic": self.topic, "payload": self.payload}, ensure_ascii=False)
-
-    @classmethod
-    def from_json(cls, raw: str) -> "BusMessage":
-        data = json.loads(raw)
-        return cls(topic=data["topic"], payload=data["payload"])
+    handler: Handler
+    queue: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
+    running: bool = True
 
 
 class ContextBus:
-    """In-memory or Redis-backed asynchronous event bus."""
+    """
+    Async pub/sub event bus for agent-to-agent and agent-to-orchestrator communication.
 
-    def __init__(self) -> None:
-        self._latest: Dict[str, Dict[str, Any]] = {}
-        self._queues: DefaultDict[str, set[asyncio.Queue]] = defaultdict(set)
-        self._lock = asyncio.Lock()
-        self._redis_url = os.getenv("REDIS_URL")
-        self._redis = None
-        self._redis_available = False
-        if self._redis_url:
-            self._redis_available = self._try_init_redis()
+    Topics:
+      - agent.{event_type}    (started, progress, completed, failed)
+      - user.{directive}      (cancel, pause, resume)
+      - orchestrator.{event}
+      - system.{event}
+    """
 
-    def _try_init_redis(self) -> bool:
-        try:
-            import redis.asyncio as redis  # type: ignore
+    def __init__(self, redis_url: Optional[str] = None):
+        self._subscriptions: dict[str, list[Subscription]] = defaultdict(list)
+        self._history: list[dict[str, Any]] = []
+        self._max_history = 500
+        self._redis_url = redis_url or os.getenv("REDIS_URL", "")
+        self._redis_pubsub = None
 
-            self._redis = redis.from_url(self._redis_url, decode_responses=True)
-            logger.info("Context bus connected to Redis")
-            return True
-        except Exception as exc:
-            logger.warning("Redis unavailable, falling back to in-memory bus: %s", exc)
-            self._redis = None
-            return False
+    # ── Publish ──────────────────────────────────────────────
 
-    async def publish(self, topic: str, payload: Dict[str, Any]) -> None:
-        """Publish a payload to a topic and store the latest value."""
-        envelope = {"topic": topic, "payload": payload}
-        self._latest[topic] = payload
+    async def publish(self, topic: str, data: dict[str, Any]):
+        """Publish an event to all subscribers of the topic."""
+        entry = {"topic": topic, "data": data, "ts": time.time()}
+        self._history.append(entry)
+        if len(self._history) > self._max_history:
+            self._history = self._history[-self._max_history:]
 
-        if self._redis_available and self._redis is not None:
-            message = BusMessage(topic=topic, payload=payload).to_json()
-            await self._redis.set(f"context_bus:latest:{topic}", message)
-            await self._redis.publish(topic, message)
-            return
+        subs = self._subscriptions.get(topic, []) + self._subscriptions.get("*", [])
+        for sub in subs:
+            if sub.running:
+                try:
+                    sub.queue.put_nowait(entry)
+                except asyncio.QueueFull:
+                    pass  # slow consumer — drop oldest
 
-        async with self._lock:
-            for queue in list(self._queues.get(topic, set())):
-                queue.put_nowait(envelope)
-
-    async def subscribe(self, topic: str) -> AsyncIterator[Dict[str, Any]]:
-        """Subscribe to a topic and yield payload dictionaries forever."""
-        if self._redis_available and self._redis is not None:
-            pubsub = self._redis.pubsub()
-            await pubsub.subscribe(topic)
+        # Redis forwarding (optional)
+        if self._redis_pubsub:
             try:
-                async for message in pubsub.listen():
-                    if message.get("type") != "message":
-                        continue
-                    envelope = BusMessage.from_json(message["data"])
-                    yield envelope.payload
-            finally:
-                await pubsub.unsubscribe(topic)
-                await pubsub.close()
+                await self._redis_pubsub.publish(topic, json.dumps(data))
+            except Exception:
+                pass  # redis unavailable
+
+    # ── Subscribe ────────────────────────────────────────────
+
+    def subscribe(self, topic: str, handler: Optional[Handler] = None) -> Subscription:
+        """
+        Register a subscriber for a topic. If handler is provided, it is called
+        asynchronously for each event. Returns Subscription (can unsubscribe).
+        """
+        sub = Subscription(topic=topic, handler=handler or _null_handler)
+        self._subscriptions[topic].append(sub)
+        return sub
+
+    def unsubscribe(self, sub: Subscription):
+        """Remove a subscription."""
+        sub.running = False
+        subs = self._subscriptions.get(sub.topic, [])
+        if sub in subs:
+            subs.remove(sub)
+
+    # ── Consume (for polling subscribers) ────────────────────
+
+    def events(self, topic: str) -> asyncio.Queue[dict[str, Any]]:
+        """Return the queue for a topic. Subscribe with this to poll."""
+        sub = self.subscribe(topic)
+        return sub.queue
+
+    # ── History ──────────────────────────────────────────────
+
+    def recent_events(self, topic: Optional[str] = None, limit: int = 20) -> list[dict]:
+        """Return recent event history, optionally filtered by topic."""
+        events = self._history
+        if topic:
+            events = [e for e in events if e["topic"] == topic]
+        return events[-limit:]
+
+    def last_event(self, topic: str) -> Optional[dict]:
+        """Return the most recent event for a topic."""
+        events = self.recent_events(topic, limit=1)
+        return events[0] if events else None
+
+    # ── Lifecycle ────────────────────────────────────────────
+
+    async def start_redis(self):
+        """Start optional Redis pub/sub client."""
+        if not self._redis_url:
             return
-
-        queue: asyncio.Queue = asyncio.Queue()
-        async with self._lock:
-            self._queues[topic].add(queue)
         try:
-            while True:
-                envelope = await queue.get()
-                yield envelope["payload"]
-        finally:
-            async with self._lock:
-                self._queues[topic].discard(queue)
+            import redis.asyncio as aioredis
+            self._redis_pubsub = await aioredis.from_url(self._redis_url)
+        except Exception:
+            self._redis_pubsub = None
 
-    async def get_latest(self, topic: str) -> Optional[Dict[str, Any]]:
-        """Return the latest payload published for a topic."""
-        if topic in self._latest:
-            return self._latest[topic]
+    async def stop(self):
+        """Shut down everything."""
+        for subs in self._subscriptions.values():
+            for sub in subs:
+                sub.running = False
+        self._subscriptions.clear()
+        if self._redis_pubsub:
+            try:
+                await self._redis_pubsub.close()
+            except Exception:
+                pass
 
-        if self._redis_available and self._redis is not None:
-            raw = await self._redis.get(f"context_bus:latest:{topic}")
-            if raw:
-                return BusMessage.from_json(raw).payload
-        return None
+    def status_snapshot(self) -> dict:
+        """Quick snapshot of bus health."""
+        return {
+            "subscriptions": sum(len(v) for v in self._subscriptions.values()),
+            "history_size": len(self._history),
+            "topics": list(self._subscriptions.keys()),
+            "redis": self._redis_url != "",
+        }
 
 
-_BUS = ContextBus()
+async def _null_handler(data: dict) -> None:
+    pass
+
+
+# Global singleton accessor for backward compatibility
+_BUS_INSTANCE: Optional[ContextBus] = None
 
 
 def get_bus() -> ContextBus:
-    """Return the shared context bus instance."""
-    return _BUS
+    global _BUS_INSTANCE
+    if _BUS_INSTANCE is None:
+        _BUS_INSTANCE = ContextBus()
+    return _BUS_INSTANCE

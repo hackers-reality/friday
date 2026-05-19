@@ -1,24 +1,19 @@
-"""Model routing for Friday's NVIDIA NIM agent pool.
-
-Selects the best NIM model for a task type using config.yaml overrides,
-runtime catalog availability, and a simple fallback order per category.
 """
+FRIDAY NIM Router — maps task_type strings to NIM model IDs.
+Supports config.yaml overrides under nim.model_map and auto-fallback
+to next-best model in category when a model returns 404.
+"""
+
 from __future__ import annotations
 
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Optional
 
-from friday.logging_utils import configure_logging
-from friday.orchestration_config import ensure_config
+import yaml
 
-
-logger = configure_logging(__name__)
-
-DEFAULT_MODEL_MAP: Dict[str, List[str]] = {
+_DEFAULT_MODEL_MAP: dict[str, list[str]] = {
     "code_gen": [
         "nvidia/llama-3.1-nemotron-70b-instruct",
-        "deepseek/deepseek-v3",
         "meta/llama-3.3-70b-instruct",
     ],
     "image_analysis": [
@@ -44,126 +39,98 @@ DEFAULT_MODEL_MAP: Dict[str, List[str]] = {
     ],
 }
 
-TASK_ALIASES = {
-    "code": "code_gen",
-    "coding": "code_gen",
-    "programming": "code_gen",
-    "vision": "image_analysis",
-    "image": "image_analysis",
-    "camera": "image_analysis",
-    "photo": "image_analysis",
-    "research": "research",
-    "summarize": "summarization",
-    "summary": "summarization",
-    "reason": "reasoning",
-    "reasoning": "reasoning",
-    "general": "general",
-    "chat": "general",
-}
+_CONFIG_CACHE: Optional[dict] = None
 
 
-def _normalize_task_type(task_type: str) -> str:
-    task = task_type.strip().lower()
-    return TASK_ALIASES.get(task, task)
+def _load_config() -> dict:
+    global _CONFIG_CACHE
+    if _CONFIG_CACHE is not None:
+        return _CONFIG_CACHE
+    path = Path.cwd() / "config.yaml"
+    if path.exists():
+        with open(path) as f:
+            _CONFIG_CACHE = yaml.safe_load(f) or {}
+    else:
+        _CONFIG_CACHE = {}
+    return _CONFIG_CACHE
 
 
-def _normalize_candidates(value: Any) -> List[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        primary = value.get("primary") or value.get("model")
-        fallbacks = value.get("fallbacks") or value.get("alternatives") or []
-        if isinstance(fallbacks, str):
-            fallbacks = [fallbacks]
-        items = [primary] if primary else []
-        items.extend(fallbacks)
-        return [item for item in items if isinstance(item, str) and item]
-    if isinstance(value, Sequence):
-        return [str(item) for item in value if str(item)]
-    return [str(value)]
+def _build_model_map() -> dict[str, list[str]]:
+    """Merge config overrides into defaults."""
+    cfg = _load_config()
+    overrides = cfg.get("nim", {}).get("model_map", {})
+    merged = dict(_DEFAULT_MODEL_MAP)
+    for task_type, models in overrides.items():
+        if isinstance(models, list) and models:
+            merged[task_type] = models
+    return merged
 
 
-class NIMRouter:
-    """Resolve the best NIM model for a task type."""
+def resolve_model(task_type: str, unavailable: Optional[set[str]] = None) -> Optional[str]:
+    """
+    Given a task type, return the best available NIM model ID.
 
-    def __init__(self, config_path: Path | None = None) -> None:
-        self._config_path = Path(config_path) if config_path else None
-        self._config = ensure_config(self._config_path) if self._config_path else ensure_config()
-        self._catalog: Set[str] = set()
-        self._unavailable: Set[str] = set()
+    Args:
+        task_type: e.g. 'code_gen', 'research', 'image_analysis', 'general'
+        unavailable: set of model IDs known to be unavailable (from health checks)
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Return the current orchestration config."""
-        return self._config
+    Returns:
+        Model ID string, or None if no model available for this task type.
+    """
+    model_map = _build_model_map()
+    candidates = model_map.get(task_type, []) or model_map.get("general", [])
+    unavailable = unavailable or set()
 
-    def reload(self) -> Dict[str, Any]:
-        """Reload config.yaml from disk."""
-        self._config = ensure_config(self._config_path) if self._config_path else ensure_config()
-        return self._config
+    for model in candidates:
+        if model not in unavailable:
+            return model
 
-    def get_candidates(self, task_type: str) -> List[str]:
-        """Return the configured candidate models for a task type."""
-        config_models = self._config.get("nim", {}).get("model_map", {}) or {}
-        normalized_task = _normalize_task_type(task_type)
-        candidates = _normalize_candidates(config_models.get(normalized_task))
-        if not candidates:
-            candidates = _normalize_candidates(DEFAULT_MODEL_MAP.get(normalized_task))
-        if not candidates:
-            candidates = _normalize_candidates(DEFAULT_MODEL_MAP["general"])
-        return candidates
-
-    def update_catalog(self, models: Iterable[str]) -> None:
-        """Store a runtime catalog of available models."""
-        self._catalog = {str(model) for model in models}
-        logger.info("Updated NIM catalog with %d model ids", len(self._catalog))
-
-    def mark_unavailable(self, model_id: str) -> None:
-        """Remember a model that returned 404/503 so we skip it next time."""
-        self._unavailable.add(model_id)
-
-    def resolve_model(
-        self,
-        task_type: str,
-        *,
-        available_models: Optional[Iterable[str]] = None,
-        exclude: Optional[Iterable[str]] = None,
-    ) -> str:
-        """Return the first viable model for the task type."""
-        candidates = self.get_candidates(task_type)
-        catalog = set(available_models or self._catalog)
-        blocked = self._unavailable.union({str(item) for item in (exclude or [])})
-
-        for model_id in candidates:
-            if model_id in blocked:
-                continue
-            if catalog and model_id not in catalog:
-                continue
-            return model_id
-
-        for model_id in candidates:
-            if model_id not in blocked:
-                logger.warning("Falling back to uncatalogued model %s for %s", model_id, task_type)
-                return model_id
-
-        fallback = DEFAULT_MODEL_MAP["general"][0]
-        logger.warning("No candidate available for %s, falling back to %s", task_type, fallback)
-        return fallback
-
-    async def refresh_catalog(self, client: Any) -> Set[str]:
-        """Ask the NIM client for the current model catalog."""
-        models = await client.list_models()
-        catalog = {entry if isinstance(entry, str) else entry.get("id", "") for entry in models}
-        catalog = {model for model in catalog if model}
-        self.update_catalog(catalog)
-        return catalog
+    return candidates[0] if candidates else None
 
 
-_ROUTER = NIMRouter()
+def list_task_types() -> list[str]:
+    """Return all known task types."""
+    return list(_build_model_map().keys())
 
 
-def get_router() -> NIMRouter:
-    """Return the shared router instance."""
-    return _ROUTER
+def list_all_models() -> list[str]:
+    """Return deduplicated list of all models across all task types."""
+    seen: set[str] = set()
+    models: list[str] = []
+    for candidates in _build_model_map().values():
+        for m in candidates:
+            if m not in seen:
+                seen.add(m)
+                models.append(m)
+    return models
+
+
+def classify_task_type(utterance: str) -> str:
+    """
+    Lightweight keyword-based task type classification.
+    Used before NIM call to route to correct model.
+    """
+    text = utterance.lower()
+
+    code_keywords = ["code", "function", "class", "implement", "debug", "fix", "write",
+                     "algorithm", "api", "endpoint", "refactor", "test", "pull request"]
+    research_keywords = ["research", "find", "search", "look up", "analyze", "compare",
+                         "what is", "investigate", "summarize", "explain"]
+    image_keywords = ["see", "look", "image", "picture", "photo", "object", "detect",
+                      "animal", "face", "hand", "scene", "what is this", "camera"]
+    reasoning_keywords = ["why", "how does", "explain", "reason", "logic", "solving",
+                          "strategy", "plan", "optimize", "compare and contrast"]
+    summary_keywords = ["summarize", "tl;dr", "brief", "recap", "overview", "key points"]
+
+    if any(k in text for k in image_keywords):
+        return "image_analysis"
+    if any(k in text for k in code_keywords):
+        return "code_gen"
+    if any(k in text for k in research_keywords):
+        return "research"
+    if any(k in text for k in summary_keywords):
+        return "summarization"
+    if any(k in text for k in reasoning_keywords):
+        return "reasoning"
+
+    return "general"
