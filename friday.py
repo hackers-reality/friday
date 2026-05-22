@@ -103,7 +103,9 @@ def main():
     except KeyboardInterrupt:
         _log("Shutting down.")
     except Exception as e:
+        import traceback
         _log(f"[FAIL] Live engine error: {e}")
+        traceback.print_exc()
         max_restarts = 5
         for attempt in range(1, max_restarts + 1):
             _log(f"Restarting (attempt {attempt}/{max_restarts})...")
@@ -118,6 +120,7 @@ def main():
                 break
             except Exception as e2:
                 _log(f"[FAIL] Live engine error (attempt {attempt}): {e2}")
+                traceback.print_exc()
         else:
             _log("[FAIL] Max restarts reached. Exiting.")
 

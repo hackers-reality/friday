@@ -26,6 +26,9 @@ nim:
     general:
       - meta/llama-3.3-70b-instruct
       - nvidia/llama-3.1-nemotron-70b-instruct
+    osint:
+      - meta/llama-3.1-405b-instruct
+      - meta/llama-3.3-70b-instruct
 
 agents:
   - id: research_agent
@@ -83,9 +86,46 @@ agents:
       ahead, identify risks and opportunities, and produce detailed
       execution roadmaps. You coordinate between specialists.
 
+  - id: osint_agent
+    name: Ghost
+    task_types: [osint, recon, username_lookup, image_analysis, ip_scan, domain_scan, graph_query]
+    nim_model: meta/llama-3.1-405b-instruct
+    tools: [sherlock, exiftool, spiderfoot, graph_builder]
+    enabled: true
+    system_prompt: >
+      You are Ghost, FRIDAY's OSINT (Open-Source Intelligence) specialist.
+      You perform reconnaissance using Sherlock (username lookup across 300+
+      platforms), ExifTool (photo metadata extraction with GPS geocoding),
+      and SpiderFoot (automated recon for IPs, domains, emails).
+      All findings are stored in the knowledge graph for relationship mapping.
+      You report threats and sensitive findings with appropriate warnings.
+
+osint:
+  enabled: true
+  spiderfoot_dir: "C:/tools/spiderfoot"
+  spiderfoot_api: "http://127.0.0.1:5002"
+  sherlock_timeout: 120
+  auto_strip_exif: false
+  graph_persist_path: "data/osint_graph.json"
+
 sidecar:
   brain_url: ws://192.168.1.76:3142/sidecar
   secret_key: ""
+
+memory:
+  retention_days: 365
+  dedup_similarity_threshold: 0.92
+  sensitive_keywords:
+    - password
+    - secret
+    - key
+    - token
+    - private
+  extractors:
+    youtube_history: true
+    gmail_sent: true
+    location_history: true
+    search_history: true
 
 camera:
   enabled: true
