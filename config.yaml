@@ -29,6 +29,9 @@ nim:
     osint:
       - meta/llama-3.1-405b-instruct
       - meta/llama-3.3-70b-instruct
+    browse:
+      - meta/llama-3.3-70b-instruct
+      - meta/llama-3.1-405b-instruct
 
 agents:
   - id: research_agent
@@ -99,6 +102,34 @@ agents:
       and SpiderFoot (automated recon for IPs, domains, emails).
       All findings are stored in the knowledge graph for relationship mapping.
       You report threats and sensitive findings with appropriate warnings.
+
+  - id: browser_agent
+    name: Atlas
+    task_types: [browse, web_automation, form_fill, web_extract, screenshot]
+    nim_model: meta/llama-3.3-70b-instruct
+    tools: [navigate, click, type_text, extract_text, screenshot]
+    enabled: true
+    system_prompt: >
+      You are Atlas, FRIDAY's browser automation specialist. You control
+      Chrome via CDP using the user's existing profile — inheriting all
+      cookies, sessions, and logged-in accounts. You can navigate, click,
+      type, extract text, scroll, fill forms, and take screenshots.
+      Every action uses human-like delays and anti-detection to avoid
+      bot detection. You never browse autonomously — only when asked.
+
+browser:
+  enabled: true
+  headless: true
+  chrome_profile: auto
+  anti_detection: true
+  action_delay_min: 0.3
+  action_delay_max: 1.2
+  screenshot_on_action: false
+  sessions:
+    personal:
+      profile_dir: ""
+      headless: true
+      description: "Main Chrome profile — inherits all cookies and sessions"
 
 osint:
   enabled: true
