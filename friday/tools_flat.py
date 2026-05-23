@@ -3206,7 +3206,7 @@ __all__ = [
     "github_create_branch", "github_create_pr", "github_list_prs", "github_pr_comment", "github_pr_diff", "github_pr_files", "github_delete_file", "github_get_contents", "github_get_user", "github_self_modify", "github_review_pr",
     "github_create_repo", "github_list_issues", "github_create_issue", "github_search_code",
     "github_merge_pr", "github_repo_info", "github_list_branches", "github_commit_history",
-    "github_authorize", "github_exchange_code", "github_setup",
+    "github_authorize", "github_exchange_code", "github_refresh_token", "github_setup",
     "multi_agent_delegate", "message_channel_tool",
     "send_notification", "get_pending_notifications", "clear_notifications",
     "dream_tool", "scheduler_tool", "skills_tool", "predictive_tool",
