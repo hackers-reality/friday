@@ -1,6 +1,7 @@
 """
-Friday Proactive Screen Monitor - Phase 2.2 Enhanced
-Watches screen continuously, analyzes with AI, makes proactive comments.
+FRIDAY Proactive Screen Monitor — watches screen, reads health state,
+and makes smart proactive comments about what the user is doing and how
+the system is performing. Extended with health-aware proactive speaking.
 """
 from typing import Optional, Callable, Dict, Any__
 
@@ -71,11 +72,33 @@ class ProactiveScreenMonitor:
         self.current_activity = "Unknown"
         self.activity_start_time = time.time()
         self.screenshot_count = 0
+        self._last_health_comment_time = 0.0
+        self._health_comment_interval = 120.0  # Every 2 minutes
+        self._last_health_state = "unknown"
         
     def _calculate_image_hash(self, image_bytes: bytes) -> str:
         """Simple hash to detect if screen changed."""
         return str(hash(image_bytes) % 1000000)
     
+    def _get_health_context(self) -> str:
+        """Get a short health summary for the AI prompt."""
+        try:
+            from friday.health_monitor import get_health_monitor
+            hm = get_health_monitor()
+            snap = hm.snapshot()
+            self._last_health_state = snap.get("overall", "unknown")
+            comps = snap.get("components", {})
+            details = []
+            for name, st in comps.items():
+                s = st.get("status", "?")
+                if s != "ok":
+                    details.append(f"{name}={s}")
+            if details:
+                return f"System health: {snap['overall']} ({', '.join(details)})"
+            return f"System health: {snap['overall']} (all subsystems operational)"
+        except Exception:
+            return "System health: unknown"
+
     def _capture_and_analyze(self) -> Optional[Dict[str, Any]]:
         """Capture screen and analyze with AI."""
         try:
@@ -119,12 +142,16 @@ class ProactiveScreenMonitor:
                         )
                     )
                     
+                    health_context = self._get_health_context()
                     text_part = types.Part(
-                        text="""
+                        text=f"""
                         You are Friday's vision system. Analyze this screenshot briefly.
                         1. What is the user doing? (watching anime, coding, browsing, gaming, etc.)
                         2. What app/window are they in?
                         3. One casual, observant comment (1 sentence max).
+                        
+                        Context: {health_context}
+                        If a subsystem is degraded, acknowledge it casually.
                         If they're watching anime, mention the show if recognizable.
                         If they're coding, offer help casually.
                         Don't repeat yourself. Be concise. No preamble.

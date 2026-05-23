@@ -1671,56 +1671,54 @@ def draft_email(context: str, recipient: str) -> str:
 #  Instagram Messaging 
 
 def send_instagram_dm(username: str, message: str) -> str:
-    """Send Instagram DM using browser automation. Must be logged into Instagram in the default browser."""
+    """Send Instagram DM using browser_manager (Playwright or Pyppeteer CDP).
+    Must be logged into Instagram in Chrome.
+    Uses browser_manager with existing Chrome profile — inherits all cookies/sessions."""
+    import asyncio
+    import time
+
+    async def _send():
+        from friday.browser_manager import BrowserManager
+        bm = BrowserManager.get_instance()
+        page = await bm.get_page()
+
+        await page.goto("https://www.instagram.com/direct/new/", wait_until="networkidle" if bm._backend != "pyppeteer" else "networkidle0")
+        await asyncio.sleep(3)
+
+        try:
+            if bm._backend == "pyppeteer":
+                await page.waitForSelector("input[placeholder='Search...']", timeout=10000)
+                await page.type("input[placeholder='Search...']", username)
+                await asyncio.sleep(2)
+                await page.keyboard.press("Enter")
+                await asyncio.sleep(1)
+                await page.keyboard.press("Tab")
+                await asyncio.sleep(0.5)
+                await page.type("div[role='textbox']", message)
+                await asyncio.sleep(0.5)
+                await page.keyboard.press("Enter")
+            else:
+                await page.wait_for_selector("input[placeholder='Search...']", timeout=10000)
+                await page.fill("input[placeholder='Search...']", username)
+                await asyncio.sleep(2)
+                await page.keyboard.press("Enter")
+                await asyncio.sleep(1)
+                await page.keyboard.press("Tab")
+                await asyncio.sleep(0.5)
+                await page.type("div[role='textbox']", message)
+                await asyncio.sleep(0.5)
+                await page.keyboard.press("Enter")
+
+            await asyncio.sleep(2)
+            return f"[OK] Message sent to {username} via Instagram"
+        except Exception as e:
+            return f"[FAIL] Instagram DM failed during interaction: {e}"
+
     try:
-        import webbrowser
-        import pygetwindow as gw
-        import pyautogui
-        import time
-        import urllib.parse
-
-        # Use Instagram's direct message URL — recipient is entered via search
-        dm_url = "https://www.instagram.com/direct/new/"
-        webbrowser.open(dm_url)
-        time.sleep(4)
-
-        # Try focusing an Instagram or browser window
-        target_titles = ['Instagram', 'Chrome', 'Edge', 'Mozilla Firefox', 'Brave', 'Opera']
-        browser_windows = [w for w in gw.getAllTitles() if any(b in w for b in target_titles)]
-        if not browser_windows:
-            return "[FAIL] Instagram didn't load. Please log in to Instagram in Chrome first."
-
-        for w in browser_windows:
-            try:
-                gw.getWindowsWithTitle(w)[0].activate()
-                break
-            except Exception:
-                pass
-        time.sleep(1)
-
-        # Type the username to search for the recipient
-        pyautogui.typewrite(username)
-        time.sleep(2)
-
-        # Select the first result
-        pyautogui.press('enter')
-        time.sleep(1)
-
-        # Navigate to message input
-        pyautogui.press('tab')
-        time.sleep(0.5)
-
-        # Type the message
-        pyautogui.typewrite(message)
-        time.sleep(0.5)
-
-        # Send
-        pyautogui.press('enter')
-
-        return f"[OK] Message sent to {username} via Instagram"
-
-    except ImportError:
-        return "[FAIL] pygetwindow or pyautogui not installed. Install: pip install pygetwindow pyautogui"
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(_send())
+        loop.close()
+        return result
     except Exception as e:
         return f"[FAIL] Instagram DM error: {e}"
 

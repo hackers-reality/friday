@@ -30,18 +30,43 @@ def _save_pending(data: Dict) -> None:
     _PENDING_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+def _get_health_section() -> str:
+    """Get system health summary for briefing."""
+    try:
+        from friday.health_monitor import get_health_monitor
+        hm = get_health_monitor()
+        snap = hm.snapshot()
+        alerts = snap.get("alerts", [])
+        today_alerts = [a for a in alerts if a.get("time", "").startswith(date.today().isoformat())] if alerts else []
+        lines = [
+            f"System health: {snap['overall']}",
+            f"Uptime: {snap['uptime_human']}",
+            f"Alerts today: {len(today_alerts)}",
+        ]
+        if today_alerts:
+            for a in today_alerts[-3:]:
+                lines.append(f"  - [{a.get('severity','info').upper()}] {a.get('source','?')}: {a.get('message','')}")
+        return "\n".join(lines)
+    except Exception:
+        return "System health: unavailable"
+
+
 def build_briefing(channel_id: str) -> str:
     delta = get_growth_delta(channel_id, days=1)
     top = get_top_videos(channel_id, n=1)
     top_title = top[0]["title"] if top else "No videos"
     lines = []
-    lines.append(f"YouTube briefing for {date.today().isoformat()}")
-    lines.append(f"Subscriber change: {delta.get('subscribers_delta',0)}")
-    lines.append(f"Views change: {delta.get('views_delta',0)}")
-    lines.append(f"Top video: {top_title}")
+    lines.append(f"FRIDAY Morning Briefing — {date.today().isoformat()}")
+    lines.append("")
+    lines.append("[YouTube Analytics]")
+    lines.append(f"  Subscriber change: {delta.get('subscribers_delta',0)}")
+    lines.append(f"  Views change: {delta.get('views_delta',0)}")
+    lines.append(f"  Top video: {top_title}")
     cfg = ensure_config().get("youtube", {})
-    # include pending content ideas count
-    lines.append("Pending content ideas: check dashboard")
+    lines.append("  Pending content ideas: check dashboard")
+    lines.append("")
+    lines.append("[System Health]")
+    lines.append(f"  {_get_health_section()}")
     return "\n".join(lines)
 
 

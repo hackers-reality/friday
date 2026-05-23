@@ -284,15 +284,133 @@ def run_benchmarks() -> dict:
     return results
 
 
-# ─── Tool Function ───────────────────────────────────────
+# ─── Deep Self-Diagnostics ──────────────────────────────────
+
+def check_subsystem_interconnect() -> list:
+    """Check that all FRIDAY subsystems can talk to each other."""
+    results = []
+
+    # Context bus
+    try:
+        from friday.context_bus import get_bus
+        bus = get_bus()
+        snap = bus.status_snapshot()
+        results.append({"check": "interconnect:context_bus", "status": "ok",
+                         "detail": f"{snap['subscriptions']} subs, {snap['history_size']} events"})
+    except Exception as e:
+        results.append({"check": "interconnect:context_bus", "status": "fail", "detail": str(e)})
+
+    # Browser manager
+    try:
+        from friday.browser_manager import BrowserManager
+        bm = BrowserManager.get_instance()
+        bs = bm.status()
+        results.append({"check": "interconnect:browser", "status": "ok" if bs.get("running") else "warn",
+                         "detail": f"backend={bs.get('backend','?')} session={bs.get('active_session','?')}"})
+    except Exception as e:
+        results.append({"check": "interconnect:browser", "status": "warn", "detail": str(e)})
+
+    # Health monitor
+    try:
+        from friday.health_monitor import get_health_monitor
+        hm = get_health_monitor()
+        snap = hm.snapshot()
+        results.append({"check": "interconnect:health_monitor", "status": "ok",
+                         "detail": f"overall={snap['overall']} components={snap['monitored_count']}"})
+    except Exception as e:
+        results.append({"check": "interconnect:health_monitor", "status": "warn", "detail": str(e)})
+
+    # Orchestrator
+    try:
+        from friday.orchestrator import Orchestrator
+        orch = Orchestrator.get_instance() if hasattr(Orchestrator, 'get_instance') else None
+        if orch:
+            st = orch.status() if hasattr(orch, 'status') else {}
+            results.append({"check": "interconnect:orchestrator", "status": "ok",
+                             "detail": f"agents={st.get('active_agents', '?')}"})
+        else:
+            results.append({"check": "interconnect:orchestrator", "status": "warn", "detail": "Not initialized"})
+    except Exception as e:
+        results.append({"check": "interconnect:orchestrator", "status": "warn", "detail": str(e)})
+
+    # Proactive monitors
+    try:
+        from friday.monitor import _monitor_thread
+        running = _monitor_thread is not None and _monitor_thread.is_alive()
+        results.append({"check": "interconnect:system_monitor", "status": "ok" if running else "warn",
+                         "detail": "running" if running else "idle"})
+    except Exception as e:
+        results.append({"check": "interconnect:system_monitor", "status": "warn", "detail": str(e)})
+
+    return results
+
+
+def deep_diagnostics() -> str:
+    """Run a comprehensive deep-diagnostic of all FRIDAY subsystems."""
+    lines = [
+        "=" * 60,
+        "  FRIDAY DEEP SELF-DIAGNOSTIC",
+        f"  Generated: {_now()}",
+        "=" * 60,
+        "",
+    ]
+
+    # Standard diagnostics
+    lines.append("[SECTION] Standard Diagnostics")
+    std = run_diagnostics()
+    for r in std:
+        sym = "OK" if r["status"] == "ok" else ("WA" if r["status"] == "warn" else "!!")
+        lines.append(f"  [{sym}] {r['check']}: {r['detail']}")
+
+    lines.append("")
+    lines.append("[SECTION] Subsystem Interconnect")
+    inter = check_subsystem_interconnect()
+    for r in inter:
+        sym = "OK" if r["status"] == "ok" else ("WA" if r["status"] == "warn" else "!!")
+        lines.append(f"  [{sym}] {r['check']}: {r['detail']}")
+
+    lines.append("")
+    lines.append("[SECTION] Health Monitor Snapshot")
+    try:
+        from friday.health_monitor import get_health_monitor
+        hm = get_health_monitor()
+        snap = hm.snapshot()
+        lines.append(f"  Overall: {snap['overall']}")
+        lines.append(f"  Uptime: {snap['uptime_human']}")
+        lines.append(f"  Components: {snap['monitored_count']}")
+        for name, st in snap.get("components", {}).items():
+            lines.append(f"    {name}: {st.get('status', '?')}  {st.get('detail', '')}")
+    except Exception as e:
+        lines.append(f"  [!!] health_monitor: {e}")
+
+    lines.append("")
+    lines.append("[SECTION] Performance Benchmarks")
+    try:
+        bench = run_benchmarks()
+        io_data = bench.get("io", {})
+        for label, data in io_data.items():
+            lines.append(f"  I/O {label}: write={data.get('write_speed_mbps',0)}MB/s read={data.get('read_speed_mbps',0)}MB/s")
+        lines.append(f"  JSON serialize: {bench.get('json_serialize_ms',0)}ms")
+        lines.append(f"  Dict lookup: {bench.get('dict_lookup_ns',0)}ns")
+    except Exception as e:
+        lines.append(f"  [!!] benchmarks: {e}")
+
+    lines.append("")
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
+# ─── Extend the tool dispatch ────────────────────────────────
 
 def diagnostics_tool(action: str = "diagnostics", **kwargs) -> str:
-    """FRIDAY tool: Diagnostics & Benchmarks.
+    """FRIDAY tool: Diagnostics, Benchmarks & Deep Self-Diagnostics.
 
     Actions:
         diagnostics    - Run system health checks
         benchmarks     - Run performance benchmarks
         report         - Run full diagnostics + benchmarks
+        deep           - Run comprehensive deep self-diagnostics
+        interconnect   - Check subsystem interconnectivity
     """
     if action == "diagnostics":
         results = run_diagnostics()
@@ -320,5 +438,16 @@ def diagnostics_tool(action: str = "diagnostics", **kwargs) -> str:
         }
         import json as _json
         return _json.dumps(report, indent=2)
+
+    if action == "deep":
+        return deep_diagnostics()
+
+    if action == "interconnect":
+        results = check_subsystem_interconnect()
+        lines = ["### SUBSYSTEM INTERCONNECT"]
+        for r in results:
+            sym = "OK" if r["status"] == "ok" else ("WA" if r["status"] == "warn" else "!!")
+            lines.append(f"  [{sym}] {r['check']}: {r['detail']}")
+        return "\n".join(lines)
 
     return f"[FAIL] Unknown action: {action}"

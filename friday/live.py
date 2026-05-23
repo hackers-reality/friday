@@ -133,6 +133,7 @@ from friday.memory_tree import memory_tree_tool
 from friday.model_router import model_router_tool
 from friday.extension_registry import extension_registry_tool
 from friday.diagnostics import diagnostics_tool
+from friday.health_monitor import health_monitor_tool
 from friday.cv_engine import cv_tool
 
 load_dotenv()
@@ -152,6 +153,7 @@ for _mod_name in [
     "friday.capabilities", "friday.ironman",
     "friday.memory_tree", "friday.model_router",
     "friday.extension_registry", "friday.diagnostics",
+    "friday.health_monitor", "friday.terminal_health_display",
 ]:
     try:
         importlib.import_module(_mod_name)
@@ -1899,10 +1901,17 @@ def _build_tools():
                 }),
             ),
             types.FunctionDeclaration(
-                name="ironman_tool",
-                description="Iron Man system features. Actions: damage_report (system health audit with risk scoring), suit_check (pre-flight verification), morning_plan (daily briefing), evening_review (end-of-day summary).",
+                name="diagnostics_tool",
+                description="FRIDAY Diagnostics: run system health checks, benchmarks, deep self-diagnostics.",
                 parameters=types.Schema(type="OBJECT", properties={
-                    "action": {"type": "STRING", "description": "Action: status, damage_report, suit_check, morning_plan, evening_review."},
+                    "action": {"type": "STRING", "description": "'diagnostics' (default), 'benchmarks', 'report', 'deep', or 'interconnect'"}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="health_monitor_tool",
+                description="Unified health monitor: check status of all FRIDAY subsystems (browser, system, context bus, disk, agents). Shows overall health, component statuses, and recent alerts.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "'status' (default), 'alerts', 'components', or 'refresh'"}
                 }),
             ),
             types.FunctionDeclaration(
@@ -2143,6 +2152,7 @@ TOOL_MAP = {
     "model_router_tool": model_router_tool,
     "extension_registry_tool": extension_registry_tool,
     "diagnostics_tool": diagnostics_tool,
+    "health_monitor_tool": health_monitor_tool,
 }
 
 

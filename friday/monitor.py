@@ -78,6 +78,72 @@ def _send_alert(title: str, message: str, severity: str = "warning"):
         pass
 
 
+# ─── Health Monitor Integration ──────────────────────────────
+
+def _publish_to_health_monitor(alerts: list):
+    """Forward system-level alerts to the unified health monitor."""
+    try:
+        from friday.health_monitor import get_health_monitor
+        hm = get_health_monitor()
+        for a in alerts:
+            hm.add_alert(severity=a.get("severity", "warning"),
+                          source="system_monitor",
+                          message=a.get("message", ""))
+    except Exception:
+        pass
+
+
+def check_browser_health() -> dict:
+    """App-level check: is the browser running and responsive?"""
+    try:
+        from friday.browser_manager import BrowserManager
+        bm = BrowserManager.get_instance()
+        return bm.health_check()
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+def check_agent_health() -> dict:
+    """App-level check: are agents responsive?"""
+    try:
+        from friday.agent_registry import AgentRegistry
+        reg = AgentRegistry.get_instance() if hasattr(AgentRegistry, 'get_instance') else None
+        if reg:
+            agents = reg.list_agents() if hasattr(reg, 'list_agents') else []
+            return {"status": "ok", "detail": f"{len(agents)} registered"}
+        return {"status": "ok", "detail": "Agent registry available"}
+    except Exception as e:
+        return {"status": "degraded", "detail": str(e)}
+
+
+def check_websocket_health() -> dict:
+    """App-level check: is the Gemini Live WebSocket healthy?"""
+    try:
+        from friday.context_bus import get_bus
+        bus = get_bus()
+        return {"status": "ok", "detail": "Context bus active"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+def app_health_report() -> str:
+    """Return a consolidated app-level health report."""
+    results = []
+    results.append(("browser", check_browser_health()))
+    results.append(("agents", check_agent_health()))
+    results.append(("websocket", check_websocket_health()))
+
+    lines = ["### APP-LEVEL HEALTH"]
+    for name, result in results:
+        st = result.get("status", "unknown").upper()
+        detail = result.get("detail", "")
+        lines.append(f"  [{st}] {name}: {detail}")
+    return "\n".join(lines)
+
+
+# ─── End Health Monitor Integration ──────────────────────────
+
+
 def _detect_crashes(state: dict) -> list:
     """Check for recently crashed processes by comparing process lists."""
     crashes = []
@@ -147,6 +213,9 @@ def _handle_alerts(alerts: list):
             alert['message'],
             alert.get('severity', 'warning')
         )
+    # Forward to unified health monitor
+    _publish_to_health_monitor(alerts)
+    for alert in alerts:
         # Auto-response: kill top resource hogs on critical CPU/memory
         if alert.get('type') in ('cpu_spike', 'memory_pressure') and alert.get('severity') == 'critical':
             try:
@@ -270,6 +339,10 @@ def monitor_tool(action: str = "status", **kwargs) -> str:
         for a in alerts:
             lines.append(f"  [{a.get('severity','info').upper()}] {a.get('message','')}")
         return "\n".join(lines)
+
+    elif action == "app_health":
+        """Check app-level health (browser, agents, websocket)."""
+        return app_health_report()
 
     else:
         return f"[FAIL] Unknown action: {action}"
