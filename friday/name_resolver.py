@@ -73,17 +73,17 @@ def extract_mentions(text: str) -> list[str]:
     mentions.extend(at_mentions)
 
     # "ask/tell/instruct/delegate {Name} to ..."
-    for prefix in r"(?:ask|tell|instruct|delegate|capture|broadcast)":
-        pattern = re.compile(rf"{prefix}\s+(\w[\w\s]{{0,30}}?)(?:\s+to|\s+and|\s*[,\.!?]|$)", re.IGNORECASE)
-        for match in pattern.finditer(text):
-            name = match.group(1).strip()
-            if name and name not in mentions:
-                mentions.append(name)
+    pattern = re.compile(
+        r"\b(?:ask|tell|instruct|delegate|capture|broadcast)\b(?:\s+to)?\s+([@\w\s&]+?)(?:\bto\b|[:;,.!?]|$)",
+        re.IGNORECASE
+    )
+    for match in pattern.finditer(text):
+        name = match.group(1).strip()
+        # Split combined mentions like "Veronica and Forge" or "@Veronica and Forge"
+        parts = re.split(r"\s+and\s+|\s*,\s*|\s*&\s*", name)
+        for p in parts:
+            p_clean = p.strip().lstrip("@")
+            if p_clean and p_clean not in mentions:
+                mentions.append(p_clean)
 
-    # Split combined mentions like "Veronica and Forge"
-    split_mentions: list[str] = []
-    for m in mentions:
-        parts = re.split(r"\s+and\s+", m)
-        split_mentions.extend(p.strip() for p in parts if p.strip())
-
-    return split_mentions or mentions
+    return mentions

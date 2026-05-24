@@ -112,6 +112,8 @@ export interface Agent {
   success_rate: number;
   tasks_today: number;
   enabled: boolean;
+  progress?: number;
+  current_action?: string;
 }
 
 export interface AgentDispatchRequest {

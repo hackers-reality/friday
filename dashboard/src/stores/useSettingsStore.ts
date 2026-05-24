@@ -30,7 +30,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   updateSetting: (section, key, value) => {
     const cfg = get().config
     if (!cfg) return
-    const updated = { ...cfg, [section]: { ...(cfg as Record<string, Record<string, unknown>>)[section], [key]: value } }
+    const updated = { ...cfg, [section]: { ...(cfg as unknown as Record<string, Record<string, unknown>>)[section], [key]: value } }
     set({ config: updated as FridayConfig, isDirty: true })
   },
 

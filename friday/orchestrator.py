@@ -130,7 +130,54 @@ class Orchestrator:
         if not self.reg.loaded:
             await self.reg.load()
         for defn in self.reg.list_all(enabled_only=True):
-            self._executors[defn.id] = NimAgentExecutor(defn, self._client, self._bus)
+            agent_instance = None
+            if defn.id == "browser_agent":
+                try:
+                    from friday.browser_agent import BrowserAgent
+                    agent_instance = BrowserAgent(defn)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("Failed to load BrowserAgent for browser_agent: %s", e)
+            elif defn.id == "osint_agent":
+                try:
+                    from friday.osint_agent import GhostAgent
+                    agent_instance = GhostAgent(defn)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("Failed to load GhostAgent for osint_agent: %s", e)
+            elif defn.id == "research_agent":
+                try:
+                    from friday.research_agent import VeronicaAgent
+                    agent_instance = VeronicaAgent(defn)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("Failed to load VeronicaAgent for research_agent: %s", e)
+            elif defn.id == "code_agent":
+                try:
+                    from friday.code_agent import ForgeAgent
+                    agent_instance = ForgeAgent(defn)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("Failed to load ForgeAgent for code_agent: %s", e)
+            elif defn.id == "sandbox_runner_agent":
+                try:
+                    from friday.sandbox_runner import AutonomousSandboxRunner
+                    agent_instance = AutonomousSandboxRunner(defn)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("Failed to load AutonomousSandboxRunner for sandbox_runner_agent: %s", e)
+            elif defn.id == "pr_reviewer_agent":
+                try:
+                    from friday.pr_agent import AutonomousPRReviewer
+                    agent_instance = AutonomousPRReviewer(defn)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("Failed to load AutonomousPRReviewer for pr_reviewer_agent: %s", e)
+
+            if agent_instance:
+                self._executors[defn.id] = agent_instance
+            else:
+                self._executors[defn.id] = NimAgentExecutor(defn, self._client, self._bus)
             self._statuses[defn.id] = LiveStatus(agent_id=defn.id, state="idle")
         self._scheduler.start()
         self._initialized = True

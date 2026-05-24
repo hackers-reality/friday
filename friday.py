@@ -28,6 +28,7 @@ def _signal_handler(sig, frame):
 
 
 def main():
+    os.environ["OPENCV_LOG_LEVEL"] = "OFF"
     os.environ.setdefault("PYTHONUTF8", "1")
     signal.signal(signal.SIGINT, _signal_handler)
 

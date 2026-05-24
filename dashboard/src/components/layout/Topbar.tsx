@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Settings, Bell } from 'lucide-react'
+import { Settings, Power } from 'lucide-react'
 import { useVoiceStore } from '../../stores/useVoiceStore'
 import { useSystemStore } from '../../stores/useSystemStore'
 import { NotificationBell } from '../overlays/NotificationBell'
@@ -14,6 +14,7 @@ export function Topbar() {
   const agents = useSystemStore((s) => s.agents)
   const devices = useSystemStore((s) => s.devices)
   const [clock, setClock] = useState('')
+  const [shuttingDown, setShuttingDown] = useState(false)
 
   const activeAgents = agents.filter((a) => a.status === 'running').length
   const onlineDevices = devices.filter((d) => d.status === 'online').length
@@ -26,6 +27,17 @@ export function Topbar() {
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [])
+
+  const handleShutdown = async () => {
+    if (!window.confirm('Shut down F.R.I.D.A.Y. completely? The dashboard will go offline.')) return
+    setShuttingDown(true)
+    try {
+      await fetch('/api/system/shutdown', { method: 'POST' })
+    } catch (_) {}
+    setTimeout(() => {
+      document.body.innerHTML = '<div style="background:#0A1118;color:#00f2fe;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;font-size:1.2rem;letter-spacing:0.1em;">F·R·I·D·A·Y · OFFLINE · Run <code style=\'margin:0 0.4em;padding:0.15em 0.4em;background:#111;border-radius:4px;\'>friday</code> to restart</div>'
+    }, 1200)
+  }
 
   const orbVariants = {
     idle: { scale: [1, 1.05, 1], boxShadow: '0 0 0px rgba(0,245,255,0)' },
@@ -93,6 +105,20 @@ export function Topbar() {
           title="Settings"
         >
           <Settings size={16} />
+        </button>
+        {/* Shutdown FRIDAY */}
+        <button
+          onClick={handleShutdown}
+          disabled={shuttingDown}
+          className={clsx(
+            'transition-colors',
+            shuttingDown
+              ? 'text-neon-red animate-pulse cursor-not-allowed'
+              : 'text-text-dim hover:text-neon-red'
+          )}
+          title="Shut down F.R.I.D.A.Y."
+        >
+          <Power size={16} />
         </button>
       </div>
     </header>

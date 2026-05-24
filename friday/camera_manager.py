@@ -86,17 +86,20 @@ class CameraManager:
 
         first_open_cap = None
         for idx in (0, 1, 2):
-            cap = cv2.VideoCapture(idx)
+            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(idx)
             if cap.isOpened():
                 has_light = False
-                # Read up to 3 test frames to allow camera hardware to warm up/initialize
-                for _ in range(3):
+                # Read up to 25 test frames to allow camera hardware and auto-exposure to warm up/initialize
+                for _ in range(25):
                     ok, frame = cap.read()
                     if ok and frame is not None:
                         # A mean brightness > 2.0 implies the feed is not a black virtual screen
                         if np.mean(frame) > 2.0:
                             has_light = True
                             break
+                    time.sleep(0.02)
                 if has_light:
                     logger.info("Camera manager connected to functional camera index %s", idx)
                     if first_open_cap:

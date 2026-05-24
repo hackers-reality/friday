@@ -110,27 +110,44 @@ def classify_task_type(utterance: str) -> str:
     Lightweight keyword-based task type classification.
     Used before NIM call to route to correct model.
     """
+    import re
     text = utterance.lower()
+
+    # Use word boundary checks for keywords to avoid partial matches (e.g. "api" in "capital")
+    def matches_any(keywords: list[str]) -> bool:
+        for kw in keywords:
+            # If keyword has spaces, match literally
+            if " " in kw:
+                pattern = rf"\b{re.escape(kw)}\b"
+            else:
+                # Match full word or prefix (for words longer than 4 chars)
+                if len(kw) <= 4:
+                    pattern = rf"\b{re.escape(kw)}\b"
+                else:
+                    pattern = rf"\b{re.escape(kw)}"
+            if re.search(pattern, text):
+                return True
+        return False
 
     code_keywords = ["code", "function", "class", "implement", "debug", "fix", "write",
                      "algorithm", "api", "endpoint", "refactor", "test", "pull request"]
     research_keywords = ["research", "find", "search", "look up", "analyze", "compare",
-                         "what is", "investigate", "summarize", "explain"]
+                         "what is", "investigate"]
     image_keywords = ["see", "look", "image", "picture", "photo", "object", "detect",
                       "animal", "face", "hand", "scene", "what is this", "camera"]
     reasoning_keywords = ["why", "how does", "explain", "reason", "logic", "solving",
                           "strategy", "plan", "optimize", "compare and contrast"]
     summary_keywords = ["summarize", "tl;dr", "brief", "recap", "overview", "key points"]
 
-    if any(k in text for k in image_keywords):
+    if matches_any(image_keywords):
         return "image_analysis"
-    if any(k in text for k in code_keywords):
+    if matches_any(code_keywords):
         return "code_gen"
-    if any(k in text for k in research_keywords):
-        return "research"
-    if any(k in text for k in summary_keywords):
+    if matches_any(summary_keywords):
         return "summarization"
-    if any(k in text for k in reasoning_keywords):
+    if matches_any(reasoning_keywords):
         return "reasoning"
+    if matches_any(research_keywords):
+        return "research"
 
     return "general"

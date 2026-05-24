@@ -65,7 +65,7 @@ class FridayAPI:
                     "dashboard": "Run `cd dashboard && npm run build` to build the frontend",
                 }
 
-        print(f"\n  🛸  F·R·I·D·A·Y → http://localhost:{self.port}\n")
+        print(f"\n  [FRIDAY] Dashboard listening at http://localhost:{self.port}\n")
         webbrowser.open(f"http://localhost:{self.port}")
         uvicorn.run(app, host=self.host, port=self.port)
         return {"success": True}

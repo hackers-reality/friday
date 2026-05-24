@@ -415,6 +415,8 @@ def _get_agents() -> list:
                     "current_task": status.get("current_task"),
                     "last_result": status.get("last_result"),
                     "last_seen": status.get("last_seen"),
+                    "progress": status.get("progress", 0),
+                    "current_action": status.get("current_action", ""),
                 }
             )
         return agents

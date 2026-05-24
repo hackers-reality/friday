@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import { useVoiceStore } from '../stores/useVoiceStore'
-import { NeonButton } from '../components/ui/NeonButton'
 import clsx from 'clsx'
 
 export function VoicePage() {

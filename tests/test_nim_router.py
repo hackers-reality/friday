@@ -33,14 +33,18 @@ class TestResolveModel:
 
     def test_returns_none_when_no_task_map_and_no_general(self):
         from friday.nim_router import _DEFAULT_MODEL_MAP
+        import friday.nim_router
         saved = dict(_DEFAULT_MODEL_MAP)
+        saved_cache = friday.nim_router._CONFIG_CACHE
         try:
             _DEFAULT_MODEL_MAP.clear()
             _DEFAULT_MODEL_MAP["general"] = []
+            friday.nim_router._CONFIG_CACHE = {}
             assert resolve_model("code_gen") is None
         finally:
             _DEFAULT_MODEL_MAP.clear()
             _DEFAULT_MODEL_MAP.update(saved)
+            friday.nim_router._CONFIG_CACHE = saved_cache
 
 
 class TestClassifyTaskType:
@@ -79,4 +83,4 @@ class TestListFunctions:
     def test_list_all_models_no_duplicates(self):
         models = list_all_models()
         assert len(models) == len(set(models))
-        assert all("llama" in m or "nemotron" in m or "mixtral" in m or "minimax" in m or "neva" in m or "phi" in m for m in models)
+        assert all("llama" in m or "nemotron" in m or "mixtral" in m or "minimax" in m or "neva" in m or "phi" in m or "deepseek" in m for m in models)

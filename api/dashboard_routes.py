@@ -1170,6 +1170,26 @@ def system_restart():
     return {"ok": True}
 
 
+@router.post("/api/system/shutdown")
+def system_shutdown():
+    """Gracefully shut down the entire FRIDAY process tree."""
+    def _shutdown():
+        time.sleep(0.8)
+        try:
+            import psutil
+            parent = psutil.Process(os.getpid())
+            for child in parent.children(recursive=True):
+                try:
+                    child.terminate()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        os._exit(0)
+    threading.Thread(target=_shutdown, daemon=True).start()
+    return {"ok": True, "message": "FRIDAY shutting down"}
+
+
 # ─── Voice ───
 @router.post("/api/voice/push-to-talk/start")
 async def voice_ptt_start() -> dict:

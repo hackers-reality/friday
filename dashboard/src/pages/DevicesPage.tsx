@@ -4,7 +4,7 @@ import { NeonBadge } from '../components/ui/NeonBadge'
 import { NeonButton } from '../components/ui/NeonButton'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { EmptyState } from '../components/ui/EmptyState'
-import { Monitor, Terminal } from 'lucide-react'
+import { Terminal } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
 

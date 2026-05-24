@@ -17,10 +17,13 @@ class TestModelRouter(unittest.TestCase):
         self._orig_rp = mr._ROUTER_CONFIG_PATH
         mr.FRIDAY_CONFIG = self.tmpdir
         mr._ROUTER_CONFIG_PATH = os.path.join(self.tmpdir, "model_router.json")
+        self._orig_health_check = mr.check_provider_health
+        mr.check_provider_health = lambda provider: {"provider": provider, "status": "ok", "latency_ms": 1.0}
 
     def tearDown(self):
         mr.FRIDAY_CONFIG = self._orig_fc
         mr._ROUTER_CONFIG_PATH = self._orig_rp
+        mr.check_provider_health = self._orig_health_check
         shutil.rmtree(self.tmpdir)
 
     def test_get_config_defaults(self):

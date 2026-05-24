@@ -1,7 +1,5 @@
 import { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { NeonCard } from '../components/ui/NeonCard'
-import { NeonBadge } from '../components/ui/NeonBadge'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Upload } from 'lucide-react'
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { NeonCard } from '../components/ui/NeonCard'
 import { NeonBadge } from '../components/ui/NeonBadge'
 import { NeonButton } from '../components/ui/NeonButton'
-import { Play, Save, Trash2, Plus, Code } from 'lucide-react'
+import { Play, Save, Plus, Code } from 'lucide-react'
 import type { PyRunnerScript } from '../types'
 
 export function PyRunnerPage() {

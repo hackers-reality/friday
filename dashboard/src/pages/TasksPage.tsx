@@ -1,7 +1,5 @@
 import { NeonCard } from '../components/ui/NeonCard'
 import { NeonBadge } from '../components/ui/NeonBadge'
-import { EmptyState } from '../components/ui/EmptyState'
-import clsx from 'clsx'
 
 const COLUMNS = [
   { key: 'queued' as const, label: 'Queued', color: 'yellow' as const },

@@ -324,7 +324,9 @@ def _camera_loop(camera_index: int, interval: float):
             _cv_state["error"] = "OpenCV not installed"
         return
 
-    cap = cv2.VideoCapture(camera_index)
+    cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
         with _cv_lock:
             _cv_state["error"] = f"Cannot open camera {camera_index}"
@@ -351,6 +353,18 @@ def _camera_loop(camera_index: int, interval: float):
             with _cv_lock:
                 _cv_state["error"] = "Camera read failed"
             break
+
+        # Dynamically auto-brighten dark/dim frames
+        try:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            mean_b = float(np.mean(gray))
+            if 1.5 < mean_b < 95.0:
+                gamma = 0.4 if mean_b < 45.0 else 0.65
+                invGamma = 1.0 / gamma
+                table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+                frame = cv2.LUT(frame, table)
+        except Exception:
+            pass
 
         # Encode frame for storage
         _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
@@ -515,17 +529,19 @@ def start_camera(camera_index: int = 0, interval: float = 2.0) -> str:
         import numpy as np
 
         # Preflight check on the selected camera index
-        test_cap = cv2.VideoCapture(camera_index)
+        test_cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+        if not test_cap.isOpened():
+            test_cap = cv2.VideoCapture(camera_index)
         has_light = False
         if test_cap.isOpened():
-            for _ in range(3):
+            for _ in range(25):
                 ok, frame = test_cap.read()
                 if ok and frame is not None and np.mean(frame) > 2.0:
                     has_light = True
                     break
+                time.sleep(0.02)
 
         if not has_light:
-            # Selected camera is closed or returns blank/black frame. Let's scan other indices.
             if test_cap.isOpened():
                 test_cap.release()
             found_alt = False
@@ -533,14 +549,17 @@ def start_camera(camera_index: int = 0, interval: float = 2.0) -> str:
                 for alternative_index in (0, 1, 2):
                     if alternative_index == camera_index:
                         continue
-                    alt_cap = cv2.VideoCapture(alternative_index)
+                    alt_cap = cv2.VideoCapture(alternative_index, cv2.CAP_DSHOW)
+                    if not alt_cap.isOpened():
+                        alt_cap = cv2.VideoCapture(alternative_index)
                     if alt_cap.isOpened():
                         alt_ok = False
-                        for _ in range(3):
+                        for _ in range(25):
                             ok, frame = alt_cap.read()
                             if ok and frame is not None and np.mean(frame) > 2.0:
                                 alt_ok = True
                                 break
+                            time.sleep(0.02)
                         if alt_ok:
                             camera_index = alternative_index
                             test_cap = alt_cap
@@ -549,12 +568,14 @@ def start_camera(camera_index: int = 0, interval: float = 2.0) -> str:
                         alt_cap.release()
 
             if not found_alt:
-                # No non-black camera found, try to open the original index if it was at least opened
-                test_cap = cv2.VideoCapture(camera_index)
+                test_cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+                if not test_cap.isOpened():
+                    test_cap = cv2.VideoCapture(camera_index)
                 if not test_cap.isOpened():
                     return f"[FAIL] Cannot open camera {camera_index} and no functional alternative found."
         
-        test_cap.release()
+        if test_cap.isOpened():
+            test_cap.release()
     except Exception as e:
         return f"[FAIL] Camera check failed: {e}"
 
@@ -702,7 +723,9 @@ def cv_tool(action: str = "status", **kwargs) -> str:
             import cv2
             available = []
             for i in range(10):
-                cap = cv2.VideoCapture(i)
+                cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+                if not cap.isOpened():
+                    cap = cv2.VideoCapture(i)
                 if cap.isOpened():
                     available.append(str(i))
                     cap.release()

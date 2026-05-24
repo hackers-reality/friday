@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { NeonCard } from '../components/ui/NeonCard'
 import { NeonBadge } from '../components/ui/NeonBadge'
 import { NeonButton } from '../components/ui/NeonButton'
-import { Play, Pause, Trash2, Plus } from 'lucide-react'
+import { Play, Pause, Plus } from 'lucide-react'
 import type { SchedulerJob } from '../types'
 
 export function SchedulerPage() {

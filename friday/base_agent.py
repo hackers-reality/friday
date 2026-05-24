@@ -54,6 +54,14 @@ class AgentDef:
     enabled: bool = False
     system_prompt: str = ""
 
+    @property
+    def agent_id(self) -> str:
+        return self.id
+
+    @property
+    def display_name(self) -> str:
+        return self.name
+
 
 class BaseAgent(ABC):
     """
