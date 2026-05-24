@@ -509,12 +509,51 @@ def start_camera(camera_index: int = 0, interval: float = 2.0) -> str:
 
     stop_camera()
 
-    # Check camera availability before starting thread
+    # Check camera availability before starting thread, validating brightness
     try:
         import cv2
+        import numpy as np
+
+        # Preflight check on the selected camera index
         test_cap = cv2.VideoCapture(camera_index)
-        if not test_cap.isOpened():
-            return f"[FAIL] Cannot open camera {camera_index}"
+        has_light = False
+        if test_cap.isOpened():
+            for _ in range(3):
+                ok, frame = test_cap.read()
+                if ok and frame is not None and np.mean(frame) > 2.0:
+                    has_light = True
+                    break
+
+        if not has_light:
+            # Selected camera is closed or returns blank/black frame. Let's scan other indices.
+            if test_cap.isOpened():
+                test_cap.release()
+            found_alt = False
+            if camera_index in (0, 1, 2):
+                for alternative_index in (0, 1, 2):
+                    if alternative_index == camera_index:
+                        continue
+                    alt_cap = cv2.VideoCapture(alternative_index)
+                    if alt_cap.isOpened():
+                        alt_ok = False
+                        for _ in range(3):
+                            ok, frame = alt_cap.read()
+                            if ok and frame is not None and np.mean(frame) > 2.0:
+                                alt_ok = True
+                                break
+                        if alt_ok:
+                            camera_index = alternative_index
+                            test_cap = alt_cap
+                            found_alt = True
+                            break
+                        alt_cap.release()
+
+            if not found_alt:
+                # No non-black camera found, try to open the original index if it was at least opened
+                test_cap = cv2.VideoCapture(camera_index)
+                if not test_cap.isOpened():
+                    return f"[FAIL] Cannot open camera {camera_index} and no functional alternative found."
+        
         test_cap.release()
     except Exception as e:
         return f"[FAIL] Camera check failed: {e}"

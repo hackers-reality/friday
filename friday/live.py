@@ -1902,9 +1902,10 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="diagnostics_tool",
-                description="FRIDAY Diagnostics: run system health checks, benchmarks, deep self-diagnostics.",
+                description="FRIDAY Diagnostics & Benchmarks. Actions: diagnostics (run system health checks), benchmarks (run performance tests), report (full diagnostics + benchmarks), deep (run comprehensive deep diagnostics), interconnect (check subsystem connectivity).",
                 parameters=types.Schema(type="OBJECT", properties={
-                    "action": {"type": "STRING", "description": "'diagnostics' (default), 'benchmarks', 'report', 'deep', or 'interconnect'"}
+                    "action": {"type": "STRING", "description": "Action: diagnostics, benchmarks, report, deep, interconnect (default: diagnostics)."},
+                    "verbose": {"type": "BOOLEAN", "description": "Verbose diagnostic output (only applies to diagnostics action)."},
                 }),
             ),
             types.FunctionDeclaration(
@@ -1950,14 +1951,6 @@ def _build_tools():
                     "description": {"type": "STRING", "description": "Description."},
                     "capabilities": {"type": "ARRAY", "description": "Capability list.", "items": {"type": "STRING"}},
                     "query": {"type": "STRING", "description": "Capability search query for discover."},
-                }),
-            ),
-            types.FunctionDeclaration(
-                name="diagnostics_tool",
-                description="Diagnostics & Benchmarks. Actions: diagnostics (run health checks), benchmarks (run performance tests), report (full diagnostics + benchmarks).",
-                parameters=types.Schema(type="OBJECT", properties={
-                    "action": {"type": "STRING", "description": "Action: diagnostics, benchmarks, report."},
-                    "verbose": {"type": "BOOLEAN", "description": "Verbose diagnostic output."},
                 }),
             ),
         ])
@@ -2657,6 +2650,14 @@ async def friday_live_engine():
                                                 if not first_interaction_event.is_set():
                                                     first_interaction_event.set()
                                                 chat.add_user_message(txt)
+                                                from friday.comms import live_to_dashboard_queue
+                                                live_to_dashboard_queue.put({
+                                                    "type": "complete",
+                                                    "payload": {
+                                                        "content": txt,
+                                                        "type": "user"
+                                                    }
+                                                })
                                                 # Fire-and-forget memory context injection for audio
                                                 asyncio.create_task(_inject_memory_context(txt))
 
@@ -2687,6 +2688,11 @@ async def friday_live_engine():
                                                     delta = new_text[len(displayed_transcript):]
                                                     if delta:
                                                         console.print(f"  {delta}", end="")
+                                                        from friday.comms import live_to_dashboard_queue
+                                                        live_to_dashboard_queue.put({
+                                                            "type": "token",
+                                                            "payload": {"token": delta}
+                                                        })
                                                 else:
                                                     console.print(f"\r  {new_text}", end="")
                                                 displayed_transcript = new_text
@@ -2701,11 +2707,27 @@ async def friday_live_engine():
                                             final_text = last_transcript.strip()
                                             if final_text:
                                                 console.print()
+                                                from friday.comms import live_to_dashboard_queue
+                                                live_to_dashboard_queue.put({
+                                                    "type": "complete",
+                                                    "payload": {
+                                                        "content": final_text,
+                                                        "type": "friday"
+                                                    }
+                                                })
                                                 if final_text.rstrip().endswith("?"):
                                                     chat.add_system("[MIC] Listening... (follow-up mode)")
+                                                    live_to_dashboard_queue.put({
+                                                        "type": "system",
+                                                        "payload": {"content": "[MIC] Listening... (follow-up mode)"}
+                                                    })
                                                     follow_up_mode = True
                                                 else:
                                                     chat.add_system("[STANDBY] Standing by")
+                                                    live_to_dashboard_queue.put({
+                                                        "type": "system",
+                                                        "payload": {"content": "[STANDBY] Standing by"}
+                                                    })
                                                     follow_up_mode = False
 
                                             if is_greeting:
@@ -2729,6 +2751,11 @@ async def friday_live_engine():
                                             displayed_transcript = ""
                                             follow_up_mode = True
                                             chat.add_system("[MUTE] Interrupted")
+                                            from friday.comms import live_to_dashboard_queue
+                                            live_to_dashboard_queue.put({
+                                                "type": "system",
+                                                "payload": {"content": "[MUTE] Interrupted"}
+                                            })
 
                                     # Tool calls
                                     if tc:
@@ -2738,6 +2765,11 @@ async def friday_live_engine():
                                             name = fc.name
                                             args = fc.args or {}
                                             chat.add_system(f"Executing: {name}")
+                                            from friday.comms import live_to_dashboard_queue
+                                            live_to_dashboard_queue.put({
+                                                "type": "system",
+                                                "payload": {"content": f"Executing: {name}"}
+                                            })
                                             result = _invoke_tool(name, args, session)
                                             responses.append(
                                                 types.FunctionResponse(name=name, id=fc.id, response=result)
@@ -2811,30 +2843,23 @@ async def friday_live_engine():
 
                     last_session_was_greeting = False
 
-                    # Text input
-                    input_queue = asyncio.Queue()
-
-                    def blocking_input():
+                    # Text input via Comms queue (no blocking stdin/CLI loop)
+                    async def input_reader():
+                        from friday.comms import dashboard_to_live_queue
                         while True:
                             try:
-                                line = input()
-                                input_queue.put_nowait(line)
-                            except EOFError:
-                                break
-
-                    input_thread = threading.Thread(target=blocking_input, daemon=True)
-                    input_thread.start()
-
-                    async def input_reader():
-                        while True:
-                            text = await input_queue.get()
-                            text = text.strip()
-                            if text:
-                                if not first_interaction_event.is_set():
-                                    first_interaction_event.set()
-                                await _inject_memory_context(text)
-                                await session.send_realtime_input(text=text)
-                                chat.add_user_message(text)
+                                while not dashboard_to_live_queue.empty():
+                                    text = dashboard_to_live_queue.get_nowait()
+                                    text = text.strip()
+                                    if text:
+                                        if not first_interaction_event.is_set():
+                                            first_interaction_event.set()
+                                        await _inject_memory_context(text)
+                                        await session.send_realtime_input(text=text)
+                                        chat.add_user_message(text)
+                            except Exception:
+                                pass
+                            await asyncio.sleep(0.1)
 
                     reader_task = asyncio.create_task(input_reader())
 

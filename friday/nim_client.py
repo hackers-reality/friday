@@ -258,3 +258,13 @@ class InferenceClient:
 
     async def close(self):
         await self._client.aclose()
+
+
+_INFERENCE_CLIENT: Optional[InferenceClient] = None
+
+
+def get_inference_client() -> InferenceClient:
+    global _INFERENCE_CLIENT
+    if _INFERENCE_CLIENT is None:
+        _INFERENCE_CLIENT = InferenceClient()
+    return _INFERENCE_CLIENT

@@ -1,9 +1,9 @@
 """
 FRIDAY Startup — supervisor for background services.
 
-Launches Dashboard API, Dashboard UI, sidecar heartbeat, memory checks,
-and the live engine. All services are tracked via runtime_state.json
-so they survive process boundaries.
+Launches the FastAPI server (port 7070) with the Vite+React dashboard,
+sidecar heartbeat, memory checks, and the live engine.
+All services are tracked via runtime_state.json.
 """
 
 from __future__ import annotations
@@ -28,80 +28,35 @@ def _get_pid() -> int:
     return os.getpid()
 
 
-# ─── Dashboard API ──────────────────────────────────────
+# ─── Dashboard (FastAPI + React) ─────────────────────────
 
-def _start_dashboard_api(host: str = "127.0.0.1", port: int = 8090) -> dict:
-    """Start the Dashboard API server. Returns structured result."""
-    from friday.dashboard_api import DashboardAPI
+def _start_dashboard(port: int = 7070) -> dict:
+    """Start the FastAPI server with the Vite+React dashboard."""
+    from friday.api import FridayAPI
 
-    # Check if port is in use — could be our own from a previous launch
-    port_check = check_port_open(host, port)
+    port_check = check_port_open("127.0.0.1", port)
     if port_check["open"]:
-        # Check if it's a healthy FRIDAY API
-        health = check_http_endpoint(f"http://{host}:{port}/api/health")
+        health = check_http_endpoint(f"http://127.0.0.1:{port}/api/status")
         if health.get("reachable"):
-            set_service_state("dashboard_api", url=f"http://{host}:{port}", port=port, pid=0, status="already_running")
-            return {"success": True, "url": f"http://{host}:{port}", "port": port, "status": "already_running"}
-        # Port is occupied but not FRIDAY — find a free one
-        port = find_free_port(8091, 20)
-        _log(f"Port 8090 busy, using {port}")
+            set_service_state("dashboard", url=f"http://127.0.0.1:{port}", port=port, pid=0, status="already_running")
+            return {"success": True, "url": f"http://127.0.0.1:{port}", "port": port, "status": "already_running"}
+        port = find_free_port(port + 1, 20)
+        _log(f"Port {port - 1} busy, using {port}")
 
-    api = DashboardAPI(host=host, port=port)
+    api = FridayAPI(host="0.0.0.0", port=port)
     result = api.start()
 
     if "error" in result:
         return {"success": False, "error": result["error"]}
 
-    # Store in runtime state
-    set_service_state("dashboard_api",
-        url=result.get("url", f"http://{host}:{port}"),
+    set_service_state("dashboard",
+        url=f"http://127.0.0.1:{port}",
         port=port,
         pid=_get_pid(),
         started_at=time.time(),
         status="running",
     )
-    return {"success": True, "url": f"http://{host}:{port}", "port": port, "status": "started"}
-
-
-def _stop_dashboard_api() -> dict:
-    """Stop the Dashboard API server."""
-    from friday.dashboard_api import DashboardAPI
-    # We can't import the module's _dashboard_instance from here.
-    # Instead, we check runtime state for services that need stopping.
-    # Since DashboardAPI runs in this process's thread, we manage via module var.
-    return {"success": True, "message": "Dashboard API will stop when supervisor exits"}
-
-
-# ─── Dashboard UI ───────────────────────────────────────
-
-def _start_dashboard_ui(api_url: str = "http://127.0.0.1:8090", host: str = "127.0.0.1", port: int = 8080) -> dict:
-    """Start the HTML Dashboard server. Returns structured result."""
-    from friday.dashboard import DashboardServer
-
-    port_check = check_port_open(host, port)
-    if port_check["open"]:
-        # Check if a FRIDAY dashboard is already serving
-        health = check_http_endpoint(f"http://{host}:{port}/")
-        if health.get("reachable"):
-            set_service_state("dashboard_ui", url=f"http://{host}:{port}", port=port, pid=0, status="already_running")
-            return {"success": True, "url": f"http://{host}:{port}", "port": port, "status": "already_running"}
-        port = find_free_port(8081, 20)
-        _log(f"Port 8080 busy, using {port}")
-
-    ds = DashboardServer(port=port)
-    result = ds.start()
-    if "error" in result:
-        return {"success": False, "error": result.get("error", "Unknown error")}
-
-    set_service_state("dashboard_ui",
-        url=result.get("url", f"http://{host}:{port}"),
-        port=port,
-        pid=_get_pid(),
-        started_at=time.time(),
-        api_url=api_url,
-        status="running",
-    )
-    return {"success": True, "url": result.get("url", f"http://{host}:{port}"), "port": port, "status": "started"}
+    return {"success": True, "url": f"http://127.0.0.1:{port}", "port": port, "status": "started"}
 
 
 # ─── Sidecar Heartbeat ──────────────────────────────────
@@ -151,15 +106,14 @@ def _run_memory_check() -> dict:
 
 # ─── Full Launch ────────────────────────────────────────
 
-def launch_all(api_port: int = 8090, ui_port: int = 8080,
+def launch_all(dashboard_port: int = 7070,
                start_live: bool = False, start_sidecar_ws: bool = False,
                log_fn=None) -> Dict[str, Any]:
     """
     Launch all background services in the current process.
 
     Args:
-        api_port: Preferred port for dashboard API
-        ui_port: Preferred port for dashboard UI
+        dashboard_port: Port for the FastAPI server (React dashboard + REST API)
         start_live: If True, also start the live engine (blocks)
         start_sidecar_ws: If True, start the sidecar WebSocket server
         log_fn: Optional logging function
@@ -175,6 +129,37 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
 
     _log("Starting FRIDAY services...")
 
+    # Initialize configuration files if they are missing
+    from friday._paths import FRIDAY_CONFIG
+    import json
+    
+    _log("[INIT] Checking configuration directory...")
+    os.makedirs(FRIDAY_CONFIG, exist_ok=True)
+    
+    # model_router.json
+    router_path = os.path.join(FRIDAY_CONFIG, "model_router.json")
+    if not os.path.exists(router_path):
+        from friday.model_router import DEFAULT_CONFIG
+        with open(router_path, "w") as f:
+            json.dump(DEFAULT_CONFIG, f, indent=2)
+        _log("[OK] Initialized default model_router.json")
+
+    # extension_registry.json
+    ext_path = os.path.join(FRIDAY_CONFIG, "extension_registry.json")
+    if not os.path.exists(ext_path):
+        default_ext = {"extensions": {}, "mcp_servers": {}, "version": 1}
+        with open(ext_path, "w") as f:
+            json.dump(default_ext, f, indent=2)
+        _log("[OK] Initialized default extension_registry.json")
+
+    # autonomy.json
+    autonomy_path = os.path.join(FRIDAY_CONFIG, "autonomy.json")
+    if not os.path.exists(autonomy_path):
+        default_autonomy = {"autonomy_level": "high", "version": 1}
+        with open(autonomy_path, "w") as f:
+            json.dump(default_autonomy, f, indent=2)
+        _log("[OK] Initialized default autonomy.json")
+
     # 1. Memory check
     _log("[CHECK] Memory...")
     mem_result = _run_memory_check()
@@ -184,26 +169,16 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
     else:
         _log(f"[WARN] No user profile at {FRIDAY_MEMORY}/user_profile.json")
 
-    # 2. Dashboard API
-    _log("[START] Dashboard API...")
-    api_result = _start_dashboard_api(port=api_port)
-    results["dashboard_api"] = api_result
-    if api_result.get("success"):
-        _log(f"[OK] Dashboard API: {api_result['url']}")
+    # 2. Dashboard (FastAPI + React)
+    _log("[START] Dashboard...")
+    dash_result = _start_dashboard(port=dashboard_port)
+    results["dashboard"] = dash_result
+    if dash_result.get("success"):
+        _log(f"[OK] Dashboard: {dash_result['url']}")
     else:
-        _log(f"[FAIL] Dashboard API: {api_result.get('error', 'unknown')}")
+        _log(f"[FAIL] Dashboard: {dash_result.get('error', 'unknown')}")
 
-    # 3. Dashboard UI
-    api_url = api_result.get("url", f"http://127.0.0.1:{api_port}")
-    _log("[START] Dashboard UI...")
-    ui_result = _start_dashboard_ui(api_url=api_url, port=ui_port)
-    results["dashboard_ui"] = ui_result
-    if ui_result.get("success"):
-        _log(f"[OK] Dashboard UI: {ui_result['url']}")
-    else:
-        _log(f"[FAIL] Dashboard UI: {ui_result.get('error', 'unknown')}")
-
-    # 4. Sidecar heartbeat
+    # 3. Sidecar heartbeat
     _log("[START] Sidecar heartbeat...")
     sc_result = _start_sidecar_heartbeat()
     results["sidecar_heartbeat"] = sc_result
@@ -212,7 +187,7 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
     else:
         _log(f"[FAIL] Sidecar heartbeat: {sc_result.get('error', 'unknown')}")
 
-    # 4.5 Scheduler
+    # 4. Scheduler
     _log("[START] Scheduler...")
     try:
         from friday.scheduler import scheduler_tool
@@ -282,17 +257,15 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
     _log("")
     _log("=" * 50)
     _log("FRIDAY is running")
-    if ui_result.get("success"):
-        _log(f"  Dashboard UI:  {ui_result['url']}")
-    if api_result.get("success"):
-        _log(f"  Dashboard API: {api_result['url']}")
+    if dash_result.get("success"):
+        _log(f"  Dashboard:  {dash_result['url']}")
     if results.get("sidecar_ws", {}).get("success"):
         _log("  Sidecar WS:    ws://127.0.0.1:42070")
     _log("  Say 'FRIDAY' to activate voice (if live engine started)")
     _log("=" * 50)
     _log("")
 
-    # 5. Live engine (optional, blocks)
+    # 7. Live engine (optional, blocks)
     if start_live:
         _log("[START] Live engine...")
         try:
@@ -309,17 +282,15 @@ def launch_all(api_port: int = 8090, ui_port: int = 8080,
 
 
 def launch_dashboard_background() -> bool:
-    """Legacy: start API + UI in this process thread. Returns True on success."""
-    results = launch_all(api_port=8090, ui_port=8080, start_live=False)
-    api_ok = results.get("dashboard_api", {}).get("success", False)
-    ui_ok = results.get("dashboard_ui", {}).get("success", False)
-    return api_ok or ui_ok
+    """Start the dashboard in the current process thread. Returns True on success."""
+    results = launch_all(dashboard_port=7070, start_live=False)
+    return bool(results.get("dashboard", {}).get("success", False))
 
 
 def launch_all_background_services() -> dict:
-    """Legacy: return dict of service name → bool."""
-    results = launch_all(api_port=8090, ui_port=8080, start_live=False)
+    """Return dict of service name → bool."""
+    results = launch_all(dashboard_port=7070, start_live=False)
     return {
-        "dashboard": results.get("dashboard_api", {}).get("success", False) or results.get("dashboard_ui", {}).get("success", False),
+        "dashboard": results.get("dashboard", {}).get("success", False),
         "sidecar": results.get("sidecar_heartbeat", {}).get("success", False),
     }

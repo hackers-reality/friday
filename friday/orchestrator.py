@@ -228,6 +228,20 @@ class Orchestrator:
             return {agent_id: self._statuses.get(agent_id, LiveStatus(agent_id=agent_id))}
         return dict(self._statuses)
 
+    def get_status(self, agent_id: str) -> dict:
+        """Helper to get a dictionary summary of agent status."""
+        st = self._statuses.get(agent_id)
+        if st:
+            return {
+                "status": st.state,
+                "current_task": st.task_id,
+                "progress": st.progress_pct,
+                "current_action": st.current_action,
+                "started_at": st.started_at,
+                "duration_ms": st.duration_ms
+            }
+        return {"status": "offline"}
+
     def status_summary(self) -> str:
         """Human-readable status summary."""
         parts = []
@@ -272,3 +286,38 @@ class Orchestrator:
 
     async def shutdown(self):
         self._scheduler.shutdown(wait=False)
+
+
+_ORCHESTRATOR: Optional[Orchestrator] = None
+
+
+def get_orchestrator() -> Orchestrator:
+    global _ORCHESTRATOR
+    if _ORCHESTRATOR is None:
+        from friday.agent_registry import get_registry
+        from friday.nim_client import get_inference_client
+        from friday.context_bus import get_bus
+        _ORCHESTRATOR = Orchestrator(get_registry(), get_inference_client(), get_bus())
+    return _ORCHESTRATOR
+
+
+def run_delegate_sync(payload: str, context: dict = None, preferred_agent: str = None) -> Any:
+    orch = get_orchestrator()
+    loop = None
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        pass
+
+    if not orch._initialized:
+        if loop and loop.is_running():
+            asyncio.run_coroutine_threadsafe(orch.init(), loop).result()
+        else:
+            asyncio.run(orch.init())
+
+    coro = orch.delegate(preferred_agent, payload) if preferred_agent else orch.parse_and_route(payload)
+    if loop and loop.is_running():
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result()
+    else:
+        return asyncio.run(coro)

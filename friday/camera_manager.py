@@ -79,17 +79,43 @@ class CameraManager:
     def _open_camera(self):
         try:
             import cv2
+            import numpy as np
         except Exception as exc:
-            logger.warning("OpenCV unavailable for camera manager: %s", exc)
+            logger.warning("OpenCV or NumPy unavailable for camera manager: %s", exc)
             return None
 
+        first_open_cap = None
         for idx in (0, 1, 2):
             cap = cv2.VideoCapture(idx)
             if cap.isOpened():
-                logger.info("Camera manager connected on index %s", idx)
-                return cap
-            cap.release()
+                has_light = False
+                # Read up to 3 test frames to allow camera hardware to warm up/initialize
+                for _ in range(3):
+                    ok, frame = cap.read()
+                    if ok and frame is not None:
+                        # A mean brightness > 2.0 implies the feed is not a black virtual screen
+                        if np.mean(frame) > 2.0:
+                            has_light = True
+                            break
+                if has_light:
+                    logger.info("Camera manager connected to functional camera index %s", idx)
+                    if first_open_cap:
+                        first_open_cap.release()
+                    return cap
+                else:
+                    logger.info("Camera index %s opened but returned black frame. Scanning other indices...", idx)
+                    if first_open_cap is None:
+                        first_open_cap = cap
+                    else:
+                        cap.release()
+            else:
+                cap.release()
+
+        if first_open_cap:
+            logger.warning("No functional non-black camera found. Falling back to index 0/first open camera.")
+            return first_open_cap
         return None
+
 
     def _publish_camera_event(self, payload: dict) -> None:
         if not self.proactive_events:

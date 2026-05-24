@@ -1,113 +1,74 @@
 """
 Friday API - REST API for Friday.
-FastAPI/Flask web API to access Friday capabilities remotely.
+FastAPI web API serving the Vite+React dashboard and REST endpoints.
 """
 from __future__ import annotations
 
 import os
 import sys
 import json
+import webbrowser
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
 import base64
 
+DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "dashboard" / "dist"
 
-# ─── API Server (Simplified) ────────────────────────────#
+
+# ─── API Server ─────────────────────────────────────────#
 
 class FridayAPI:
-    """Simple API server for Friday."""
-    
-    def __init__(self, host: str = "127.0.0.1", port: int = 8000):
+    """API server for Friday, serves React dashboard + REST API."""
+
+    def __init__(self, host: str = "0.0.0.0", port: int = 7070):
         self.host = host
         self.port = port
-        self.routes: Dict[str, callable] = {}
-        self.running = False
-        self.fastapi_available = self._check_fastapi()
-        
-    def _check_fastapi(self) -> bool:
-        try:
-            import fastapi
-            self.fastapi = fastapi
-            return True
-        except ImportError:
-            return False
-    
-    def add_route(self, path: str, handler: callable, methods: List[str] = None):
-        """Add an API route."""
-        self.routes[path] = {
-            "handler": handler,
-            "methods": methods or ["GET"],
-        }
-    
-    def start_fastapi(self):
-        """Start FastAPI server."""
-        if not self.fastapi_available:
-            return {"success": False, "error": "FastAPI not available. Install: pip install fastapi uvicorn"}
-        
+
+    def start(self) -> dict:
+        """Start FastAPI with static file serving and CORS."""
         try:
             import uvicorn
             from fastapi import FastAPI
-            
-            app = FastAPI(title="Friday API", version="2.0.0")
-            try:
-                from friday.sidecar.brain_ws_server import router as sidecar_router
-                app.include_router(sidecar_router)
-            except Exception:
-                pass
-            try:
-                from api.dashboard_routes import router as dashboard_router
-                app.include_router(dashboard_router)
-            except Exception:
-                pass
-            
-            # Add routes
-            for path, config in self.routes.items():
-                # This is simplified - in reality, use proper FastAPI decorators
-                pass
-            
-            # Add default routes
+            from fastapi.middleware.cors import CORSMiddleware
+            from fastapi.staticfiles import StaticFiles
+        except ImportError:
+            return {"success": False, "error": "fastapi/uvicorn not installed"}
+
+        app = FastAPI(title="FRIDAY", version="2.0.0")
+
+        # CORS for dev server
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        # Include dashboard API routes
+        try:
+            from api.dashboard_routes import router as dashboard_router
+            app.include_router(dashboard_router)
+        except Exception:
+            pass
+
+        # Serve Vite build as static files
+        if DASHBOARD_DIR.exists():
+            app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")
+        else:
             @app.get("/")
             def root():
-                return {"message": "Friday API", "version": "2.0.0"}
-            
-            @app.get("/status")
-            def status():
-                return {"status": "running", "host": self.host, "port": self.port}
-            
-            uvicorn.run(app, host=self.host, port=self.port)
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def start_flask(self):
-        """Start Flask server (fallback)."""
-        try:
-            from flask import Flask, request, jsonify
-            
-            app = Flask("Friday")
-            
-            @app.route("/")
-            def root():
-                return jsonify({"message": "Friday API", "version": "2.0.0"})
-            
-            @app.route("/status")
-            def status():
-                return jsonify({"status": "running", "host": self.host, "port": self.port})
-            
-            app.run(host=self.host, port=self.port)
-            return {"success": True}
-        except ImportError:
-            return {"success": False, "error": "Flask not available. Install: pip install flask"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def start(self):
-        """Start the API server."""
-        if self.fastapi_available:
-            return self.start_fastapi()
-        else:
-            return self.start_flask()
+                return {
+                    "message": "FRIDAY API",
+                    "version": "2.0.0",
+                    "dashboard": "Run `cd dashboard && npm run build` to build the frontend",
+                }
+
+        print(f"\n  🛸  F·R·I·D·A·Y → http://localhost:{self.port}\n")
+        webbrowser.open(f"http://localhost:{self.port}")
+        uvicorn.run(app, host=self.host, port=self.port)
+        return {"success": True}
 
 
 # ─── API Client ────────────────────────────#

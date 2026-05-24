@@ -101,3 +101,13 @@ class AgentRegistry:
 
     def list_names(self, enabled_only: bool = True) -> list[str]:
         return [a.name for a in self.list_all(enabled_only=enabled_only)]
+
+
+_REGISTRY: Optional[AgentRegistry] = None
+
+
+def get_registry() -> AgentRegistry:
+    global _REGISTRY
+    if _REGISTRY is None:
+        _REGISTRY = AgentRegistry()
+    return _REGISTRY

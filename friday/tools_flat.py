@@ -421,13 +421,13 @@ def list_running_apps() -> list[str]:
         try:
             import ctypes
             windows = []
-            def enum_callback(hwnd, results):
+            def enum_callback(hwnd, lParam):
                 if ctypes.windll.user32.IsWindowVisible(hwnd):
                     length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
                     if length > 0:
                         buf = ctypes.create_unicode_buffer(length + 1)
                         ctypes.windll.user32.GetWindowTextW(hwnd, buf, length + 1)
-                        results.append(buf.value)
+                        windows.append(buf.value)
                 return True
             ctypes.windll.user32.EnumWindows(
                 ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_void_p)(enum_callback),
