@@ -31,6 +31,13 @@ def main():
     os.environ.setdefault("PYTHONUTF8", "1")
     signal.signal(signal.SIGINT, _signal_handler)
 
+    # Bootstrap configuration files on startup
+    try:
+        from friday.startup import bootstrap_configs
+        bootstrap_configs(log_fn=_log)
+    except Exception as e:
+        _log(f"[WARN] Failed to bootstrap configs: {e}")
+
     _log("")
     _log("=" * 50)
     _log("  F·R·I·D·A·Y   Sovereign Agent")

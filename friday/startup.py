@@ -104,6 +104,41 @@ def _run_memory_check() -> dict:
     }
 
 
+def bootstrap_configs(log_fn=None):
+    """Ensure FRIDAY_CONFIG directory and default config files are initialized."""
+    log = log_fn or _log
+    from friday._paths import FRIDAY_CONFIG
+    import json
+    import os
+
+    log("[INIT] Checking configuration directory...")
+    os.makedirs(FRIDAY_CONFIG, exist_ok=True)
+    
+    # model_router.json
+    router_path = os.path.join(FRIDAY_CONFIG, "model_router.json")
+    if not os.path.exists(router_path):
+        from friday.model_router import DEFAULT_CONFIG
+        with open(router_path, "w") as f:
+            json.dump(DEFAULT_CONFIG, f, indent=2)
+        log("[OK] Initialized default model_router.json")
+
+    # extension_registry.json
+    ext_path = os.path.join(FRIDAY_CONFIG, "extension_registry.json")
+    if not os.path.exists(ext_path):
+        default_ext = {"extensions": {}, "mcp_servers": {}, "version": 1}
+        with open(ext_path, "w") as f:
+            json.dump(default_ext, f, indent=2)
+        log("[OK] Initialized default extension_registry.json")
+
+    # autonomy.json
+    autonomy_path = os.path.join(FRIDAY_CONFIG, "autonomy.json")
+    if not os.path.exists(autonomy_path):
+        default_autonomy = {"autonomy_level": "high", "version": 1}
+        with open(autonomy_path, "w") as f:
+            json.dump(default_autonomy, f, indent=2)
+        log("[OK] Initialized default autonomy.json")
+
+
 # ─── Full Launch ────────────────────────────────────────
 
 def launch_all(dashboard_port: int = 7070,
@@ -130,35 +165,7 @@ def launch_all(dashboard_port: int = 7070,
     _log("Starting FRIDAY services...")
 
     # Initialize configuration files if they are missing
-    from friday._paths import FRIDAY_CONFIG
-    import json
-    
-    _log("[INIT] Checking configuration directory...")
-    os.makedirs(FRIDAY_CONFIG, exist_ok=True)
-    
-    # model_router.json
-    router_path = os.path.join(FRIDAY_CONFIG, "model_router.json")
-    if not os.path.exists(router_path):
-        from friday.model_router import DEFAULT_CONFIG
-        with open(router_path, "w") as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2)
-        _log("[OK] Initialized default model_router.json")
-
-    # extension_registry.json
-    ext_path = os.path.join(FRIDAY_CONFIG, "extension_registry.json")
-    if not os.path.exists(ext_path):
-        default_ext = {"extensions": {}, "mcp_servers": {}, "version": 1}
-        with open(ext_path, "w") as f:
-            json.dump(default_ext, f, indent=2)
-        _log("[OK] Initialized default extension_registry.json")
-
-    # autonomy.json
-    autonomy_path = os.path.join(FRIDAY_CONFIG, "autonomy.json")
-    if not os.path.exists(autonomy_path):
-        default_autonomy = {"autonomy_level": "high", "version": 1}
-        with open(autonomy_path, "w") as f:
-            json.dump(default_autonomy, f, indent=2)
-        _log("[OK] Initialized default autonomy.json")
+    bootstrap_configs(log_fn=_log)
 
     # 1. Memory check
     _log("[CHECK] Memory...")
