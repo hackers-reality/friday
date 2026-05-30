@@ -119,6 +119,7 @@ scratch/
 
 .gmail_token.json
 .github_token.json
+dashboard/
 dashboard/node_modules/
 friday_memory/
 *.pt
