@@ -153,6 +153,76 @@ from friday.tools_osint_extra import (
     btc_address_lookup, eth_address_lookup,
     format_osint_for_report, summarize_osint_findings, osint_to_markdown,
 )
+# ── Browser Automation (browser-use) ──
+from friday.tools.browser_tool import (
+    BrowserActionResult, run_browser_task,
+    browser_navigate, browser_extract_content, browser_search,
+)
+
+# ── Maigret OSINT Username Search ──
+from friday.tools.maigret_tool import (
+    MaigretProfile, MaigretResult, run_maigret,
+)
+
+# ── Holehe OSINT Email-to-Account Check ──
+from friday.tools.holehe_tool import (
+    HoleheServiceResult, HoleheResult, run_holehe,
+)
+
+# ── Telegram OSINT (Telethon) ──
+from friday.tools.telegram_osint_tool import (
+    TelegramMessage, TelegramChannelInfo, TelegramUserInfo, TelegramResult,
+    resolve_telegram_user, scrape_telegram_channel,
+)
+
+# ── GitHub OSINT (PyGithub) ──
+from friday.tools.github_osint_tool import (
+    GithubRepo, GithubUserInfo, GithubCommitInfo, GithubResult,
+    github_user_info, github_search_users, github_search_repos,
+    github_commit_emails, github_org_repos,
+)
+
+# ── Naminter Username Enumeration ──
+from friday.tools.naminter_tool import (
+    NaminterProfile, NaminterResult, run_naminter,
+)
+
+# ── Wappalyzer Web Technology Detection ──
+from friday.tools.wappalyzer_tool import (
+    WappalyzerTech, WappalyzerResult, detect_technologies,
+)
+
+# ── Search Tools (DuckDuckGo / Brave / Tavily) ──
+from friday.tools.search_tools import (
+    SearchItem, SearchResult,
+    search_duckduckgo, search_brave, search_tavily, search_auto,
+)
+
+# ── Dev Tools (Ruff / ripgrep / ast-grep / Tree-sitter / Pyright) ──
+from friday.tools.dev_tools import (
+    lint_code, format_code, search_code, search_ast, parse_code, type_check,
+)
+
+# ── Web Tools (Crawl4AI / curl_cffi / Trafilatura / Docling) ──
+from friday.tools.web_tools import (
+    crawl_page, fetch_with_fingerprint, extract_text, parse_document,
+)
+
+# ── AI Tools (Ollama / Diffusers / OpenRouter / Langfuse) ──
+from friday.tools.ai_tools import (
+    ollama_generate, ollama_list_models, generate_image, openrouter_chat, langfuse_trace,
+)
+
+# ── Storage / Database Tools (Supabase / Qdrant / e2b) ──
+from friday.tools.storage_tools import (
+    supabase_query, qdrant_search, e2b_execute_code,
+)
+
+# ── SCM / DevOps Tools (pre-commit / PyDriller / LibCST / pip-audit) ──
+from friday.tools.scm_tools import (
+    run_precommit, analyze_git_repo, codemod_python, audit_dependencies,
+)
+
 from friday.kimi_webbridge_tool import (
     webbridge_connect, webbridge_disconnect, webbridge_doctor,
     webbridge_navigate, webbridge_click, webbridge_fill,
@@ -246,6 +316,24 @@ __all__ = _tflat.__all__ + [
     "security_headers", "cors_check",
     "wayback_snapshots", "wayback_urls",
     "certificate_transparency", "domain_similar",
+    # ── Browser Automation (browser-use) ──
+    "BrowserActionResult", "run_browser_task",
+    "browser_navigate", "browser_extract_content", "browser_search",
+    # ── Maigret OSINT Username Search ──
+    "MaigretProfile", "MaigretResult", "run_maigret",
+    # ── Holehe Email-to-Account ──
+    "HoleheServiceResult", "HoleheResult", "run_holehe",
+    # ── Telegram OSINT ──
+    "TelegramMessage", "TelegramChannelInfo", "TelegramUserInfo", "TelegramResult",
+    "resolve_telegram_user", "scrape_telegram_channel",
+    # ── GitHub OSINT ──
+    "GithubRepo", "GithubUserInfo", "GithubCommitInfo", "GithubResult",
+    "github_user_info", "github_search_users", "github_search_repos",
+    "github_commit_emails", "github_org_repos",
+    # ── Naminter Username Enumeration ──
+    "NaminterProfile", "NaminterResult", "run_naminter",
+    # ── Wappalyzer Web Technology Detection ──
+    "WappalyzerTech", "WappalyzerResult", "detect_technologies",
     # ── Kimi WebBridge ──
     "webbridge_connect", "webbridge_disconnect", "webbridge_doctor",
     "webbridge_navigate", "webbridge_click", "webbridge_fill",
@@ -256,4 +344,17 @@ __all__ = _tflat.__all__ + [
     "webbridge_get_current_url", "webbridge_get_title", "webbridge_hover",
     "webbridge_focus", "webbridge_double_click", "webbridge_drag",
     "webbridge_install_instructions",
+    # ── Search Tools (DuckDuckGo / Brave / Tavily) ──
+    "SearchItem", "SearchResult",
+    "search_duckduckgo", "search_brave", "search_tavily", "search_auto",
+    # ── Dev Tools (Ruff / ripgrep / ast-grep / Tree-sitter / Pyright) ──
+    "lint_code", "format_code", "search_code", "search_ast", "parse_code", "type_check",
+    # ── Web Tools (Crawl4AI / curl_cffi / Trafilatura / Docling) ──
+    "crawl_page", "fetch_with_fingerprint", "extract_text", "parse_document",
+    # ── AI Tools (Ollama / Diffusers / OpenRouter / Langfuse) ──
+    "ollama_generate", "ollama_list_models", "generate_image", "openrouter_chat", "langfuse_trace",
+    # ── Storage / Database Tools (Supabase / Qdrant / e2b) ──
+    "supabase_query", "qdrant_search", "e2b_execute_code",
+    # ── SCM / DevOps Tools (pre-commit / PyDriller / LibCST / pip-audit) ──
+    "run_precommit", "analyze_git_repo", "codemod_python", "audit_dependencies",
 ]

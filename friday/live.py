@@ -3016,6 +3016,25 @@ async def friday_live_engine():
     except Exception:
         pass
 
+    # ── Agent Chat System ──
+    try:
+        from friday.agent_chat import get_agent_chat_system
+        _agent_chat = get_agent_chat_system()
+        asyncio.create_task(_agent_chat.load_state())
+        console.print("[dim]Agent chat system initialized[/]")
+    except Exception:
+        pass
+
+    # ── Goal Punisher ──
+    try:
+        from friday.goal_punisher import GoalPunisher
+        _goal_punisher = GoalPunisher()
+        _goal_punisher.load_state()
+        _goal_punisher.start_monitoring()
+        console.print("[dim]Goal punisher active[/]")
+    except Exception:
+        pass
+
     try:
         from friday.scheduler import scheduler_tool
         scheduler_tool("start")
