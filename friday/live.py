@@ -19,16 +19,12 @@ import datetime
 import json
 import os
 import queue as _thread_queue
-import re
 import struct
 import sys
 import threading
 import time
 
-import cv2
-import numpy as np
 import pyaudio
-import requests
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -39,7 +35,6 @@ from rich import box
 
 import pvporcupine
 from pvrecorder import PvRecorder
-from PIL import ImageGrab
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
 
 if sys.platform == "win32":
@@ -163,16 +158,15 @@ from friday.email_analysis_tool import (
 from friday.google_clients import (
     sheets_create, sheets_read, sheets_write, sheets_append, sheets_list,
     docs_create, docs_read, docs_append_text,
-    slides_create, slides_add_slide, slides_read,
-    drive_list, drive_search, drive_upload, drive_download, drive_create_folder,
-    translate_text, translate_detect_language,
+    slides_create, slides_read,
+    drive_list, drive_search, drive_upload, drive_download,
+    translate_text,
     tts_synthesize,
     vision_annotate,
-    maps_geocode, maps_reverse_geocode, maps_places_search, maps_directions,
+    maps_geocode, maps_places_search,
     youtube_analytics_advanced,
-    classroom_list_courses, classroom_list_coursework,
-    books_search, books_get_volume,
-    people_list, people_search, people_create_contact,
+    classroom_list_courses,
+    books_search,
 )
 from friday.agent_terminal import (
     agent_spawn_and_track, agent_delegate_with_terminal,
@@ -180,9 +174,6 @@ from friday.agent_terminal import (
     friday_key_check, friday_workflow_research_vuln_fix,
     agent_bus_status, agent_chain_research_vuln_fix,
     friday_multi_agent_task, close_all_agent_resources,
-    friday_craft_delegation_prompt, friday_delegate_with_prompt,
-    get_delegation_depth, get_allowed_tools_for_agent,
-    store_agent_session, load_agent_config,
 )
 
 from friday.tools_osint_extra import (
@@ -2810,6 +2801,12 @@ def _invoke_tool(func_name, args, session=None):
             result = situational_awareness()
         else:
             result = func(**args)
+        # Handle coroutines returned by async tools
+        if hasattr(result, '__await__'):
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as _pool:
+                future = _pool.submit(asyncio.run, result)
+                result = future.result(timeout=300)
         # Run post-hooks
         try:
             from friday.hooks import run_post_hooks
