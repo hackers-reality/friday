@@ -2345,8 +2345,18 @@ def _build_tools():
                 name="close_all_agent_resources",
                 description="Close all active agent terminal windows and clean up resources."
             ),
+
+            # ─── Auto-generated declarations from tools/registry.py ───
+            *build_new_tools(types),
         ])
     ]
+
+
+def build_new_tools(types_module) -> list:
+    """Generate FunctionDeclarations from tools/registry.py descriptors.
+    Avoids duplicates with manually-declared tools."""
+    from friday.tools.registry import build_new_tools as _build_new_tools
+    return _build_new_tools(types_module)
 
 TOOL_MAP = {
     "stark_doctor": stark_doctor,
@@ -2694,6 +2704,12 @@ TOOL_MAP = {
     "summarize_osint_findings": summarize_osint_findings,
     "osint_to_markdown": osint_to_markdown,
 }
+
+# Merge auto-registered tools from tools/registry.py into TOOL_MAP
+from friday.tools.registry import build_new_tool_map as _build_new_tool_map
+for _k, _v in _build_new_tool_map().items():
+    if _k not in TOOL_MAP:
+        TOOL_MAP[_k] = _v
 
 
 def _invoke_tool(func_name, args, session=None):
