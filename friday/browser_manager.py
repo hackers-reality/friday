@@ -430,6 +430,68 @@ class BrowserManager:
             logger.warning("Screenshot failed: %s", exc)
             return ""
 
+    # ── State ────────────────────────────────────────────────
+
+    async def get_state(self) -> dict:
+        page = await self.get_page()
+        try:
+            if self._backend == "pyppeteer":
+                title = await page.title()
+            else:
+                title = await page.title()
+            return {"url": page.url, "title": title}
+        except Exception as exc:
+            logger.warning("get_state failed: %s", exc)
+            return {"url": "", "title": ""}
+
+    # ── Click ────────────────────────────────────────────────
+
+    async def click(self, selector: str) -> dict:
+        page = await self.get_page()
+        try:
+            await page.click(selector)
+            return {"ok": True, "selector": selector}
+        except Exception as exc:
+            logger.warning("Click failed: %s", exc)
+            return {"ok": False, "selector": selector, "error": str(exc)}
+
+    # ── Type ─────────────────────────────────────────────────
+
+    async def type_text(self, selector: str, text: str) -> dict:
+        page = await self.get_page()
+        try:
+            if self._backend == "pyppeteer":
+                await page.click(selector)
+                await page.type(selector, text)
+            else:
+                await page.fill(selector, text)
+            return {"ok": True, "selector": selector, "text": text}
+        except Exception as exc:
+            logger.warning("Type failed: %s", exc)
+            return {"ok": False, "selector": selector, "error": str(exc)}
+
+    # ── Extract ──────────────────────────────────────────────
+
+    async def extract(self) -> dict:
+        page = await self.get_page()
+        try:
+            text = await page.evaluate("document.body.innerText")
+            return {"text": text}
+        except Exception as exc:
+            logger.warning("Extract failed: %s", exc)
+            return {"text": "", "error": str(exc)}
+
+    # ── Evaluate ─────────────────────────────────────────────
+
+    async def evaluate(self, script: str) -> dict:
+        page = await self.get_page()
+        try:
+            result = await page.evaluate(script)
+            return {"result": result}
+        except Exception as exc:
+            logger.warning("Evaluate failed: %s", exc)
+            return {"result": None, "error": str(exc)}
+
     # ── Session Management ───────────────────────────────────
 
     async def switch_session(self, session_name: str) -> bool:

@@ -21,12 +21,24 @@ import httpx
 
 NIM_API_BASE = os.getenv("NIM_API_BASE", "https://integrate.api.nvidia.com/v1")
 ZEN_API_BASE = os.getenv("ZEN_API_BASE", "https://api.opencode.ai/v1")
+GEMINI_FALLBACK_MODEL = os.getenv(
+    "GEMINI_MODEL",
+    os.getenv("FRIDAY_GEMINI_MODEL", "gemini-3.1-flash-live-preview"),
+)
+
+
+def _env_first(*names: str) -> str:
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return ""
 
 
 def _collect_nim_keys() -> list[str]:
-    """Collect all NVIDIA API keys from .env: NVIDIA_API_KEY, NIM_KEY_1..N."""
+    """Collect NVIDIA keys from supported .env aliases plus NIM_KEY_1..N."""
     keys: list[str] = []
-    primary = os.getenv("NVIDIA_API_KEY", "")
+    primary = _env_first("NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY", "NIM_API_KEY")
     if primary:
         keys.append(primary)
     i = 1
@@ -78,7 +90,7 @@ class InferenceClient:
 
     1. NVIDIA NIM  — multi-key, rate-limited, OpenAI-compatible
     2. OpenCode Zen — single-key, OpenAI-compatible (opencode/big-pickle, etc.)
-    3. Google Gemini — google-genai SDK (gemini-2.0-flash)
+    3. Google Gemini — google-genai SDK
     """
 
     def __init__(self, nim_api_base: str = NIM_API_BASE, zen_api_base: str = ZEN_API_BASE):
@@ -89,7 +101,8 @@ class InferenceClient:
         self._key_lock = asyncio.Lock()
         self._buckets: dict[str, TokenBucket] = {}
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0))
-        self._zen_key = os.getenv("ZEN_API_KEY", "")
+        self._zen_key = _env_first("ZEN_API_KEY", "OPENCODE_ZEN_API_KEY", "OPENCODE_API_KEY")
+        self._zen_model = os.getenv("OPENCODE_ZEN_MODEL", "opencode/big-pickle")
 
     def _bucket(self, model: str) -> TokenBucket:
         if model not in self._buckets:
@@ -108,6 +121,7 @@ class InferenceClient:
         messages: list[dict],
         max_tokens: int = 4096,
         temperature: float = 0.7,
+        tools: list[dict] | None = None,
     ) -> NIMResult:
         """
         Send a chat completion request. Fallback chain:
@@ -150,6 +164,8 @@ class InferenceClient:
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
+        if tools:
+            payload["tools"] = tools
 
         for attempt in range(4):
             t0 = time.monotonic()
@@ -196,7 +212,7 @@ class InferenceClient:
         """Tier 2: OpenCode Zen API (OpenAI-compatible)."""
         t0 = time.monotonic()
         try:
-            zen_model = "opencode/big-pickle"
+            zen_model = self._zen_model
             resp = await self._client.post(
                 f"{self.zen_api_base}/chat/completions",
                 headers={"Authorization": f"Bearer {self._zen_key}", "Content-Type": "application/json"},
@@ -217,10 +233,10 @@ class InferenceClient:
             return NIMResult(model=zen_model, content=choice.get("message", {}).get("content", ""),
                              usage=data.get("usage", {}), duration_ms=duration)
         except httpx.TimeoutException:
-            return NIMResult(model="opencode/big-pickle", content="[ZEN timeout]",
+            return NIMResult(model=self._zen_model, content="[ZEN timeout]",
                              usage={}, duration_ms=int((time.monotonic() - t0) * 1000))
         except Exception as e:
-            return NIMResult(model="opencode/big-pickle", content=f"[ZEN error] {e}",
+            return NIMResult(model=self._zen_model, content=f"[ZEN error] {e}",
                              usage={}, duration_ms=int((time.monotonic() - t0) * 1000))
 
     async def _gemini_fallback(self, model: str, messages: list[dict], reason: str) -> NIMResult:
@@ -232,10 +248,11 @@ class InferenceClient:
             user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
             prompt = f"{sys_msg}\n\n{user_msg}" if sys_msg else user_msg
             t0 = time.monotonic()
-            resp = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+            model_id = os.getenv("GEMINI_MODEL", os.getenv("FRIDAY_GEMINI_MODEL", GEMINI_FALLBACK_MODEL))
+            resp = client.models.generate_content(model=model_id, contents=prompt)
             duration = int((time.monotonic() - t0) * 1000)
             return NIMResult(
-                model="gemini-2.0-flash",
+                model=model_id,
                 content=resp.text,
                 usage={"prompt_tokens": 0, "completion_tokens": 0},
                 duration_ms=duration,

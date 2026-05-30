@@ -119,3 +119,8 @@ scratch/
 
 .gmail_token.json
 .github_token.json
+dashboard/node_modules/
+friday_memory/
+*.pt
+.venv/
+__pycache__/

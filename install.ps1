@@ -86,6 +86,10 @@ $packages = @(
     "mcp>=1.0",
     "flask>=3.0",
     "flask-socketio>=5.3",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "python-multipart>=0.0.9",
+    "websockets>=12.0",
     "rich>=13.0",
     "colorama>=0.4.6"
 )
@@ -222,9 +226,12 @@ $wrapperPath = Join-Path $PWD "friday.cmd"
 @echo off
 cd /d "%~dp0"
 set PYTHONUTF8=1
-set "FRIDAY_PY=python"
-if exist ".venv\Scripts\python.exe" set "FRIDAY_PY=.venv\Scripts\python.exe"
-if exist "venv\Scripts\python.exe" set "FRIDAY_PY=venv\Scripts\python.exe"
+set "FRIDAY_PY=python.exe"
+if exist ".venv\Scripts\python.exe" (
+    set "FRIDAY_PY=.venv\Scripts\python.exe"
+) else if exist "venv\Scripts\python.exe" (
+    set "FRIDAY_PY=venv\Scripts\python.exe"
+)
 if "%~1"=="" goto start_friday
 if /I "%~1"=="start" goto start_friday
 if /I "%~1"=="live" goto start_friday
@@ -232,7 +239,7 @@ if /I "%~1"=="live" goto start_friday
 exit /b %ERRORLEVEL%
 :start_friday
 echo [STARK INDUSTRIES] Bootstrapping F.R.I.D.A.Y. Sovereign Agent...
-echo [+] Starting dashboard, sidecar heartbeat, memory, monitor, and live voice loop...
+echo [+] Starting dashboard server. This terminal shows logs only...
 echo.
 %FRIDAY_PY% friday.py
 "@ | Out-File -FilePath $wrapperPath -Encoding ASCII

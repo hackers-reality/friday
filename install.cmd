@@ -135,9 +135,12 @@ echo [7/7] Adding friday command to PATH...
 echo @echo off
 echo cd /d "%%~dp0"
 echo set PYTHONUTF8=1
-echo set "FRIDAY_PY=python"
-echo if exist ".venv\Scripts\python.exe" set "FRIDAY_PY=.venv\Scripts\python.exe"
-echo if exist "venv\Scripts\python.exe" set "FRIDAY_PY=venv\Scripts\python.exe"
+echo set "FRIDAY_PY=python.exe"
+echo if exist ".venv\Scripts\python.exe" ^(
+echo     set "FRIDAY_PY=.venv\Scripts\python.exe"
+echo ^) else if exist "venv\Scripts\python.exe" ^(
+echo     set "FRIDAY_PY=venv\Scripts\python.exe"
+echo ^)
 echo if "%%~1"=="" goto start_friday
 echo if /I "%%~1"=="start" goto start_friday
 echo if /I "%%~1"=="live" goto start_friday
@@ -145,7 +148,7 @@ echo %%FRIDAY_PY%% -m friday.cli %%*
 echo exit /b %%ERRORLEVEL%%
 echo :start_friday
 echo echo [STARK INDUSTRIES] Bootstrapping F.R.I.D.A.Y. Sovereign Agent...
-echo echo [+] Starting dashboard, sidecar heartbeat, memory, monitor, and live voice loop...
+echo echo [+] Starting dashboard server. This terminal shows logs only...
 echo echo.
 echo %%FRIDAY_PY%% friday.py
 ) > "%PWD%\friday.cmd"

@@ -863,13 +863,11 @@ def git_ops(operation: str, message: str = "") -> str:
     return f"Git {operation}"
 
 def see_screen(question: str = "What do you see on the screen?") -> str:
-    """Capture screen and analyze it using Gemini Vision API.
-    Uses gemini-1.5-flash (higher quota) with automatic retry + model fallback on 429."""
+    """Capture screen and analyze it — fast. Uses lower res + fastest model first."""
     try:
         import base64, io, requests, json, time
         from PIL import Image, ImageGrab
 
-        # Capture screen: try pyautogui first, fallback to PIL ImageGrab
         img = None
         try:
             import pyautogui
@@ -880,56 +878,56 @@ def see_screen(question: str = "What do you see on the screen?") -> str:
             except Exception as e2:
                 return f"[FAIL] Screen capture failed: {e2}"
 
-        # Resize for API efficiency
-        img.thumbnail((1280, 720), Image.LANCZOS)
+        # Lower res = faster
+        img.thumbnail((800, 600), Image.LANCZOS)
         buffer = io.BytesIO()
-        img.save(buffer, format="JPEG", quality=75)
+        img.save(buffer, format="JPEG", quality=60)
         img_b64 = base64.b64encode(buffer.getvalue()).decode()
 
         api_key = os.environ.get("GOOGLE_API_KEY", "")
         if not api_key:
             return "[FAIL] GOOGLE_API_KEY not configured."
 
-        models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"]
+        # Fastest model first, single attempt per model
+        models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
         last_error = ""
 
         for model in models:
-            for attempt in range(2):
-                try:
-                    r = requests.post(
-                        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                        headers={"Content-Type": "application/json"},
-                        params={"key": api_key},
-                        json={
-                            "contents": [{
-                                "parts": [
-                                    {"text": f"[SCREEN ANALYSIS] {question}\nDescribe what you see. Include: visible text, UI elements, coordinates of interactive elements, any errors on screen."},
-                                    {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
-                                ]
-                            }]
-                        },
-                        timeout=30,
-                    )
-                    data = r.json()
-                    if r.status_code == 429:
-                        last_error = f"Rate limited on {model}"
-                        time.sleep(2 ** attempt)
-                        continue
-                    if r.status_code != 200:
-                        last_error = f"{model} HTTP {r.status_code}: {data.get('error', {}).get('message', '')}"
-                        break
-                    if "candidates" not in data or not data["candidates"]:
-                        error_info = data.get("error", {}).get("message", str(data))
-                        last_error = f"{model} no response: {error_info}"
-                        break
-                    text = data["candidates"][0]["content"]["parts"][0]["text"]
-                    return text
-                except requests.exceptions.Timeout:
-                    last_error = f"{model} timeout"
+            try:
+                r = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    headers={"Content-Type": "application/json"},
+                    params={"key": api_key},
+                    json={
+                        "contents": [{
+                            "parts": [
+                                {"text": f"[SCREEN] {question}"},
+                                {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
+                            ]
+                        }]
+                    },
+                    timeout=15,
+                )
+                data = r.json()
+                if r.status_code == 429:
+                    last_error = f"Rate limited on {model}"
+                    time.sleep(2)
                     continue
-                except Exception as e:
-                    last_error = f"{model} error: {e}"
+                if r.status_code != 200:
+                    last_error = f"{model} HTTP {r.status_code}: {data.get('error', {}).get('message', '')}"
                     break
+                if "candidates" not in data or not data["candidates"]:
+                    error_info = data.get("error", {}).get("message", str(data))
+                    last_error = f"{model} no response: {error_info}"
+                    break
+                text = data["candidates"][0]["content"]["parts"][0]["text"]
+                return text
+            except requests.exceptions.Timeout:
+                last_error = f"{model} timeout"
+                continue
+            except Exception as e:
+                last_error = f"{model} error: {e}"
+                break
 
         return f"[FAIL] Screen analysis failed. All models exhausted. Last error: {last_error}"
     except ImportError as e:
@@ -1135,6 +1133,237 @@ def kyu_tool_handler(action: str = "status", **kwargs) -> str:
         return "[FAIL] friday.kyu not available."
     except Exception as e:
         return f"[FAIL] KYU error: {e}"
+
+
+def osint_user_profile_tool(action: str = "status", name: str = "", email: str = "", fields: str = "") -> str:
+    """Dynamic user OSINT profiling: onboard, research, status, or update profile.
+    Actions:
+      'onboard'   — Save user's name/email and create profile entry.
+      'research'  — Run OSINT tools (social search, breach check, email rep, DNS, domain sim) against stored name/email to enrich profile.
+      'status'    — Return current profile state (what we know, what's missing).
+      'update'    — Manually update profile fields from conversation (format: 'field:value|field:value').
+    """
+    try:
+        from friday.memory_import import load_profile, save_profile
+        import asyncio
+
+        if action == "onboard":
+            if not name and not email:
+                return "[FAIL] Provide at least name or email for onboarding."
+            profile = load_profile()
+            if not profile or profile.get("version", 0) < 1:
+                profile = {"name": None, "version": 2, "audits": [], "last_updated": None}
+            if name:
+                profile["name"] = name.strip()
+            if email:
+                social = profile.setdefault("social_media", {})
+                existing = social.setdefault("email", [])
+                if email.strip() not in existing:
+                    existing.append(email.strip())
+            profile["last_updated"] = datetime.now().isoformat()
+            conf = profile.setdefault("_confidence", {})
+            conf["name"] = conf.get("name", 0.7) if name else 0.0
+            save_profile(profile)
+            memory_store("user_name", profile.get("name", ""), "profile")
+            if email:
+                memory_store("user_email", email.strip(), "profile")
+            return f"[OK] Onboarded: name={profile.get('name')}, email={email or 'not provided'}"
+
+        elif action == "research":
+            profile = load_profile()
+            pname = profile.get("name", name) if profile else name
+            pemails = []
+            if profile:
+                pemails = profile.get("social_media", {}).get("email", [])
+            if email and email not in pemails:
+                pemails.append(email)
+            if not pname and not pemails:
+                return "[FAIL] No name or email in profile. Run 'onboard' first or pass name/email as kwargs."
+
+            findings = {}
+
+            async def _run_osint():
+                from friday.tools_osint_extra import (
+                    social_analyzer, leak_check, email_rep, holehe_check,
+                    email_domain_analyzer, dns_enum, domain_similar
+                )
+                if pname:
+                    try:
+                        res = await social_analyzer(pname)
+                        if "error" not in res:
+                            findings["social_media"] = res
+                    except Exception:
+                        pass
+                for eaddr in pemails:
+                    try:
+                        res = await leak_check(eaddr)
+                        if "error" not in res:
+                            findings.setdefault("breaches", {})[eaddr] = res
+                    except Exception:
+                        pass
+                    try:
+                        res = await email_rep(eaddr)
+                        if "error" not in res:
+                            findings.setdefault("email_reputation", {})[eaddr] = res
+                    except Exception:
+                        pass
+                    try:
+                        res = await holehe_check(eaddr)
+                        if "error" not in res:
+                            findings.setdefault("account_existence", {})[eaddr] = res
+                    except Exception:
+                        pass
+                    try:
+                        res = await email_domain_analyzer(eaddr)
+                        if "error" not in res:
+                            findings.setdefault("email_domain", {})[eaddr] = res
+                    except Exception:
+                        pass
+                    domain = eaddr.split("@")[-1] if "@" in eaddr else None
+                    if domain:
+                        try:
+                            res = await dns_enum(domain)
+                            if "error" not in res:
+                                findings.setdefault("dns", {})[domain] = res
+                        except Exception:
+                            pass
+                        try:
+                            res = await domain_similar(domain)
+                            if "error" not in res:
+                                findings.setdefault("similar_domains", {})[domain] = res
+                        except Exception:
+                            pass
+
+            try:
+                asyncio.run(_run_osint())
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(_run_osint())
+                finally:
+                    loop.close()
+
+            profile = load_profile()
+            for eaddr in pemails:
+                social = profile.setdefault("social_media", {})
+                existing = social.setdefault("email", [])
+                if eaddr not in existing:
+                    existing.append(eaddr)
+            br = findings.get("breaches", {})
+            for eaddr, data in br.items():
+                if data.get("found"):
+                    breach_entry = {
+                        "source": f"breach_check_{eaddr}",
+                        "detail": f"Found in {data.get('source_count', 0)} breaches",
+                        "confidence": 0.8,
+                    }
+                    profile.setdefault("security_audit", []).append(breach_entry)
+            social_found = findings.get("social_media", {}).get("platforms_found", [])
+            if social_found:
+                profile.setdefault("social_media", {}).setdefault("platforms", social_found)
+                memory_store("osint_social_platforms", ", ".join(social_found), "osint")
+            save_profile(profile)
+            memory_store("osint_profiling_done", datetime.now().isoformat(), "osint")
+
+            lines = ["### OSINT Profile Research Complete", ""]
+            if pname:
+                lines.append(f"**Name:** {pname}")
+            if pemails:
+                lines.append(f"**Emails:** {', '.join(pemails)}")
+            if social_found:
+                lines.append(f"**Social platforms found:** {', '.join(social_found[:10])}")
+            for eaddr, data in br.items():
+                if data.get("found"):
+                    lines.append(f"**Breaches for {eaddr}:** {data.get('source_count', 0)} sources, {data.get('password_count', 0)} passwords")
+                else:
+                    lines.append(f"**Breaches for {eaddr}:** None found")
+            for eaddr, data in findings.get("email_reputation", {}).items():
+                rep = data.get("reputation", "unknown")
+                lines.append(f"**Reputation ({eaddr}):** {rep}")
+            return "\n".join(lines)
+
+        elif action == "status":
+            profile = load_profile()
+            if not profile or not profile.get("name"):
+                return "[INFO] No user profile exists yet. Run 'onboard' to create one."
+            lines = ["### User Profile Status", ""]
+            lines.append(f"**Name:** {profile.get('name', 'Not set')}")
+            emails = profile.get("social_media", {}).get("email", [])
+            if emails:
+                lines.append(f"**Emails:** {', '.join(emails)}")
+            else:
+                lines.append("**Emails:** None")
+            conf = profile.get("_confidence", {})
+            lines.append(f"**Name confidence:** {conf.get('name', 0)}")
+            platforms = profile.get("social_media", {}).get("platforms", [])
+            if platforms:
+                lines.append(f"**Social platforms:** {', '.join(platforms)}")
+            has_osint = False
+            try:
+                memory_file = os.path.join(FRIDAY_MEMORY, "memory.json")
+                if os.path.exists(memory_file):
+                    with open(memory_file, "r", encoding="utf-8") as f:
+                        memories = json.load(f)
+                    has_osint = any(m.get("key") == "osint_profiling_done" for m in memories)
+            except Exception:
+                pass
+            lines.append(f"**OSINT profiling:** {'Done' if has_osint else 'Not yet run'}")
+            lines.append(f"**Last updated:** {profile.get('last_updated', 'Never')}")
+            missing = []
+            if not profile.get("location"):
+                missing.append("location")
+            if not profile.get("occupation"):
+                missing.append("occupation")
+            if not profile.get("tech_stack"):
+                missing.append("tech_stack")
+            if missing:
+                lines.append(f"**Missing info:** {', '.join(missing)}")
+            return "\n".join(lines)
+
+        elif action == "update":
+            if not fields:
+                return "[FAIL] Provide 'fields' in format 'field:value|field:value'"
+            profile = load_profile()
+            if not profile or profile.get("version", 0) < 1:
+                profile = {"name": None, "version": 2, "audits": [], "last_updated": None}
+            pairs = [p.strip() for p in fields.split("|")]
+            updated = []
+            for pair in pairs:
+                if ":" not in pair:
+                    continue
+                key, val = pair.split(":", 1)
+                key = key.strip().lower()
+                val = val.strip()
+                if key == "name":
+                    profile["name"] = val
+                    updated.append(f"name={val}")
+                elif key == "email":
+                    profile.setdefault("social_media", {}).setdefault("email", []).append(val)
+                    updated.append(f"email={val}")
+                elif key == "location":
+                    profile["location"] = val
+                    updated.append(f"location={val}")
+                elif key == "occupation":
+                    profile["occupation"] = val
+                    updated.append(f"occupation={val}")
+                elif key in ("tech", "tech_stack"):
+                    profile.setdefault("tech_stack", []).append({"item": val, "confidence": 0.7, "source": "conversation"})
+                    updated.append(f"tech_stack+={val}")
+                elif key == "goals":
+                    profile.setdefault("goals", []).append({"item": val, "confidence": 0.7, "source": "conversation"})
+                    updated.append(f"goals+={val}")
+                elif key in ("interests", "hobbies"):
+                    profile.setdefault("interests", []).append({"item": val, "confidence": 0.7, "source": "conversation"})
+                    updated.append(f"interests+={val}")
+            profile["last_updated"] = datetime.now().isoformat()
+            save_profile(profile)
+            return f"[OK] Profile updated: {', '.join(updated)}"
+
+        else:
+            return f"[FAIL] Unknown action: {action}. Use: onboard, research, status, update."
+
+    except Exception as e:
+        return f"[FAIL] OSINT User Profile error: {e}"
 
 
 def research_tool_handler(action: str = "analyze", topic: str = None, depth: int = 3) -> str:
@@ -1893,15 +2122,70 @@ def queue_result(task_id: str) -> str:
 
 
 def type_text(text: str) -> str:
-    """Type text using keyboard simulation."""
+    """Type text using keyboard simulation with multi-method fallback."""
+    import subprocess, time, os, tempfile, ctypes, base64
+
+    # Method 1: pyautogui
     try:
         import pyautogui
-        pyautogui.typewrite(text)
-        return f"[OK] Typed: {text[:50]}..."
-    except ImportError:
-        return "[FAIL] pyautogui not installed."
-    except Exception as e:
-        return f"[FAIL] Type error: {e}"
+        time.sleep(0.3)
+        pyautogui.typewrite(text, interval=0.02)
+        return f"[OK] Typed: {text[:50]}... (pyautogui)"
+    except Exception:
+        pass
+
+    # Method 2: Clipboard + Ctrl+V (most reliable on Windows)
+    try:
+        encoded = base64.b64encode(text.encode("utf-16-le")).decode()
+        ps_script = (
+            'Add-Type -AssemblyName System.Windows.Forms; '
+            '$bytes = [Convert]::FromBase64String("{0}"); '
+            '$text = [System.Text.Encoding]::Unicode.GetString($bytes); '
+            '[System.Windows.Forms.Clipboard]::SetText($text); '
+            'Start-Sleep -Milliseconds 100; '
+            '$wshell = New-Object -ComObject wscript.shell; '
+            '$wshell.SendKeys("^v"); '
+            'Start-Sleep -Milliseconds 200'
+        ).format(encoded)
+        subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                       capture_output=True, timeout=10)
+        return f"[OK] Typed: {text[:50]}... (clipboard)"
+    except Exception:
+        pass
+
+    # Method 3: PowerShell SendKeys directly
+    try:
+        escaped = text.replace("'", "''").replace("{", "{{").replace("}", "}}")
+        ps_script = (
+            'Add-Type -AssemblyName System.Windows.Forms; '
+            '[System.Windows.Forms.SendKeys]::SendWait("{0}")'
+        ).format(escaped)
+        subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                       capture_output=True, timeout=10)
+        return f"[OK] Typed: {text[:50]}... (sendkeys)"
+    except Exception:
+        pass
+
+    # Method 4: ctypes keybd_event (Win32 API)
+    try:
+        user32 = ctypes.windll.user32
+        for ch in text:
+            shift = ch.isupper() or ch in "~!@#$%^&*()_+{}|:\"<>?"
+            vk = ord(ch.upper()) if ch.isalpha() else (ord(ch) if ord(ch) < 256 else 0)
+            if vk == 0:
+                continue
+            if shift:
+                user32.keybd_event(0x10, 0, 0, 0)
+            user32.keybd_event(vk, 0, 0, 0)
+            user32.keybd_event(vk, 0, 2, 0)
+            if shift:
+                user32.keybd_event(0x10, 0, 2, 0)
+            time.sleep(0.01)
+        return f"[OK] Typed: {text[:50]}... (win32)"
+    except Exception:
+        pass
+
+    return "[FAIL] All typing methods failed."
 
 
 def take_snapshot(name: str = None) -> str:
@@ -2364,6 +2648,286 @@ def opencli_drag(source: str, target: str) -> str:
         return "[FAIL] friday.opencli not available."
     except Exception as e:
         return f"[FAIL] Drag error: {e}"
+
+
+#  Kimi WebBridge Tools (replacement for OpenCLI) #
+
+def _run_kimi_async(coro):
+    """Helper to run an async Kimi WebBridge function synchronously."""
+    try:
+        import asyncio
+        try:
+            return asyncio.run(coro)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+def webbridge_connect_sync() -> str:
+    """Connect to Kimi WebBridge daemon."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_connect
+        result = _run_kimi_async(webbridge_connect())
+        if result.get("success"):
+            return f"[OK] Kimi WebBridge connected (daemon running)"
+        return f"[FAIL] Kimi WebBridge: {result.get('error', 'connection failed')}"
+    except ImportError:
+        return "[FAIL] friday.kimi_webbridge_tool not available."
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge connect error: {e}"
+
+def webbridge_disconnect_sync() -> str:
+    """Disconnect from Kimi WebBridge daemon."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_disconnect
+        result = _run_kimi_async(webbridge_disconnect())
+        return "[OK] Kimi WebBridge disconnected" if result.get("success") else f"[FAIL] {result.get('error', 'disconnect failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge disconnect error: {e}"
+
+def webbridge_doctor_sync() -> str:
+    """Diagnose Kimi WebBridge connectivity."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_doctor
+        result = _run_kimi_async(webbridge_doctor())
+        if result.get("success"):
+            status = result.get("status", "connected")
+            return f"[OK] Kimi WebBridge: {status}"
+        return f"[FAIL] Kimi WebBridge diagnosis: {result.get('error', 'unreachable')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge doctor error: {e}"
+
+def webbridge_navigate_sync(url: str) -> str:
+    """Open a URL in the browser via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_navigate
+        result = _run_kimi_async(webbridge_navigate(url))
+        return f"[OK] Navigated to {url}" if result.get("success") else f"[FAIL] {result.get('error', 'navigate failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge navigate error: {e}"
+
+def webbridge_click_sync(target: str) -> str:
+    """Click an element via Kimi WebBridge (CSS selector or text)."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_click
+        result = _run_kimi_async(webbridge_click(target))
+        return f"[OK] Clicked {target}" if result.get("success") else f"[FAIL] {result.get('error', 'click failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge click error: {e}"
+
+def webbridge_fill_sync(target: str, text: str) -> str:
+    """Fill a form field via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_fill
+        result = _run_kimi_async(webbridge_fill(target, text))
+        return f"[OK] Filled {target}" if result.get("success") else f"[FAIL] {result.get('error', 'fill failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge fill error: {e}"
+
+def webbridge_type_text_sync(text: str) -> str:
+    """Type text into the focused element via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_type_text
+        result = _run_kimi_async(webbridge_type_text(text))
+        return f"[OK] Typed text" if result.get("success") else f"[FAIL] {result.get('error', 'type failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge type error: {e}"
+
+def webbridge_screenshot_sync() -> str:
+    """Take a screenshot via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_screenshot
+        result = _run_kimi_async(webbridge_screenshot())
+        if result.get("success"):
+            b64 = result.get("data", "")
+            if b64:
+                import tempfile, base64
+                path = os.path.join(tempfile.gettempdir(), "kimi_screenshot.png")
+                with open(path, "wb") as f:
+                    f.write(base64.b64decode(b64))
+                return f"[OK] Screenshot saved to {path}"
+        return f"[FAIL] {result.get('error', 'screenshot failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge screenshot error: {e}"
+
+def webbridge_extract_text_sync() -> str:
+    """Extract page text via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_extract_text
+        result = _run_kimi_async(webbridge_extract_text())
+        if result.get("success"):
+            text = result.get("text", "")
+            return text[:2000] if text else "[FAIL] No text extracted"
+        return f"[FAIL] {result.get('error', 'extract failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge extract error: {e}"
+
+def webbridge_get_page_state_sync() -> str:
+    """Get page structure from Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_get_page_state
+        result = _run_kimi_async(webbridge_get_page_state())
+        if result.get("success"):
+            return str(result.get("state", result))
+        return f"[FAIL] {result.get('error', 'state failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge state error: {e}"
+
+def webbridge_scroll_sync(direction: str = "down") -> str:
+    """Scroll the browser page via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_scroll
+        result = _run_kimi_async(webbridge_scroll(direction))
+        return f"[OK] Scrolled {direction}" if result.get("success") else f"[FAIL] {result.get('error', 'scroll failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge scroll error: {e}"
+
+def webbridge_press_key_sync(key: str) -> str:
+    """Press a keyboard key in the browser via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_press_key
+        result = _run_kimi_async(webbridge_press_key(key))
+        return f"[OK] Pressed {key}" if result.get("success") else f"[FAIL] {result.get('error', 'key failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge key error: {e}"
+
+def webbridge_key_combo_sync(keys: str) -> str:
+    """Press a key combo (e.g. Ctrl+C) via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_key_combo
+        result = _run_kimi_async(webbridge_key_combo(keys))
+        return f"[OK] Combo {keys}" if result.get("success") else f"[FAIL] {result.get('error', 'combo failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge combo error: {e}"
+
+def webbridge_evaluate_sync(js: str) -> str:
+    """Execute JavaScript in the browser via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_evaluate
+        result = _run_kimi_async(webbridge_evaluate(js))
+        if result.get("success"):
+            val = result.get("result", "")
+            return str(val)[:2000] if val else "[OK] JS executed"
+        return f"[FAIL] {result.get('error', 'eval failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge eval error: {e}"
+
+def webbridge_submit_form_sync(selector: str = "") -> str:
+    """Submit a form via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_submit_form
+        result = _run_kimi_async(webbridge_submit_form(selector))
+        return f"[OK] Form submitted" if result.get("success") else f"[FAIL] {result.get('error', 'submit failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge submit error: {e}"
+
+def webbridge_select_option_sync(selector: str, value: str) -> str:
+    """Select a dropdown option via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_select_option
+        result = _run_kimi_async(webbridge_select_option(selector, value))
+        return f"[OK] Selected {value}" if result.get("success") else f"[FAIL] {result.get('error', 'select failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge select error: {e}"
+
+def webbridge_list_tabs_sync() -> str:
+    """List all browser tabs via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_list_tabs
+        result = _run_kimi_async(webbridge_list_tabs())
+        if result.get("success"):
+            tabs = result.get("tabs", [])
+            if tabs:
+                lines = [f"### Browser Tabs ({len(tabs)})"]
+                for t in tabs:
+                    lines.append(f"- {t.get('title', 'Untitled')} ({t.get('url', '')})")
+                return "\n".join(lines)
+            return "[OK] No open tabs found"
+        return f"[FAIL] {result.get('error', 'list tabs failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge tabs error: {e}"
+
+def webbridge_close_tab_sync(tab_id: str = "") -> str:
+    """Close a browser tab via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_close_tab
+        result = _run_kimi_async(webbridge_close_tab(tab_id))
+        return f"[OK] Tab closed" if result.get("success") else f"[FAIL] {result.get('error', 'close tab failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge close tab error: {e}"
+
+def webbridge_get_current_url_sync() -> str:
+    """Get the current page URL from Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_get_current_url
+        result = _run_kimi_async(webbridge_get_current_url())
+        if result.get("success"):
+            return f"Current URL: {result.get('url', 'unknown')}"
+        return f"[FAIL] {result.get('error', 'get URL failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge URL error: {e}"
+
+def webbridge_get_title_sync() -> str:
+    """Get the current page title from Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_get_title
+        result = _run_kimi_async(webbridge_get_title())
+        if result.get("success"):
+            return f"Page title: {result.get('title', 'unknown')}"
+        return f"[FAIL] {result.get('error', 'get title failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge title error: {e}"
+
+def webbridge_hover_sync(selector: str) -> str:
+    """Hover over an element via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_hover
+        result = _run_kimi_async(webbridge_hover(selector))
+        return f"[OK] Hovered {selector}" if result.get("success") else f"[FAIL] {result.get('error', 'hover failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge hover error: {e}"
+
+def webbridge_focus_sync(selector: str) -> str:
+    """Focus an element via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_focus
+        result = _run_kimi_async(webbridge_focus(selector))
+        return f"[OK] Focused {selector}" if result.get("success") else f"[FAIL] {result.get('error', 'focus failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge focus error: {e}"
+
+def webbridge_double_click_sync(selector: str) -> str:
+    """Double-click an element via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_double_click
+        result = _run_kimi_async(webbridge_double_click(selector))
+        return f"[OK] Double-clicked {selector}" if result.get("success") else f"[FAIL] {result.get('error', 'double click failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge double-click error: {e}"
+
+def webbridge_drag_sync(source: str, target: str) -> str:
+    """Drag one element to another via Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_drag
+        result = _run_kimi_async(webbridge_drag(source, target))
+        return f"[OK] Dragged {source} to {target}" if result.get("success") else f"[FAIL] {result.get('error', 'drag failed')}"
+    except Exception as e:
+        return f"[FAIL] Kimi WebBridge drag error: {e}"
+
+def webbridge_install_instructions_sync() -> str:
+    """Get instructions to install Kimi WebBridge."""
+    try:
+        from friday.kimi_webbridge_tool import webbridge_install_instructions
+        result = _run_kimi_async(webbridge_install_instructions())
+        if result.get("success"):
+            return result.get("instructions", "See kimi.com/features/webbridge")
+        return "Install Kimi WebBridge:\n1. Install Chrome extension from Chrome Web Store (search 'Kimi WebBridge')\n2. Install npm package: npm install -g kimi-webbridge\n3. Run: npx kimi-webbridge\n4. Extension connects on ws://127.0.0.1:10086/ws"
+    except Exception as e:
+        return f"[FAIL] Install instructions error: {e}"
 
 
 #  Workflow Automation Tool #
@@ -3200,6 +3764,15 @@ __all__ = [
     "opencli_run", "opencli_list_adapters",
     "opencli_hover", "opencli_focus", "opencli_dblclick",
     "opencli_check", "opencli_uncheck", "opencli_drag",
+    "webbridge_connect_sync", "webbridge_disconnect_sync", "webbridge_doctor_sync",
+    "webbridge_navigate_sync", "webbridge_click_sync", "webbridge_fill_sync",
+    "webbridge_type_text_sync", "webbridge_screenshot_sync", "webbridge_extract_text_sync",
+    "webbridge_get_page_state_sync", "webbridge_scroll_sync", "webbridge_press_key_sync",
+    "webbridge_key_combo_sync", "webbridge_evaluate_sync", "webbridge_submit_form_sync",
+    "webbridge_select_option_sync", "webbridge_list_tabs_sync", "webbridge_close_tab_sync",
+    "webbridge_get_current_url_sync", "webbridge_get_title_sync", "webbridge_hover_sync",
+    "webbridge_focus_sync", "webbridge_double_click_sync", "webbridge_drag_sync",
+    "webbridge_install_instructions_sync",
     "vector_memory_tool",
     "workflow_tool", "plugin_tool", "knowledge_graph_tool",
     "github_list_files", "github_read_file", "github_write_file",

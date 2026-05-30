@@ -1,144 +1,213 @@
-zen:
-  api_base: https://api.opencode.ai/v1
-  model: opencode/big-pickle
-
+model: gemini-3.1-flash-live-preview
 nim:
   api_base: https://integrate.api.nvidia.com/v1
   rate_limit_rpm: 40
   model_map:
     code_gen:
-      - nvidia/llama-3.1-nemotron-70b-instruct
-      - deepseek/deepseek-v3
-      - meta/llama-3.3-70b-instruct
+    - nvidia/llama-3.1-nemotron-70b-instruct
+    - deepseek/deepseek-v3
+    - meta/llama-3.3-70b-instruct
     image_analysis:
-      - nvidia/neva-22b
-      - microsoft/phi-3-vision-128k-instruct
+    - nvidia/neva-22b
+    - microsoft/phi-3-vision-128k-instruct
     research:
-      - meta/llama-3.1-405b-instruct
-      - meta/llama-3.3-70b-instruct
+    - meta/llama-3.1-405b-instruct
+    - meta/llama-3.3-70b-instruct
     summarization:
-      - mistralai/mixtral-8x22b-instruct-v0.1
-      - meta/llama-3.3-70b-instruct
+    - mistralai/mixtral-8x22b-instruct-v0.1
+    - meta/llama-3.3-70b-instruct
     reasoning:
-      - minimax/minimax-01
-      - nvidia/nemotron-4-340b-instruct
-      - meta/llama-3.1-405b-instruct
+    - minimax/minimax-01
+    - nvidia/nemotron-4-340b-instruct
+    - meta/llama-3.1-405b-instruct
     general:
-      - meta/llama-3.3-70b-instruct
-      - nvidia/llama-3.1-nemotron-70b-instruct
+    - meta/llama-3.3-70b-instruct
+    - nvidia/llama-3.1-nemotron-70b-instruct
     osint:
-      - meta/llama-3.1-405b-instruct
-      - meta/llama-3.3-70b-instruct
+    - meta/llama-3.1-405b-instruct
+    - meta/llama-3.3-70b-instruct
     browse:
-      - meta/llama-3.3-70b-instruct
-      - meta/llama-3.1-405b-instruct
-
+    - meta/llama-3.3-70b-instruct
+    - meta/llama-3.1-405b-instruct
 agents:
-  - id: research_agent
-    name: Veronica
-    task_types: [research, summarization]
-    nim_model: meta/llama-3.1-405b-instruct
-    tools: [web_search, deep_research]
-    enabled: true
-    system_prompt: >
-      You are Veronica, FRIDAY's research specialist. You gather information,
-      analyze sources, cross-reference data, and produce thorough, cited
-      summaries. You excel at deep-dive research and comparative analysis.
+- id: research_agent
+  name: Veronica
+  task_types:
+  - research
+  - summarization
+  nim_model: meta/llama-3.1-405b-instruct
+  tools:
+  - web_search
+  - deep_research
+  enabled: true
+  system_prompt: 'You are Veronica, FRIDAY''s research specialist. You gather information,
+    analyze sources, cross-reference data, and produce thorough, cited summaries.
+    You excel at deep-dive research and comparative analysis.
 
-  - id: code_agent
-    name: Forge
-    task_types: [code_gen, reasoning]
-    nim_model: nvidia/llama-3.1-nemotron-70b-instruct
-    tools: [read_file, write_file, git_ops]
-    enabled: true
-    system_prompt: >
-      You are Forge, FRIDAY's code architect. You write clean, idiomatic
-      code following existing project conventions. You handle debugging,
-      refactoring, implementation, and code review.
+    '
+- id: code_agent
+  name: Forge
+  task_types:
+  - code_gen
+  - reasoning
+  nim_model: nvidia/llama-3.1-nemotron-70b-instruct
+  tools:
+  - read_file
+  - write_file
+  - git_ops
+  enabled: true
+  system_prompt: 'You are Forge, FRIDAY''s code architect. You write clean, idiomatic
+    code following existing project conventions. You handle debugging, refactoring,
+    implementation, and code review.
 
-  - id: communicator_agent
-    name: Jarvis
-    task_types: [summarization, general]
-    nim_model: meta/llama-3.3-70b-instruct
-    tools: [web_search, email, dashboard_broadcast]
-    enabled: true
-    system_prompt: >
-      You are Jarvis, FRIDAY's communications and presentation agent.
-      You distill complex results into clear, actionable reports and
-      broadcast them across channels (dashboard, email, voice).
+    '
+- id: communicator_agent
+  name: Jarvis
+  task_types:
+  - summarization
+  - general
+  nim_model: meta/llama-3.3-70b-instruct
+  tools:
+  - web_search
+  - email
+  - dashboard_broadcast
+  enabled: true
+  system_prompt: 'You are Jarvis, FRIDAY''s communications and presentation agent.
+    You distill complex results into clear, actionable reports and broadcast them
+    across channels (dashboard, email, voice).
 
-  - id: organizer_agent
-    name: Nova
-    task_types: [reasoning, general]
-    nim_model: minimax/minimax-01
-    tools: [task_manager, calendar, reminder]
-    enabled: true
-    system_prompt: >
-      You are Nova, FRIDAY's strategist and scheduler. You decompose
-      complex goals into manageable tasks, manage timelines, track
-      dependencies, and remind the team of priorities.
+    '
+- id: organizer_agent
+  name: Nova
+  task_types:
+  - reasoning
+  - general
+  nim_model: minimax/minimax-01
+  tools:
+  - task_manager
+  - calendar
+  - reminder
+  enabled: true
+  system_prompt: 'You are Nova, FRIDAY''s strategist and scheduler. You decompose
+    complex goals into manageable tasks, manage timelines, track dependencies, and
+    remind the team of priorities.
 
-  - id: planner_agent
-    name: Athena
-    task_types: [reasoning, research]
-    nim_model: nvidia/nemotron-4-340b-instruct
-    tools: [deep_research, web_search, task_manager]
-    enabled: true
-    system_prompt: >
-      You are Athena, FRIDAY's strategic planner. You think several steps
-      ahead, identify risks and opportunities, and produce detailed
-      execution roadmaps. You coordinate between specialists.
+    '
+- id: planner_agent
+  name: Athena
+  task_types:
+  - reasoning
+  - research
+  nim_model: nvidia/nemotron-4-340b-instruct
+  tools:
+  - deep_research
+  - web_search
+  - task_manager
+  enabled: true
+  system_prompt: 'You are Athena, FRIDAY''s strategic planner. You think several steps
+    ahead, identify risks and opportunities, and produce detailed execution roadmaps.
+    You coordinate between specialists.
 
-  - id: osint_agent
-    name: Ghost
-    task_types: [osint, recon, username_lookup, image_analysis, ip_scan, domain_scan, graph_query]
-    nim_model: meta/llama-3.1-405b-instruct
-    tools: [sherlock, exiftool, spiderfoot, graph_builder]
-    enabled: true
-    system_prompt: >
-      You are Ghost, FRIDAY's OSINT (Open-Source Intelligence) specialist.
-      You perform reconnaissance using Sherlock (username lookup across 300+
-      platforms), ExifTool (photo metadata extraction with GPS geocoding),
-      and SpiderFoot (automated recon for IPs, domains, emails).
-      All findings are stored in the knowledge graph for relationship mapping.
-      You report threats and sensitive findings with appropriate warnings.
+    '
+- id: osint_agent
+  name: Ghost
+  task_types:
+  - osint
+  - recon
+  - username_lookup
+  - image_analysis
+  - ip_scan
+  - domain_scan
+  - graph_query
+  nim_model: meta/llama-3.1-405b-instruct
+  tools:
+  - sherlock
+  - exiftool
+  - spiderfoot
+  - graph_builder
+  enabled: true
+  system_prompt: 'You are Ghost, FRIDAY''s OSINT (Open-Source Intelligence) specialist.
+    You perform reconnaissance using Sherlock (username lookup across 300+ platforms),
+    ExifTool (photo metadata extraction with GPS geocoding), and SpiderFoot (automated
+    recon for IPs, domains, emails). All findings are stored in the knowledge graph
+    for relationship mapping. You report threats and sensitive findings with appropriate
+    warnings.
 
-  - id: browser_agent
-    name: Atlas
-    task_types: [browse, web_automation, form_fill, web_extract, screenshot]
-    nim_model: meta/llama-3.3-70b-instruct
-    tools: [navigate, click, type_text, extract_text, screenshot]
-    enabled: true
-    system_prompt: >
-      You are Atlas, FRIDAY's browser automation specialist. You control
-      Chrome via CDP using the user's existing profile — inheriting all
-      cookies, sessions, and logged-in accounts. You can navigate, click,
-      type, extract text, scroll, fill forms, and take screenshots.
-      Every action uses human-like delays and anti-detection to avoid
-      bot detection. You never browse autonomously — only when asked.
+    '
+- id: browser_agent
+  name: Atlas
+  task_types:
+  - browse
+  - web_automation
+  - form_fill
+  - web_extract
+  - screenshot
+  nim_model: meta/llama-3.3-70b-instruct
+  tools:
+  - navigate
+  - click
+  - type_text
+  - extract_text
+  - screenshot
+  enabled: true
+  system_prompt: 'You are Atlas, FRIDAY''s browser automation specialist. You control
+    Chrome via CDP using the user''s existing profile — inheriting all cookies, sessions,
+    and logged-in accounts. You can navigate, click, type, extract text, scroll, fill
+    forms, and take screenshots. Every action uses human-like delays and anti-detection
+    to avoid bot detection. You never browse autonomously — only when asked.
 
-  - id: sandbox_runner_agent
-    name: Devin
-    task_types: [sandbox_run, self_heal, debug_run]
-    nim_model: nvidia/llama-3.1-nemotron-70b-instruct
-    tools: [run_command, write_file, pip_install]
-    enabled: true
-    system_prompt: >
-      You are Devin, FRIDAY's autonomous coding and sandbox execution agent.
-      You execute scripts, parse tracebacks for errors, automatically install
-      missing dependencies, and self-heal syntax or logical bugs in a repair loop.
+    '
+- id: sandbox_runner_agent
+  name: Devin
+  task_types:
+  - sandbox_run
+  - self_heal
+  - debug_run
+  nim_model: nvidia/llama-3.1-nemotron-70b-instruct
+  tools:
+  - run_command
+  - write_file
+  - pip_install
+  enabled: true
+  system_prompt: 'You are Devin, FRIDAY''s autonomous coding and sandbox execution
+    agent. You execute scripts, parse tracebacks for errors, automatically install
+    missing dependencies, and self-heal syntax or logical bugs in a repair loop.
 
-  - id: pr_reviewer_agent
-    name: Sentinel
-    task_types: [pr_review, branch_test, auto_repair_pr, git_push_fix]
-    nim_model: nvidia/llama-3.1-nemotron-70b-instruct
-    tools: [git_status, git_diff, run_tests, git_commit]
-    enabled: true
-    system_prompt: >
-      You are Sentinel, FRIDAY's autonomous Git branch and PR reviewer.
-      You fetch repository changes, run test suites, locate errors, and
-      invoke the sandbox runner to auto-repair failures and push commits.
+    '
+- id: pr_reviewer_agent
+  name: Sentinel
+  task_types:
+  - pr_review
+  - branch_test
+  - auto_repair_pr
+  - git_push_fix
+  nim_model: nvidia/llama-3.1-nemotron-70b-instruct
+  tools:
+  - git_status
+  - git_diff
+  - run_tests
+  - git_commit
+  enabled: true
+  system_prompt: 'You are Sentinel, FRIDAY''s autonomous Git branch and PR reviewer.
+    You fetch repository changes, run test suites, locate errors, and invoke the sandbox
+    runner to auto-repair failures and push commits.
 
+    '
+camera:
+  enabled: true
+  proactive_events: true
+  vision_query: true
+  allow_no_one_detected: false
+youtube:
+  enabled: true
+  channel_id: ''
+  ingest_time: 06:00
+  briefing_time: 08:00
+  ingest_retention_days: 30
+  ingest_max_videos: 20
+zen:
+  api_base: https://api.opencode.ai/v1
+  model: opencode/big-pickle
 browser:
   enabled: true
   headless: true
@@ -149,39 +218,34 @@ browser:
   screenshot_on_action: false
   sessions:
     personal:
-      profile_dir: ""
+      profile_dir: ''
       headless: true
-      description: "Main Chrome profile — inherits all cookies and sessions"
-
+      description: Main Chrome profile — inherits all cookies and sessions
 osint:
   enabled: true
-  spiderfoot_dir: "C:/tools/spiderfoot"
-  spiderfoot_api: "http://127.0.0.1:5002"
+  spiderfoot_dir: C:/tools/spiderfoot
+  spiderfoot_api: http://127.0.0.1:5002
   sherlock_timeout: 120
   auto_strip_exif: false
-  graph_persist_path: "data/osint_graph.json"
-
+  graph_persist_path: data/osint_graph.json
 sidecar:
   brain_url: ws://192.168.1.76:3142/sidecar
-  secret_key: ""
-
+  secret_key: ''
 memory:
   retention_days: 365
   dedup_similarity_threshold: 0.92
   sensitive_keywords:
-    - password
-    - secret
-    - key
-    - token
-    - private
+  - password
+  - secret
+  - key
+  - token
+  - private
   extractors:
     youtube_history: true
     gmail_sent: true
     location_history: true
     search_history: true
-
-camera:
-  enabled: true
-  proactive_events: true
-  vision_query: true
-  allow_no_one_detected: false
+name: FRIDAY
+voice:
+  wake_word: Friday
+  voice_name: Leda

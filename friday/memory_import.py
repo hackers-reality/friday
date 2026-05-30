@@ -2500,12 +2500,190 @@ def _index_profile_to_vector_memory(profile: Dict[str, Any]) -> None:
         pass
 
 
+# ─── Google Chat Import ─────────────────────────────────────
+
+def import_from_google_chat(filepath: str) -> str:
+    """Parse Google Chat / Hangouts JSON export from Google Takeout."""
+    try:
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+    except Exception as e:
+        return f"[FAIL] Failed to read file: {e}"
+
+    if not isinstance(data, dict) or "conversations" not in data or not isinstance(data["conversations"], list):
+        return "[FAIL] Not a valid Google Chat export: missing 'conversations' key"
+
+    profile = load_profile()
+    user_name = (profile.get("name") or "").lower().strip()
+    user_patterns = {"you", "me", "user"}
+    if user_name:
+        user_patterns.add(user_name)
+
+    conversation_count = 0
+    for conv in data["conversations"]:
+        if not isinstance(conv, dict):
+            continue
+        name = conv.get("name", "Unknown Conversation")
+        messages = conv.get("messages", [])
+        if not isinstance(messages, list) or not messages:
+            continue
+
+        turns = []
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            text = msg.get("text", "")
+            if not text:
+                continue
+            creator = msg.get("creator", {})
+            if isinstance(creator, dict):
+                creator_name = creator.get("name", "").lower().strip()
+            else:
+                creator_name = ""
+            role = "user" if creator_name in user_patterns else "assistant"
+            turns.append({"role": role, "content": text})
+
+        if turns:
+            sanitized_name = re.sub(r'[^\w\-_]', '_', name)[:50]
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            copy_path = os.path.join(_RAW_IMPORTS_DIR, f"google_chat_{sanitized_name}_{timestamp}.json")
+            conv_data = {
+                "source": os.path.basename(filepath),
+                "source_type": "google_chat",
+                "imported_at": datetime.now().isoformat(),
+                "conversations": [{"title": name[:200], "turns": turns}],
+                "message_count": len(turns),
+            }
+            with open(copy_path, "w", encoding="utf-8") as f:
+                json.dump(conv_data, f, indent=4)
+            conversation_count += 1
+
+    if conversation_count == 0:
+        return "[FAIL] No conversations found in Google Chat export"
+
+    stored = []
+    for fpath in glob.glob(os.path.join(_RAW_IMPORTS_DIR, "google_chat_*.json")):
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                stored.append(json.load(f))
+        except Exception:
+            pass
+
+    if stored:
+        try:
+            audit_result = audit_imported_data(stored)
+            update_profile_with_audit(audit_result)
+            _index_profile_to_vector_memory(load_profile())
+        except Exception:
+            pass
+
+    return f"[OK] Imported {conversation_count} conversations from Google Chat"
+
+
+# ─── Gemini Activity Import ─────────────────────────────────
+
+def parse_gemini_activity_time(time_str: str) -> Optional[datetime]:
+    """Parse ISO datetime string from Gemini activity."""
+    try:
+        return datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def import_from_gemini_activity(filepath: str) -> str:
+    """Parse Gemini MyActivity.json from Google Takeout (flat, non-threaded format)."""
+    try:
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+    except Exception as e:
+        return f"[FAIL] Failed to read file: {e}"
+
+    if not isinstance(data, dict) or "activity" not in data or not isinstance(data["activity"], list):
+        return "[FAIL] Not a valid Gemini activity export: missing 'activity' key"
+
+    items = []
+    for entry in data["activity"]:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("header") != "Gemini":
+            continue
+        title = entry.get("title", "")
+        subtitle = entry.get("subtitle", "")
+        time_str = entry.get("time", "")
+        if not title or not time_str:
+            continue
+        dt = parse_gemini_activity_time(time_str)
+        if dt is None:
+            continue
+        items.append({"title": title, "subtitle": subtitle, "time": dt})
+
+    if not items:
+        return "[FAIL] No Gemini activity entries found"
+
+    items.sort(key=lambda x: x["time"])
+
+    conversations = []
+    current_turns = []
+    current_start = items[0]["time"]
+
+    for item in items:
+        if current_turns:
+            time_diff = (item["time"] - current_start).total_seconds()
+            if time_diff > 300:
+                if current_turns:
+                    conversations.append(current_turns)
+                current_turns = []
+        current_start = item["time"] if not current_turns else current_start
+        current_turns.append({"role": "user", "content": item["title"]})
+        if item["subtitle"]:
+            current_turns.append({"role": "assistant", "content": item["subtitle"]})
+
+    if current_turns:
+        conversations.append(current_turns)
+
+    conversation_count = 0
+    for i, turns in enumerate(conversations):
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        copy_path = os.path.join(_RAW_IMPORTS_DIR, f"gemini_activity_{i}_{timestamp}.json")
+        conv_data = {
+            "source": os.path.basename(filepath),
+            "source_type": "gemini_activity",
+            "imported_at": datetime.now().isoformat(),
+            "conversations": [{"title": f"Gemini Activity {i+1}", "turns": turns}],
+            "turn_count": len(turns),
+        }
+        with open(copy_path, "w", encoding="utf-8") as f:
+            json.dump(conv_data, f, indent=4)
+        conversation_count += 1
+
+    if conversation_count == 0:
+        return "[FAIL] No conversations could be reconstructed from Gemini activity"
+
+    stored = []
+    for fpath in glob.glob(os.path.join(_RAW_IMPORTS_DIR, "gemini_activity_*.json")):
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                stored.append(json.load(f))
+        except Exception:
+            pass
+
+    if stored:
+        try:
+            audit_result = audit_imported_data(stored)
+            update_profile_with_audit(audit_result)
+            _index_profile_to_vector_memory(load_profile())
+        except Exception:
+            pass
+
+    return f"[OK] Imported {conversation_count} conversations from Gemini Activity"
+
+
 # ─── Memory Import Tool ────────────────────────────────────
 
 def memory_import_tool(action: str = "status", **kwargs) -> str:
     """
     Friday tool for importing and auditing chat history.
-    Actions: status, import_file, import_dir, import_zip, import_exports, profile, audit
+    Actions: status, import_file, import_dir, import_zip, import_exports, profile, audit, import_google_chat, import_gemini_activity
     """
     if action == "status":
         profile = load_profile()
@@ -2936,7 +3114,19 @@ def memory_import_tool(action: str = "status", **kwargs) -> str:
 
         return "\n".join(lines)
 
-    return f"Unknown action: {action}. Available: status, import_file, import_dir, import_zip, import_exports, audit, profile, repair_profile, doctor, review_profile, approve_memory, reject_memory, pin_memory, unpin_memory, decay_profile"
+    if action == "import_google_chat":
+        filepath = kwargs.get("path") or kwargs.get("filepath") or kwargs.get("file")
+        if not filepath or not os.path.exists(filepath):
+            return f"[FAIL] File not found: {filepath}"
+        return import_from_google_chat(filepath)
+
+    if action == "import_gemini_activity":
+        filepath = kwargs.get("path") or kwargs.get("filepath") or kwargs.get("file")
+        if not filepath or not os.path.exists(filepath):
+            return f"[FAIL] File not found: {filepath}"
+        return import_from_gemini_activity(filepath)
+
+    return f"Unknown action: {action}. Available: status, import_file, import_dir, import_zip, import_exports, audit, profile, repair_profile, doctor, review_profile, approve_memory, reject_memory, pin_memory, unpin_memory, decay_profile, import_google_chat, import_gemini_activity"
 
 
 # ─── User Memory Context Builder ─────────────────────────

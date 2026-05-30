@@ -1,9 +1,8 @@
 """
 FRIDAY Startup — supervisor for background services.
 
-Launches the FastAPI server (port 7070) with the Vite+React dashboard,
-sidecar heartbeat, memory checks, and the live engine.
-All services are tracked via runtime_state.json.
+Launches the API server, sidecar heartbeat, memory checks,
+and the live engine. All services are tracked via runtime_state.json.
 """
 
 from __future__ import annotations
@@ -28,28 +27,28 @@ def _get_pid() -> int:
     return os.getpid()
 
 
-# ─── Dashboard (FastAPI + React) ─────────────────────────
+# ─── API Server ──────────────────────────────────────────
 
-def _start_dashboard(port: int = 7070) -> dict:
-    """Start the FastAPI server with the Vite+React dashboard."""
+def _start_api_server(port: int = 7070) -> dict:
+    """Start the FastAPI server with REST endpoints."""
     from friday.api import FridayAPI
 
     port_check = check_port_open("127.0.0.1", port)
     if port_check["open"]:
-        health = check_http_endpoint(f"http://127.0.0.1:{port}/api/status")
+        health = check_http_endpoint(f"http://127.0.0.1:{port}/api/health")
         if health.get("reachable"):
-            set_service_state("dashboard", url=f"http://127.0.0.1:{port}", port=port, pid=0, status="already_running")
+            set_service_state("api_server", url=f"http://127.0.0.1:{port}", port=port, pid=0, status="already_running")
             return {"success": True, "url": f"http://127.0.0.1:{port}", "port": port, "status": "already_running"}
         port = find_free_port(port + 1, 20)
         _log(f"Port {port - 1} busy, using {port}")
 
-    api = FridayAPI(host="0.0.0.0", port=port)
+    api = FridayAPI(host="127.0.0.1", port=port)
     result = api.start()
 
     if "error" in result:
         return {"success": False, "error": result["error"]}
 
-    set_service_state("dashboard",
+    set_service_state("api_server",
         url=f"http://127.0.0.1:{port}",
         port=port,
         pid=_get_pid(),
@@ -141,14 +140,14 @@ def bootstrap_configs(log_fn=None):
 
 # ─── Full Launch ────────────────────────────────────────
 
-def launch_all(dashboard_port: int = 7070,
+def launch_all(api_port: int = 7070,
                start_live: bool = False, start_sidecar_ws: bool = False,
                log_fn=None) -> Dict[str, Any]:
     """
     Launch all background services in the current process.
 
     Args:
-        dashboard_port: Port for the FastAPI server (React dashboard + REST API)
+        api_port: Port for the FastAPI server (REST API)
         start_live: If True, also start the live engine (blocks)
         start_sidecar_ws: If True, start the sidecar WebSocket server
         log_fn: Optional logging function
@@ -176,14 +175,14 @@ def launch_all(dashboard_port: int = 7070,
     else:
         _log(f"[WARN] No user profile at {FRIDAY_MEMORY}/user_profile.json")
 
-    # 2. Dashboard (FastAPI + React)
-    _log("[START] Dashboard...")
-    dash_result = _start_dashboard(port=dashboard_port)
-    results["dashboard"] = dash_result
-    if dash_result.get("success"):
-        _log(f"[OK] Dashboard: {dash_result['url']}")
+    # 2. API server (REST endpoints)
+    _log("[START] API server...")
+    api_result = _start_api_server(port=api_port)
+    results["api_server"] = api_result
+    if api_result.get("success"):
+        _log(f"[OK] API server: {api_result['url']}")
     else:
-        _log(f"[FAIL] Dashboard: {dash_result.get('error', 'unknown')}")
+        _log(f"[FAIL] API server: {api_result.get('error', 'unknown')}")
 
     # 3. Sidecar heartbeat
     _log("[START] Sidecar heartbeat...")
@@ -264,8 +263,8 @@ def launch_all(dashboard_port: int = 7070,
     _log("")
     _log("=" * 50)
     _log("FRIDAY is running")
-    if dash_result.get("success"):
-        _log(f"  Dashboard:  {dash_result['url']}")
+    if api_result.get("success"):
+        _log(f"  API server: {api_result['url']}")
     if results.get("sidecar_ws", {}).get("success"):
         _log("  Sidecar WS:    ws://127.0.0.1:42070")
     _log("  Say 'FRIDAY' to activate voice (if live engine started)")
@@ -288,16 +287,10 @@ def launch_all(dashboard_port: int = 7070,
     return results
 
 
-def launch_dashboard_background() -> bool:
-    """Start the dashboard in the current process thread. Returns True on success."""
-    results = launch_all(dashboard_port=7070, start_live=False)
-    return bool(results.get("dashboard", {}).get("success", False))
-
-
-def launch_all_background_services() -> dict:
-    """Return dict of service name → bool."""
-    results = launch_all(dashboard_port=7070, start_live=False)
+def launch_background_services() -> dict:
+    """Start API server and background services. Returns dict of service name → bool."""
+    results = launch_all(api_port=7070, start_live=False)
     return {
-        "dashboard": results.get("dashboard", {}).get("success", False),
+        "api_server": results.get("api_server", {}).get("success", False),
         "sidecar": results.get("sidecar_heartbeat", {}).get("success", False),
     }

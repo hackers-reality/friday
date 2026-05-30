@@ -1,4 +1,6 @@
-"""YouTube API wrapper: Data API (API key) + Analytics (OAuth2) + quota tracking."""
+"""YouTube API wrapper: Data API (API key) + Analytics (OAuth2) + quota tracking.
+Uses unified google_oauth module for all OAuth flows (single consent for all scopes).
+"""
 from __future__ import annotations
 
 import json
@@ -15,6 +17,8 @@ except ImportError:
     requests = None
 
 from friday._paths import PROJECT_ROOT, FRIDAY_MEMORY
+from friday.google_oauth import get_access_token as _unified_get_token
+from friday.google_oauth import credentials_exist as _unified_creds_exist
 from friday.logging_utils import configure_logging
 
 logger = configure_logging(__name__)
@@ -84,7 +88,15 @@ def _save_credentials(creds: dict):
 
 
 def _get_oauth_token() -> Optional[str]:
-    """Return a valid OAuth2 access token, refreshing if needed."""
+    """Return a valid OAuth2 access token.
+    Tries unified google_oauth credentials first, then falls back to youtube-specific.
+    """
+    # First try unified credentials (from google_oauth module)
+    unified_token = _unified_get_token()
+    if unified_token:
+        return unified_token
+
+    # Fall back to legacy youtube-specific credentials
     creds = _load_credentials()
     if not creds:
         return None
@@ -93,7 +105,6 @@ def _get_oauth_token() -> Optional[str]:
     expiry = creds.get("expiry") or creds.get("expires_at", "")
     refresh_token = creds.get("refresh_token") or creds.get("_refresh_token", "")
 
-    # Check expiry
     if expiry:
         try:
             exp_dt = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
@@ -301,3 +312,15 @@ class YouTubeClient:
             if row.get("video") == video_id:
                 return row
         return None
+
+    # ── OAuth2 flow (delegates to unified google_oauth module) ──
+
+    def get_auth_url(self) -> dict:
+        """Generate OAuth2 auth URL with ALL Google API scopes (single consent)."""
+        from friday.google_oauth import get_auth_url as _get_auth_url
+        return _get_auth_url(redirect_port=8085)
+
+    def handle_auth_callback(self, code: str) -> bool:
+        """Exchange OAuth2 auth code for tokens (unified credentials)."""
+        from friday.google_oauth import handle_auth_callback as _handle_callback
+        return _handle_callback(code)

@@ -24,6 +24,7 @@ logger = configure_logging(__name__)
 CONFIG_PATH = Path(PROJECT_ROOT) / "config.yaml"
 
 DEFAULT_CONFIG: Dict[str, Any] = {
+    "model": "gemini-3.1-flash-live-preview",
     "nim": {
         "api_base": "https://integrate.api.nvidia.com/v1",
         "rate_limit_rpm": 40,

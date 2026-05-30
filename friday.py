@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-FRIDAY — Sovereign AI Agent.
-Entry point: launches the dashboard server and live engine.
+FRIDAY - Sovereign AI Agent.
+CLI entry point: launches the live engine. The terminal is the primary interface.
 """
 
 from __future__ import annotations
 import os
-import sys
 import signal
-import time
+import sys
 import threading
+import time
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from friday._singletons import set_service_state, clear_all_state
+from friday._singletons import set_service_state, get_service_state, clear_service_state, clear_all_state
 
-_DASHBOARD_PORT = 7070
+_API_PORT = 7070
 
 
 def _log(msg: str):
@@ -29,24 +29,75 @@ def _signal_handler(sig, frame):
     sys.exit(0)
 
 
-def _wait_for_server(port: int, timeout: float = 20.0) -> bool:
-    """Poll localhost:port until it accepts connections or timeout."""
-    import socket
-    deadline = time.time() + timeout
-    while time.time() < deadline:
+def _prepare_background_services() -> None:
+    """Start lightweight support services before the live engine starts."""
+    try:
+        from friday.startup import bootstrap_configs
+        bootstrap_configs(log_fn=_log)
+    except Exception as e:
+        _log(f"[WARN] Failed to bootstrap configs: {e}")
+
+    try:
+        from friday.startup import _run_memory_check
+        result = _run_memory_check()
+        if result.get("profile_exists"):
+            _log("[OK] Memory profile loaded")
+        else:
+            _log("[WARN] Memory profile not found yet")
+    except Exception as e:
+        _log(f"[WARN] Memory check failed: {e}")
+
+    try:
+        from friday.startup import _start_sidecar_heartbeat
+        result = _start_sidecar_heartbeat()
+        if result.get("success"):
+            _log("[OK] Sidecar heartbeat running")
+    except Exception as e:
+        _log(f"[WARN] Sidecar heartbeat failed: {e}")
+
+    try:
+        from friday.scheduler import scheduler_tool
+        scheduler_tool("start")
+        set_service_state("scheduler", status="running", pid=os.getpid())
+        _log("[OK] Scheduler running")
+    except Exception as e:
+        _log(f"[WARN] Scheduler not started: {e}")
+
+
+def _start_live_engine():
+    """Start the Gemini Live engine in a daemon background thread."""
+    def _run_live():
+        import asyncio
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=1):
-                return True
-        except OSError:
-            time.sleep(0.4)
-    return False
+            set_service_state("live_engine", status="starting", pid=os.getpid())
+            from friday.live import friday_live_engine
+            asyncio.run(friday_live_engine())
+        except ImportError as e:
+            _log(f"[WARN] Live engine dependencies missing: {e}")
+            clear_service_state("live_engine")
+        except Exception as e:
+            _log(f"[ERROR] Live engine crashed on startup: {e}")
+            import traceback
+            traceback.print_exc()
+            clear_service_state("live_engine")
+
+    t = threading.Thread(target=_run_live, name="FridayLiveEngine", daemon=True)
+    t.start()
+    _log("[OK] Live engine thread launched (connecting to Gemini Live API…)")
+
+    # Wait briefly then show status
+    time.sleep(3)
+    state = get_service_state("live_engine")
+    if state and state.get("status") == "running":
+        _log("[OK] Neural link established.")
+    else:
+        _log("[WARN] Live engine still connecting (see logs above).")
 
 
 def main():
     os.environ["OPENCV_LOG_LEVEL"] = "OFF"
     os.environ.setdefault("PYTHONUTF8", "1")
 
-    # Reconfigure stdout/stderr to UTF-8 so emoji/box chars don't crash on Windows
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -55,83 +106,40 @@ def main():
 
     signal.signal(signal.SIGINT, _signal_handler)
 
-    # Bootstrap configuration files on startup
-    try:
-        from friday.startup import bootstrap_configs
-        bootstrap_configs(log_fn=_log)
-    except Exception as e:
-        _log(f"[WARN] Failed to bootstrap configs: {e}")
-
     _log("")
     _log("=" * 50)
-    _log("  F.R.I.D.A.Y   Sovereign Agent")
-    _log("  Boot sequence initiated...")
+    _log("  F.R.I.D.A.Y   Sovereign AI Agent")
+    _log("  CLI boot sequence initiated...")
     _log("=" * 50)
     _log("")
 
-    # ── Start dashboard server in its own thread ──────────────────
-    _log("[START] Dashboard server on http://localhost:7070 ...")
-    dash_thread = threading.Thread(
-        target=_start_dashboard_blocking,
-        daemon=True,
-        name="dashboard-server",
-    )
-    dash_thread.start()
+    _prepare_background_services()
+    _start_live_engine()
 
-    # ── Wait until server is actually accepting connections ───────
-    _log("[WAIT] Waiting for server to be ready...")
-    ready = _wait_for_server(_DASHBOARD_PORT, timeout=20.0)
-    if ready:
-        _log(f"[OK] Dashboard is up at http://localhost:{_DASHBOARD_PORT}")
-        try:
-            import webbrowser
-            webbrowser.open(f"http://localhost:{_DASHBOARD_PORT}")
-            _log("[OPEN] Browser launched.")
-        except Exception as e:
-            _log(f"[WARN] Could not open browser: {e}")
-    else:
-        _log("[WARN] Dashboard server did not start within 20s — check errors above.")
-        _log("[INFO] You can still open http://localhost:7070 manually.")
+    _log("")
+    _log("=" * 50)
+    _log("FRIDAY is running")
+    _log("  Terminal is the primary interface")
+    _log("  Say 'FRIDAY' to activate voice")
+    _log("  Ctrl+C to shutdown")
+    _log("=" * 50)
+    _log("")
 
-    # ── Live engine (voice AI) ─────────────────────────────────────
-    _log("[START] Live voice engine...")
-    set_service_state("live_engine", status="running", pid=os.getpid())
-
+    from friday.comms import dashboard_to_live_queue
     try:
-        import asyncio
-        from friday.live import friday_live_engine
-        asyncio.run(friday_live_engine())
-    except KeyboardInterrupt:
-        _log("Shutting down (Ctrl+C).")
-    except Exception as e:
-        import traceback
-        _log(f"[FAIL] Live engine error: {e}")
-        traceback.print_exc()
-        _log("[INFO] Dashboard remains available at http://localhost:7070")
-        _log("[INFO] Press Ctrl+C to stop everything.")
-
-    # Keep main thread alive so daemon dashboard thread keeps serving
-    try:
-        _log("[INFO] Live engine exited. Dashboard still running. Press Ctrl+C to stop.")
         while True:
-            time.sleep(1)
+            line = sys.stdin.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            text = line.strip()
+            if text:
+                dashboard_to_live_queue.put(text)
     except KeyboardInterrupt:
         _log("Shutting down.")
-
-    clear_all_state()
-    _log("FRIDAY shutdown complete.")
-
-
-def _start_dashboard_blocking():
-    """Run the FastAPI/uvicorn server (blocks this thread)."""
-    try:
-        from friday.api import FridayAPI
-        api = FridayAPI(host="0.0.0.0", port=_DASHBOARD_PORT)
-        api.start()
-    except Exception as e:
-        print(f"[FRIDAY] [ERROR] Dashboard failed to start: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
+    finally:
+        clear_all_state()
+        _log("FRIDAY shutdown complete.")
 
 
 if __name__ == "__main__":

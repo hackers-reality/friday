@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -86,8 +87,6 @@ async def run_sherlock(
     Returns:
         SherlockResult with found profiles, not-found platforms, scan time.
     """
-    import sys
-
     available = await _ensure_sherlock_installed()
     if not available:
         logger.error("Sherlock not installed and install failed")

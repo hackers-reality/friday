@@ -38,6 +38,16 @@ class ModelInfo:
 # ─── Preset Models ───────────────────────────────────────
 
 PRESET_MODELS: Dict[str, ModelInfo] = {
+    "gemini-3.1-flash-live-preview": ModelInfo(
+        id="gemini-3.1-flash-live-preview",
+        provider="google",
+        family="gemini",
+        cost_per_1k_input=0.0,
+        cost_per_1k_output=0.0,
+        context_window=1_048_576,
+        capabilities=["chat", "vision", "realtime", "audio", "streaming", "function_calling"],
+        max_output_tokens=8192,
+    ),
     "gemini-2.0-flash": ModelInfo(
         id="gemini-2.0-flash",
         provider="google",
@@ -124,11 +134,11 @@ PRESET_MODELS: Dict[str, ModelInfo] = {
 # ─── Router Config ───────────────────────────────────────
 
 DEFAULT_CONFIG = {
-    "primary_model": "gemini-2.0-flash",
+    "primary_model": "gemini-3.1-flash-live-preview",
     "fallback_model": "gemini-2.5-pro",
     "code_model": "gpt-4o-mini",
     "vision_model": "gemini-2.5-pro",
-    "fast_model": "gemini-2.0-flash",
+    "fast_model": "gemini-3.1-flash-live-preview",
     "local_model": "local-llama",
     "enable_fallback": True,
     "enable_cost_tracking": True,

@@ -1,72 +1,74 @@
 """
 Friday API - REST API for Friday.
-FastAPI web API serving the Vite+React dashboard and REST endpoints.
+FastAPI web API providing REST endpoints (CLI-only mode).
 """
 from __future__ import annotations
 
 import os
 import sys
 import json
-import webbrowser
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
 import base64
 
-DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "dashboard" / "dist"
-
 
 # ─── API Server ─────────────────────────────────────────#
 
 class FridayAPI:
-    """API server for Friday, serves React dashboard + REST API."""
+    """API server for Friday, serves REST endpoints only."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 7070):
+    def __init__(self, host: str = "127.0.0.1", port: int = 7070):
         self.host = host
         self.port = port
 
     def start(self) -> dict:
-        """Start FastAPI with static file serving and CORS."""
+        """Start FastAPI with REST endpoints only."""
         try:
             import uvicorn
             from fastapi import FastAPI
             from fastapi.middleware.cors import CORSMiddleware
-            from fastapi.staticfiles import StaticFiles
-        except ImportError:
-            return {"success": False, "error": "fastapi/uvicorn not installed"}
+        except ImportError as e:
+            print(f"[FRIDAY] [ERROR] Dependencies for server missing: {e}", flush=True)
+            raise e
 
-        app = FastAPI(title="FRIDAY", version="2.0.0")
+        app = FastAPI(title="FRIDAY API", version="2.0.0")
 
-        # CORS for dev server
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+            allow_origins=["*"],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )
 
-        # Include dashboard API routes
+        @app.get("/api/health")
+        def health():
+            return {"status": "ok", "version": "2.0.0"}
+
+        @app.get("/")
+        def root():
+            return {"message": "FRIDAY API", "version": "2.0.0"}
+
+        # Include REST API routes
         try:
-            from api.dashboard_routes import router as dashboard_router
-            app.include_router(dashboard_router)
-        except Exception:
-            pass
+            from api.dashboard_routes import router as api_router
+            app.include_router(api_router)
+        except Exception as e:
+            print(f"[FRIDAY] [ERROR] Failed to load API routes: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
 
-        # Serve Vite build as static files
-        if DASHBOARD_DIR.exists():
-            app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")
-        else:
-            @app.get("/")
-            def root():
-                return {
-                    "message": "FRIDAY API",
-                    "version": "2.0.0",
-                    "dashboard": "Run `cd dashboard && npm run build` to build the frontend",
-                }
+        from friday._singletons import set_service_state
+        set_service_state(
+            "api_server",
+            status="running",
+            pid=os.getpid(),
+            port=self.port,
+            url=f"http://127.0.0.1:{self.port}",
+        )
 
-        print(f"\n  [FRIDAY] Dashboard listening at http://localhost:{self.port}\n")
-        webbrowser.open(f"http://localhost:{self.port}")
+        print(f"\n  [FRIDAY] API server listening at http://localhost:{self.port}", flush=True)
         uvicorn.run(app, host=self.host, port=self.port)
         return {"success": True}
 

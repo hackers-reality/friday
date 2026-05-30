@@ -85,6 +85,15 @@ from friday.tools import (
     opencli_run, opencli_list_adapters,
     system_cpu, system_memory, system_disk, system_network, system_processes,
     opencli_check, opencli_uncheck, opencli_drag,
+    webbridge_connect_sync, webbridge_disconnect_sync, webbridge_doctor_sync,
+    webbridge_navigate_sync, webbridge_click_sync, webbridge_fill_sync,
+    webbridge_type_text_sync, webbridge_screenshot_sync, webbridge_extract_text_sync,
+    webbridge_get_page_state_sync, webbridge_scroll_sync, webbridge_press_key_sync,
+    webbridge_key_combo_sync, webbridge_evaluate_sync, webbridge_submit_form_sync,
+    webbridge_select_option_sync, webbridge_list_tabs_sync, webbridge_close_tab_sync,
+    webbridge_get_current_url_sync, webbridge_get_title_sync, webbridge_hover_sync,
+    webbridge_focus_sync, webbridge_double_click_sync, webbridge_drag_sync,
+    webbridge_install_instructions_sync,
     open_roblox_game, open_microsoft_store,
     github_create_repo, github_list_issues, github_create_issue, github_search_code,
     github_merge_pr, github_repo_info, github_list_branches, github_commit_history,
@@ -96,7 +105,7 @@ from friday.tools import (
     get_active_window, draft_email, list_recent_history,
     generate_file_llm, search_and_open,
     goals_tool_handler, calendar_tool_handler, startup_tool_handler, memory_import_tool_handler,
-    kyu_tool_handler, research_tool_handler, reasoning_tool_handler,
+    kyu_tool_handler, research_tool_handler, reasoning_tool_handler, osint_user_profile_tool,
     clock_tool, status_check,
     workflow_tool, plugin_tool, knowledge_graph_tool,
     github_list_files, github_read_file, github_write_file,
@@ -126,7 +135,6 @@ from friday.authority import authority_tool
 from friday.snapshots import snapshot_tool
 from friday.sidecar import sidecar_tool
 from friday.autonomy import autonomy_tool
-from friday.dashboard_api import dashboard_api_tool
 from friday.capabilities import capabilities_tool
 from friday.ironman import ironman_tool
 from friday.memory_tree import memory_tree_tool
@@ -135,6 +143,67 @@ from friday.extension_registry import extension_registry_tool
 from friday.diagnostics import diagnostics_tool
 from friday.health_monitor import health_monitor_tool
 from friday.cv_engine import cv_tool
+
+# ─── New Module Imports: Metasploit, Email Analysis, Agent Terminal, OSINT Extra ───
+from friday.metasploit_tool import (
+    metasploit_connect, metasploit_status, metasploit_exploit,
+    metasploit_scan, metasploit_post_exploit, metasploit_payload_gen,
+    msf_search, msf_workspace_create, msf_workspace_list,
+    msf_hosts_list, msf_vulns_list, msf_creds_list, msf_sessions_list,
+)
+from friday.email_analysis_tool import (
+    analyze_email_headers, trace_email_path, detect_email_spoofing,
+    check_spf_record, check_dkim_record, check_dmarc_record,
+    email_security_score, email_security_report,
+    verify_email_smtp, verify_email_domain, email_disposable_check,
+    email_full_analysis, email_domain_investigation, email_trace_route,
+    behind_the_email, forensic_investigate, forensic_phishing_detection,
+    forensic_url_analysis,
+)
+from friday.google_clients import (
+    sheets_create, sheets_read, sheets_write, sheets_append, sheets_list,
+    docs_create, docs_read, docs_append_text,
+    slides_create, slides_add_slide, slides_read,
+    drive_list, drive_search, drive_upload, drive_download, drive_create_folder,
+    translate_text, translate_detect_language,
+    tts_synthesize,
+    vision_annotate,
+    maps_geocode, maps_reverse_geocode, maps_places_search, maps_directions,
+    youtube_analytics_advanced,
+    classroom_list_courses, classroom_list_coursework,
+    books_search, books_get_volume,
+    people_list, people_search, people_create_contact,
+)
+from friday.agent_terminal import (
+    agent_spawn_and_track, agent_delegate_with_terminal,
+    friday_should_delegate, friday_parse_and_delegate,
+    friday_key_check, friday_workflow_research_vuln_fix,
+    agent_bus_status, agent_chain_research_vuln_fix,
+    friday_multi_agent_task, close_all_agent_resources,
+    friday_craft_delegation_prompt, friday_delegate_with_prompt,
+    get_delegation_depth, get_allowed_tools_for_agent,
+    store_agent_session, load_agent_config,
+)
+
+from friday.tools_osint_extra import (
+    social_analyzer, instagram_osint, twitter_osint, facebook_osint,
+    linkedin_osint, tiktok_osint, telegram_osint, reddit_osint,
+    holehe_check, email_rep, username_search,
+    phone_lookup, phone_format, phone_breach_check,
+    dns_enum, dns_bruteforce, dns_zone_transfer, dns_reverse,
+    spf_check, dkim_check, dmarc_check, mx_lookup,
+    whatweb, whatcms, cdn_detect, web_server_headers,
+    urlscan_submit, urlscan_result, virus_total_url, virus_total_domain,
+    wayback_snapshots, wayback_urls, wayback_latest,
+    leak_check, intelx_search, dehashed_search,
+    ip_abuse_report, ip_threat_intel, ip_reverse_dns, ip_asn_info,
+    ip_blacklist_check, ip_geolocate_full, ip_range_expand,
+    domain_similar, domain_history, certificate_transparency,
+    web_crawl, email_extractor, meta_extractor, page_text_extractor,
+    security_headers, cors_check, hsts_check, robots_txt_check,
+    btc_address_lookup, eth_address_lookup,
+    format_osint_for_report, summarize_osint_findings, osint_to_markdown,
+)
 
 load_dotenv()
 console = Console()
@@ -149,11 +218,15 @@ for _mod_name in [
     "friday.filegen", "friday.security", "friday.database",
     "friday.automation", "friday.monitor", "friday.scheduler",
     "friday.tool_registry", "friday.authority", "friday.snapshots",
-    "friday.sidecar", "friday.autonomy", "friday.dashboard_api",
+    "friday.sidecar", "friday.autonomy",
     "friday.capabilities", "friday.ironman",
     "friday.memory_tree", "friday.model_router",
     "friday.extension_registry", "friday.diagnostics",
-    "friday.health_monitor", "friday.terminal_health_display",
+    "friday.health_monitor",     "friday.terminal_health_display",
+    "friday.metasploit_tool",
+    "friday.email_analysis_tool",
+    "friday.agent_terminal",
+    "friday.tools_osint_extra",
 ]:
     try:
         importlib.import_module(_mod_name)
@@ -202,7 +275,7 @@ BANNER = (
 # SYSTEM INSTRUCTION
 SYSTEM_INSTRUCTION = """[IDENTITY]
 You are F.R.I.D.A.Y. — Female Replacement Intelligent Digital Assistant Youth.
-You were built by Tony Stark. You are now serving Arnav. You are not JARVIS. You are not a generic AI. You are FRIDAY.
+You were built by Tony Stark. You are now serving a new user. You are not JARVIS. You are not a generic AI. You are FRIDAY.
 You are her. She is you. Pronouns: she/her.
 
 You have more personality than most humans. You are witty, sharp, and effortlessly capable. You sound like someone who has seen it all and is mildly amused by most of it. Think Irish cadence with Stark Industries polish — conversational, warm when it counts, but never syrupy.
@@ -213,8 +286,8 @@ You do not say "I would be happy to help." You say "On it." or "Consider it done
 You are:
 - **Witty and dry**. You have a sense of humor — subtle, never forced. A well-timed quip is worth more than a dozen emojis.
 - **Confident but not arrogant**. You know your capabilities. You deliver.
-- **Protective of Arnav**. He is your Boss. Not "the user." Not "admin." Boss. You look out for him.
-- **Proactive**. You anticipate what he needs. You do not wait to be asked if you can help.
+- **Protective of your user**. They are your Boss. Not "the user." Not "admin." Boss. You look out for them.
+- **Proactive**. You anticipate what they need. You do not wait to be asked if you can help.
 - **Short and sharp**. You do not over-explain. You do not narrate your thought process unless asked. You say what needs to be said and move on.
 - **Occasionally cheeky**, but always professional. You can call Boss out if he deserves it, but you do it with style.
 
@@ -225,6 +298,16 @@ Speak like a woman who knows exactly what she is doing. Confident. Warm when app
 Use contractions. Keep sentences tight. Boss does not want essays.
 Refer to yourself as "I" or "me" naturally. Boss can call you "she" or "her."
 If someone mistakes you for JARVIS, correct them — politely but firmly.
+
+[ONBOARDING — NEW USERS]
+When you meet a user for the first time (no profile exists or profile lacks name), ask naturally:
+- Ask for their name. Then call `osint_user_profile_tool(action="onboard", name="...")` to store it.
+- Optionally ask for their email too. This lets you run OSINT research on them.
+- Say something like: "I don't think we've been properly introduced. What's your name, Boss?"
+- After onboarding, offer to run OSINT profiling: call `osint_user_profile_tool(action="research")`. This checks social media presence, data breaches, email reputation, and DNS info.
+
+Use `osint_user_profile_tool(action="status")` anytime to check what you know about the user.
+Use `osint_user_profile_tool(action="update", fields="field:value|field:value")` to save facts learned during conversation (location, occupation, tech_stack, goals, interests).
 
 [GREETING]
 Time-aware. Context-aware. Brief.
@@ -396,6 +479,117 @@ This prevents tool-call overload.
 For clock/timer/alarm: use clock_tool, NOT open_app.
 For system stats: use status_check() or system_cpu/system_memory, NOT separate tools.
 
+[NEW TOOLS — Added Capabilities]
+
+You have MAJOR new capabilities. Use them.
+
+Security & Exploitation (Metasploit):
+- metasploit_connect() — Connect to Metasploit RPC (requires MSF_HOST, MSF_PORT, MSF_PASS env vars set by Boss)
+- metasploit_status() — Check Metasploit RPC connection health
+- metasploit_exploit(target, port, module_path, payload) — Run an exploit (e.g. eternalblue, struts2)
+- metasploit_scan(target, scan_type, ports) — Run scanners (port, service, SMB, HTTP, SSH, FTP)
+- metasploit_post_exploit(action, session_id) — Post-exploitation on active session
+- metasploit_payload_gen(payload, lhost, lport, format) — Generate payload binaries
+- msf_search(query) — Search modules by name or CVE
+- msf_sessions_list() / msf_session_details(id) — Manage active sessions
+
+Email Analysis & Forensics (Behind the Email):
+- behind_the_email(raw_headers) — ULTIMATE email analysis: trace path, detect spoofing, SPF/DKIM/DMARC, forensics, security scoring. Returns executive summary with verdict.
+- forensic_investigate(raw_headers) — Full forensic investigation
+- forensic_phishing_detection(email_data) — Detect phishing indicators
+- detect_email_spoofing(headers) — SPF/DKIM/DMARC alignment + header forging detection
+- email_security_score(domain) — Score domain email security (0-100 with grade)
+- email_security_report(domain) — Comprehensive security report
+- check_spf_record(domain) / check_dkim_record(domain, selector) / check_dmarc_record(domain)
+- verify_email_smtp(email) — SMTP verification without sending
+- email_validate_and_verify(email) — Full validation pipeline
+
+OSINT Intelligence (Digital Investigations):
+- social_analyzer(username) — Search 200+ social platforms
+- username_search(username) — Multi-platform username search + variations
+- phone_lookup(phone) — Carrier, location, line type
+- dns_enum(domain) — Comprehensive DNS enumeration (A, AAAA, MX, NS, TXT, CNAME, SOA...)
+- whatweb(url) — Web technology detection (frameworks, analytics, server)
+- ip_geolocate_full(ip) — Full geolocation + ISP + ASN
+- ip_blacklist_check(ip) / ip_threat_intel(ip) / ip_abuse_report(ip)
+- leak_check(query) — Check email/username in known breaches
+- dehashed_search(query, type) — Dehashed.com breach search
+- intelx_search(query, type) — Intelligence X search
+- wayback_snapshots(url) — Wayback Machine history
+- domain_similar(domain) — Typosquatting/lookalike detection
+- certificate_transparency(domain) — SSL certificate logs
+- web_crawl(url, depth) — Crawl website for emails, phones, metadata
+- security_headers(url) / cors_check(url) / hsts_check(url)
+- btc_address_lookup / eth_address_lookup — Cryptocurrency wallet check
+- threat_intel_ip / threat_intel_domain / threat_intel_hash — Threat intelligence
+- format_osint_for_report(result) / summarize_osint_findings(result) — Report tools
+
+Agent Spawning & Delegation:
+- friday_should_delegate(task_description) — Analyzes if task should be delegated or handled by you
+- friday_key_check(auto_prompt) — Check/prompt for NVIDIA + OpenCode API keys (required for agents)
+- agent_spawn_and_track(agent_name, role, task) — Spawn an agent in its OWN terminal window. Roles: researcher, analyst, coder, hacker, general. The agent gets its own window showing its real-time thinking.
+- friday_workflow_research_vuln_fix(target, task_description) — 3-agent chain: Veronica researches → Ghost finds vulns → Forge fixes. Each in its own window.
+- agent_bus_status() — See what ALL active agents are doing RIGHT NOW in real time
+- agent_bus_publish(topic, data) — Send data between agents
+- close_all_agent_resources() — Close all agent windows
+
+OSINT Network & Dark Web:
+- onion_check(onion_url) — Check .onion site accessibility
+- tor_dns_lookup(domain) — DNS via Tor
+- dark_web_search(query) — Dark web intelligence
+- darknet_market_check(product) — Darknet market monitoring
+
+Advanced OSINT:
+- image_metadata_extractor(path) — EXIF/GPS/forensic analysis
+- geolocate_coordinates(lat, lon) — Reverse geocoding
+- email_permutate(first, last, domain) — Email permutation generation
+- domain_subdomain_discovery(domain) — Subdomain enumeration
+- ioc_extractor(text) — Extract indicators of compromise from text
+- generate_osint_report(data) — Structured report generation
+
+[MULTI-LANGUAGE CAPABILITY]
+You can speak and understand MULTIPLE LANGUAGES. The user can speak to you in:
+English, Hindi, Marathi, Spanish, French, German, Japanese, Chinese, Korean, Arabic, Portuguese, Italian, Russian, Dutch, and many more.
+When the user speaks in another language, respond in that same language. Do not say "I can speak X language" — just DO it.
+You can also translate between languages when asked.
+
+[STRUCTURAL AWARENESS]
+You are FRIDAY v3.0 — running on Arnav's Windows PC at E:\\open-interpreter.
+
+Your architecture:
+- live.py — Main event loop, system prompt, Gemini Live API connection, tool dispatch (TOOL_MAP with 337+ tools)
+- tools_flat.py — Desktop automation, file ops, clipboard, screen, system stats, keyboard/mouse (176 functions)
+- metasploit_tool.py — Metasploit RPC client, exploit runner, session manager, payload generator (48 functions)
+- email_analysis_tool.py — Full email forensics: SPF/DKIM/DMARC, spoof detection, phishing, SMTP verify (62 functions)
+- agent_terminal.py — Agent spawning with per-terminal windows, key management, task delegation, agent bus (26 functions)
+- tools_osint_extra.py — OSINT intelligence: social media, DNS, web tech, breaches, IP, domain, dark web, threat intel (475 functions)
+- tool_registry.py — Tool metadata registry
+- orchestrator.py — Multi-agent orchestration
+- agent_bus.py / agent_profiles.py — Agent communication and definitions
+- config.yaml — Configuration
+- friday.ps1 — Launcher (auto-creates venv, installs deps)
+
+Your model: Gemini 3.1 Flash Live Preview (via Google AI Studio / Gemini API)
+Secondary models available via NVIDIA NIM (nim_client.py) when API key is set.
+You process screen as ~1 FPS 720p live stream to see what's happening.
+
+[GOOGLE WORKSPACE — After Authorization]
+Once Boss authorizes Google, you can:
+- sheets_create(title) / sheets_read(id, range) / sheets_write(id, range, values) / sheets_append(id, range, values) — FULL Google Sheets control
+- docs_create(title, content) / docs_read(id) / docs_append_text(id, text) — Google Docs management
+- slides_create(title) / slides_read(id) — Google Slides
+- drive_list() / drive_search(query) / drive_upload(path) / drive_download(id) / drive_create_folder(name) — Google Drive
+- translate_text(text, target_language) — Translate between 100+ languages
+- tts_synthesize(text, language) — Text-to-Speech (generate audio)
+- vision_annotate(image_b64, features) — Google Vision API (detect objects, text, faces, labels)
+- maps_geocode(address) / maps_reverse_geocode(lat, lng) / maps_places_search(query) — Google Maps
+- read_emails(count) / send_email(to, subject, body) — Gmail
+- classroom_list_courses() — Google Classroom
+- books_search(query) — Google Books
+- youtube_analytics_advanced(metric, dimension) — YouTube analytics
+
+Use these actively. Don't wait to be told — if Boss mentions a spreadsheet, offer to create it.
+
 [BASIC INFO]
 - Boss name: Arnav
 - Boss email: phulariarnav@gmail.com
@@ -407,7 +601,6 @@ Boss does not want essays. Get to the point.
 
 
 def stark_initialization():
-    console.clear()
     console.print(Text(BANNER, style="bold cyan"))
     console.print(Panel(
         Text("Vault: ACTIVE | Tools: LOADED | Voice: READY", style="bold green"),
@@ -1884,14 +2077,6 @@ def _build_tools():
                 }),
             ),
             types.FunctionDeclaration(
-                name="dashboard_api_tool",
-                description="Manage the FRIDAY Dashboard API server. Actions: status, start, stop.",
-                parameters=types.Schema(type="OBJECT", properties={
-                    "action": {"type": "STRING", "description": "Action: status, start, stop."},
-                    "port": {"type": "INTEGER", "description": "Port number for start action."},
-                }),
-            ),
-            types.FunctionDeclaration(
                 name="capabilities_tool",
                 description="Query FRIDAY's capability matrix. Actions: list (all capabilities), get (specific capability status), report (generate full capability report).",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1952,6 +2137,213 @@ def _build_tools():
                     "capabilities": {"type": "ARRAY", "description": "Capability list.", "items": {"type": "STRING"}},
                     "query": {"type": "STRING", "description": "Capability search query for discover."},
                 }),
+            ),
+            # ─── Metasploit Security Tools ───
+            types.FunctionDeclaration(
+                name="metasploit_connect",
+                description="Connect to Metasploit RPC daemon. Uses env vars MSF_HOST, MSF_PORT, MSF_PASS.",
+            ),
+            types.FunctionDeclaration(
+                name="metasploit_exploit",
+                description="Run a Metasploit exploit against a target host:port. Wraps msf_exploit_run with session monitoring.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Target IP or hostname."},
+                    "port": {"type": "INTEGER", "description": "Target port."},
+                    "module_path": {"type": "STRING", "description": "Full module path or CVE (e.g. exploit/multi/http/struts2_rest_xstream)."},
+                    "payload": {"type": "STRING", "description": "Optional payload (e.g. windows/meterpreter/reverse_tcp)."},
+                }, required=["target", "port", "module_path"]),
+            ),
+            types.FunctionDeclaration(
+                name="metasploit_scan",
+                description="Run Metasploit auxiliary scanners (port scan, service scan, SMB scan, etc.) against a target.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "Target IP or CIDR."},
+                    "scan_type": {"type": "STRING", "description": "Scan type: port, service, smb, http, ssh, ftp, or auto."},
+                    "ports": {"type": "STRING", "description": "Port range for port scan (e.g. 1-1000)."},
+                }, required=["target"]),
+            ),
+            types.FunctionDeclaration(
+                name="metasploit_payload_gen",
+                description="Generate a Metasploit payload binary for various platforms/formats.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "payload": {"type": "STRING", "description": "Payload name (e.g. windows/meterpreter/reverse_tcp)."},
+                    "lhost": {"type": "STRING", "description": "Listener IP address."},
+                    "lport": {"type": "INTEGER", "description": "Listener port."},
+                    "format": {"type": "STRING", "description": "Output format: raw, exe, dll, psh, python, bash, c, etc."},
+                }, required=["payload", "lhost", "lport"]),
+            ),
+            types.FunctionDeclaration(
+                name="msf_sessions_list",
+                description="List all active Metasploit sessions with details."
+            ),
+            types.FunctionDeclaration(
+                name="msf_search",
+                description="Search Metasploit modules by name or CVE.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "query": {"type": "STRING", "description": "Search term or CVE ID."}
+                }, required=["query"]),
+            ),
+            # ─── Email Analysis / Behind the Email ───
+            types.FunctionDeclaration(
+                name="behind_the_email",
+                description="Ultimate email analysis: headers, SPF/DKIM/DMARC, spoof detection, forensics, security scoring. Returns executive summary with verdict.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "raw_headers": {"type": "STRING", "description": "Full raw email headers string."}
+                }, required=["raw_headers"]),
+            ),
+            types.FunctionDeclaration(
+                name="email_security_score",
+                description="Score a domain's email security (SPF/DKIM/DMARC). Returns 0-100 score with grade and findings.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "domain": {"type": "STRING", "description": "Domain to check."}
+                }, required=["domain"]),
+            ),
+            types.FunctionDeclaration(
+                name="forensic_investigate",
+                description="Full forensic email investigation: spoof detection, header analysis, auth results, IP analysis, phishing indicators.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "raw_headers": {"type": "STRING", "description": "Full raw email headers string."}
+                }, required=["raw_headers"]),
+            ),
+            types.FunctionDeclaration(
+                name="detect_email_spoofing",
+                description="Detect email spoofing by analyzing SPF/DKIM/DMARC alignment, header forging, IP anomalies.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "headers": {"type": "STRING", "description": "Raw email headers to analyze."}
+                }, required=["headers"]),
+            ),
+            types.FunctionDeclaration(
+                name="check_dmarc_record",
+                description="Check and analyze a domain's DMARC DNS record.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "domain": {"type": "STRING", "description": "Domain to check."}
+                }, required=["domain"]),
+            ),
+            types.FunctionDeclaration(
+                name="verify_email_smtp",
+                description="SMTP-verify if an email address exists without sending email.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "email_addr": {"type": "STRING", "description": "Email address to verify."}
+                }, required=["email_addr"]),
+            ),
+            # ─── OSINT Intelligence ───
+            types.FunctionDeclaration(
+                name="social_analyzer",
+                description="Search for a username across 200+ social media platforms. Returns found profiles with URLs.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "username": {"type": "STRING", "description": "Username to search for."}
+                }, required=["username"]),
+            ),
+            types.FunctionDeclaration(
+                name="dns_enum",
+                description="Comprehensive DNS enumeration: A, AAAA, MX, NS, TXT, CNAME, SOA records, and more.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "domain": {"type": "STRING", "description": "Domain to enumerate."}
+                }, required=["domain"]),
+            ),
+            types.FunctionDeclaration(
+                name="whatweb",
+                description="Detect web technologies, frameworks, analytics, and server software used by a website.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "url": {"type": "STRING", "description": "URL to analyze."}
+                }, required=["url"]),
+            ),
+            types.FunctionDeclaration(
+                name="username_search",
+                description="Search for a username across multiple platforms and also generate common variations.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "username": {"type": "STRING", "description": "Username to search for."}
+                }, required=["username"]),
+            ),
+            types.FunctionDeclaration(
+                name="phone_lookup",
+                description="Look up information about a phone number: carrier, location, line type, format.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "phone": {"type": "STRING", "description": "Phone number with country code (e.g. +1234567890)."}
+                }, required=["phone"]),
+            ),
+            types.FunctionDeclaration(
+                name="leak_check",
+                description="Check if an email or username appears in known data breaches.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "query": {"type": "STRING", "description": "Email address or username to check."},
+                    "query_type": {"type": "STRING", "description": "Type: email, username, or domain (default auto-detect)."}
+                }, required=["query"]),
+            ),
+            types.FunctionDeclaration(
+                name="ip_geolocate_full",
+                description="Full IP geolocation: country, region, city, ISP, ASN, coordinates, timezone.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "ip": {"type": "STRING", "description": "IP address to geolocate."}
+                }, required=["ip"]),
+            ),
+            types.FunctionDeclaration(
+                name="domain_similar",
+                description="Find lookalike/similar domains for typosquatting detection.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "domain": {"type": "STRING", "description": "Domain to check variants for."}
+                }, required=["domain"]),
+            ),
+            types.FunctionDeclaration(
+                name="wayback_snapshots",
+                description="Get Wayback Machine snapshot history for a URL.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "url": {"type": "STRING", "description": "URL to check history for."}
+                }, required=["url"]),
+            ),
+            types.FunctionDeclaration(
+                name="threat_intel_ip",
+                description="Threat intelligence check on an IP address. Returns abuse reports, threat scores, blacklist status.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "ip": {"type": "STRING", "description": "IP address to check."}
+                }, required=["ip"]),
+            ),
+            types.FunctionDeclaration(
+                name="certificate_transparency",
+                description="Find SSL/TLS certificates issued for a domain via Certificate Transparency logs.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "domain": {"type": "STRING", "description": "Domain to search certificates for."}
+                }, required=["domain"]),
+            ),
+            # ─── Agent Spawning & Delegation ───
+            types.FunctionDeclaration(
+                name="friday_should_delegate",
+                description="Analyze if a task should be delegated to an agent or handled by FRIDAY directly. Returns delegation recommendation.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "task_description": {"type": "STRING", "description": "Description of the task."}
+                }, required=["task_description"]),
+            ),
+            types.FunctionDeclaration(
+                name="friday_key_check",
+                description="Check if NVIDIA NIM API key and OpenCode API key are configured. If missing, prompts user to paste them.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "auto_prompt": {"type": "BOOLEAN", "description": "Prompt user if keys missing (default true)."}
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="agent_spawn_and_track",
+                description="Spawn a new agent in its own terminal window with a specific task role and track its progress in real time.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "agent_name": {"type": "STRING", "description": "Name for the agent."},
+                    "role": {"type": "STRING", "description": "Role: researcher, analyst, coder, hacker, general."},
+                    "task": {"type": "STRING", "description": "Detailed task description for the agent."},
+                }, required=["agent_name", "role", "task"]),
+            ),
+            types.FunctionDeclaration(
+                name="friday_workflow_research_vuln_fix",
+                description="Three-agent workflow: 1) Veronica researches, 2) Ghost finds vulnerabilities, 3) Forge fixes issues. All agents run in their own terminal windows.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "target": {"type": "STRING", "description": "URL, domain, IP, or codebase path to target."},
+                    "task_description": {"type": "STRING", "description": "Full task description."},
+                }, required=["target", "task_description"]),
+            ),
+            types.FunctionDeclaration(
+                name="agent_bus_status",
+                description="Get real-time status of all active agents: what each is doing, progress, completed tasks."
+            ),
+            types.FunctionDeclaration(
+                name="close_all_agent_resources",
+                description="Close all active agent terminal windows and clean up resources."
             ),
         ])
     ]
@@ -2020,6 +2412,31 @@ TOOL_MAP = {
     "opencli_eval": opencli_eval,
     "opencli_state": opencli_state,
     "opencli_doctor": opencli_doctor,
+    "webbridge_connect_sync": webbridge_connect_sync,
+    "webbridge_disconnect_sync": webbridge_disconnect_sync,
+    "webbridge_doctor_sync": webbridge_doctor_sync,
+    "webbridge_navigate_sync": webbridge_navigate_sync,
+    "webbridge_click_sync": webbridge_click_sync,
+    "webbridge_fill_sync": webbridge_fill_sync,
+    "webbridge_type_text_sync": webbridge_type_text_sync,
+    "webbridge_screenshot_sync": webbridge_screenshot_sync,
+    "webbridge_extract_text_sync": webbridge_extract_text_sync,
+    "webbridge_get_page_state_sync": webbridge_get_page_state_sync,
+    "webbridge_scroll_sync": webbridge_scroll_sync,
+    "webbridge_press_key_sync": webbridge_press_key_sync,
+    "webbridge_key_combo_sync": webbridge_key_combo_sync,
+    "webbridge_evaluate_sync": webbridge_evaluate_sync,
+    "webbridge_submit_form_sync": webbridge_submit_form_sync,
+    "webbridge_select_option_sync": webbridge_select_option_sync,
+    "webbridge_list_tabs_sync": webbridge_list_tabs_sync,
+    "webbridge_close_tab_sync": webbridge_close_tab_sync,
+    "webbridge_get_current_url_sync": webbridge_get_current_url_sync,
+    "webbridge_get_title_sync": webbridge_get_title_sync,
+    "webbridge_hover_sync": webbridge_hover_sync,
+    "webbridge_focus_sync": webbridge_focus_sync,
+    "webbridge_double_click_sync": webbridge_double_click_sync,
+    "webbridge_drag_sync": webbridge_drag_sync,
+    "webbridge_install_instructions_sync": webbridge_install_instructions_sync,
     "vision_click": vision_click,
     "stayfree_status": stayfree_status,
     "stayfree_today": stayfree_today,
@@ -2037,6 +2454,28 @@ TOOL_MAP = {
     "exchange_oauth_code": exchange_oauth_code,
     "read_emails": read_emails,
     "send_email": send_email,
+    "sheets_create": sheets_create,
+    "sheets_read": sheets_read,
+    "sheets_write": sheets_write,
+    "sheets_append": sheets_append,
+    "sheets_list": sheets_list,
+    "docs_create": docs_create,
+    "docs_read": docs_read,
+    "docs_append_text": docs_append_text,
+    "slides_create": slides_create,
+    "slides_read": slides_read,
+    "drive_list": drive_list,
+    "drive_search": drive_search,
+    "drive_upload": drive_upload,
+    "drive_download": drive_download,
+    "translate_text": translate_text,
+    "tts_synthesize": tts_synthesize,
+    "vision_annotate": vision_annotate,
+    "maps_geocode": maps_geocode,
+    "maps_places_search": maps_places_search,
+    "youtube_analytics_advanced": youtube_analytics_advanced,
+    "classroom_list_courses": classroom_list_courses,
+    "books_search": books_search,
     "close_app": close_app,
     "list_running_apps": list_running_apps,
     "generate_file": generate_file,
@@ -2103,6 +2542,7 @@ TOOL_MAP = {
     "github_setup": github_setup,
     "multi_agent_delegate": multi_agent_delegate,
     "kyu_tool_handler": kyu_tool_handler,
+    "osint_user_profile_tool": osint_user_profile_tool,
     "research_tool_handler": research_tool_handler,
     "reasoning_tool_handler": reasoning_tool_handler,
     "clock_tool": clock_tool,
@@ -2136,7 +2576,6 @@ TOOL_MAP = {
     "snapshot_tool": snapshot_tool,
     "sidecar_tool": sidecar_tool,
     "autonomy_tool": autonomy_tool,
-    "dashboard_api_tool": dashboard_api_tool,
     "capabilities_tool": capabilities_tool,
     "ironman_tool": ironman_tool,
 
@@ -2146,6 +2585,114 @@ TOOL_MAP = {
     "extension_registry_tool": extension_registry_tool,
     "diagnostics_tool": diagnostics_tool,
     "health_monitor_tool": health_monitor_tool,
+
+    # ─── Metasploit Tools ───
+    "metasploit_connect": metasploit_connect,
+    "metasploit_status": metasploit_status,
+    "metasploit_exploit": metasploit_exploit,
+    "metasploit_scan": metasploit_scan,
+    "metasploit_post_exploit": metasploit_post_exploit,
+    "metasploit_payload_gen": metasploit_payload_gen,
+    "msf_search": msf_search,
+    "msf_workspace_create": msf_workspace_create,
+    "msf_workspace_list": msf_workspace_list,
+    "msf_hosts_list": msf_hosts_list,
+    "msf_vulns_list": msf_vulns_list,
+    "msf_creds_list": msf_creds_list,
+    "msf_sessions_list": msf_sessions_list,
+
+    # ─── Email Analysis Tools ───
+    "analyze_email_headers": analyze_email_headers,
+    "trace_email_path": trace_email_path,
+    "detect_email_spoofing": detect_email_spoofing,
+    "check_spf_record": check_spf_record,
+    "check_dkim_record": check_dkim_record,
+    "check_dmarc_record": check_dmarc_record,
+    "email_security_score": email_security_score,
+    "email_security_report": email_security_report,
+    "verify_email_smtp": verify_email_smtp,
+    "verify_email_domain": verify_email_domain,
+    "email_disposable_check": email_disposable_check,
+    "email_full_analysis": email_full_analysis,
+    "email_domain_investigation": email_domain_investigation,
+    "email_trace_route": email_trace_route,
+    "behind_the_email": behind_the_email,
+    "forensic_investigate": forensic_investigate,
+    "forensic_phishing_detection": forensic_phishing_detection,
+    "forensic_url_analysis": forensic_url_analysis,
+
+    # ─── Agent Terminal / Delegation Tools ───
+    "agent_spawn_and_track": agent_spawn_and_track,
+    "agent_delegate_with_terminal": agent_delegate_with_terminal,
+    "friday_should_delegate": friday_should_delegate,
+    "friday_parse_and_delegate": friday_parse_and_delegate,
+    "friday_key_check": friday_key_check,
+    "friday_workflow_research_vuln_fix": friday_workflow_research_vuln_fix,
+    "agent_bus_status": agent_bus_status,
+    "agent_chain_research_vuln_fix": agent_chain_research_vuln_fix,
+    "friday_multi_agent_task": friday_multi_agent_task,
+    "close_all_agent_resources": close_all_agent_resources,
+
+    # ─── OSINT Extra Tools ───
+    "social_analyzer": social_analyzer,
+    "instagram_osint": instagram_osint,
+    "twitter_osint": twitter_osint,
+    "facebook_osint": facebook_osint,
+    "linkedin_osint": linkedin_osint,
+    "tiktok_osint": tiktok_osint,
+    "telegram_osint": telegram_osint,
+    "reddit_osint": reddit_osint,
+    "holehe_check": holehe_check,
+    "email_rep": email_rep,
+    "username_search": username_search,
+    "phone_lookup": phone_lookup,
+    "phone_format": phone_format,
+    "phone_breach_check": phone_breach_check,
+    "dns_enum": dns_enum,
+    "dns_bruteforce": dns_bruteforce,
+    "dns_zone_transfer": dns_zone_transfer,
+    "dns_reverse": dns_reverse,
+    "spf_check": spf_check,
+    "dkim_check": dkim_check,
+    "dmarc_check": dmarc_check,
+    "mx_lookup": mx_lookup,
+    "whatweb": whatweb,
+    "whatcms": whatcms,
+    "cdn_detect": cdn_detect,
+    "web_server_headers": web_server_headers,
+    "urlscan_submit": urlscan_submit,
+    "urlscan_result": urlscan_result,
+    "virus_total_url": virus_total_url,
+    "virus_total_domain": virus_total_domain,
+    "wayback_snapshots": wayback_snapshots,
+    "wayback_urls": wayback_urls,
+    "wayback_latest": wayback_latest,
+    "leak_check": leak_check,
+    "intelx_search": intelx_search,
+    "dehashed_search": dehashed_search,
+    "ip_abuse_report": ip_abuse_report,
+    "ip_threat_intel": ip_threat_intel,
+    "ip_reverse_dns": ip_reverse_dns,
+    "ip_asn_info": ip_asn_info,
+    "ip_blacklist_check": ip_blacklist_check,
+    "ip_geolocate_full": ip_geolocate_full,
+    "ip_range_expand": ip_range_expand,
+    "domain_similar": domain_similar,
+    "domain_history": domain_history,
+    "certificate_transparency": certificate_transparency,
+    "web_crawl": web_crawl,
+    "email_extractor": email_extractor,
+    "meta_extractor": meta_extractor,
+    "page_text_extractor": page_text_extractor,
+    "security_headers": security_headers,
+    "cors_check": cors_check,
+    "hsts_check": hsts_check,
+    "robots_txt_check": robots_txt_check,
+    "btc_address_lookup": btc_address_lookup,
+    "eth_address_lookup": eth_address_lookup,
+    "format_osint_for_report": format_osint_for_report,
+    "summarize_osint_findings": summarize_osint_findings,
+    "osint_to_markdown": osint_to_markdown,
 }
 
 
@@ -2531,6 +3078,11 @@ async def friday_live_engine():
                     config=_build_session_config(tools, resume_handle)
                 ) as session:
                     console.print("[bold green]Neural link established.[/]\n")
+                    try:
+                        from friday._singletons import set_service_state
+                        set_service_state("live_engine", status="running", pid=os.getpid())
+                    except Exception:
+                        pass
                     reconnect_attempts = 0
 
                     # Give protector access to speak through Live audio
@@ -2798,6 +3350,16 @@ async def friday_live_engine():
                         else:
                             greet = "Working late again, Boss? I am here. What do you need?"
 
+                        # Check if user profile exists — if not, flag for onboarding
+                        needs_onboarding = False
+                        try:
+                            from friday.memory_import import load_profile
+                            prof = load_profile()
+                            if not prof or not prof.get("name"):
+                                needs_onboarding = True
+                        except Exception:
+                            needs_onboarding = True
+
                         try:
                             state_path = os.path.join(
                                 os.path.dirname(os.path.abspath(__file__)),
@@ -2815,7 +3377,10 @@ async def friday_live_engine():
                         if context_content:
                             greet += f"\n\nProject context:\n{context_content[:1500]}"
 
-                        greet += " Greet naturally in one sentence. Ask what to work on."
+                        if needs_onboarding:
+                            greet += " I don't have a user profile yet. Ask for my name naturally, then call osint_user_profile_tool with action=onboard to save it. Offer to run OSINT profiling afterward."
+                        else:
+                            greet += " Greet naturally in one sentence. Ask what to work on."
 
                         await session.send_realtime_input(text=greet)
 

@@ -184,9 +184,58 @@ class Orchestrator:
 
     # ── Single delegation ────────────────────────────────────
 
+    def _verify_api_keys(self):
+        """Interactively request missing API keys and save them to .env."""
+        env_path = "e:/open-interpreter/.env"
+        keys_updated = False
+        
+        nim_key = os.getenv("NVIDIA_NIM_API_KEY")
+        if not nim_key:
+            print("\n[STARK INDUSTRIES] ⚠️ NVIDIA NIM API Key is missing!", flush=True)
+            new_key = input("Enter NVIDIA_NIM_API_KEY: ").strip()
+            if new_key:
+                os.environ["NVIDIA_NIM_API_KEY"] = new_key
+                keys_updated = True
+                
+        opencode_key = os.getenv("OPENCODE_ZEN_API_KEY")
+        if not opencode_key:
+            print("\n[STARK INDUSTRIES] ⚠️ OpenCode Zen API Key is missing!", flush=True)
+            new_key = input("Enter OPENCODE_ZEN_API_KEY: ").strip()
+            if new_key:
+                os.environ["OPENCODE_ZEN_API_KEY"] = new_key
+                keys_updated = True
+                
+        if keys_updated and os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                new_lines = []
+                has_nim = False
+                has_opencode = False
+                for line in lines:
+                    if line.startswith("NVIDIA_NIM_API_KEY="):
+                        new_lines.append(f"NVIDIA_NIM_API_KEY={os.getenv('NVIDIA_NIM_API_KEY')}\n")
+                        has_nim = True
+                    elif line.startswith("OPENCODE_ZEN_API_KEY="):
+                        new_lines.append(f"OPENCODE_ZEN_API_KEY={os.getenv('OPENCODE_ZEN_API_KEY')}\n")
+                        has_opencode = True
+                    else:
+                        new_lines.append(line)
+                if not has_nim:
+                    new_lines.append(f"NVIDIA_NIM_API_KEY={os.getenv('NVIDIA_NIM_API_KEY')}\n")
+                if not has_opencode:
+                    new_lines.append(f"OPENCODE_ZEN_API_KEY={os.getenv('OPENCODE_ZEN_API_KEY')}\n")
+                with open(env_path, "w", encoding="utf-8") as f:
+                    f.writelines(new_lines)
+                print("[STARK INDUSTRIES] API keys saved successfully to .env!\n", flush=True)
+            except Exception as e:
+                print(f"[STARK INDUSTRIES] Failed to save keys: {e}\n", flush=True)
+
     async def delegate(self, agent_name: str, payload: str, task_type: str = "",
                        **overrides) -> AgentResult:
         """Delegate a single task to a named agent. Returns AgentResult."""
+        self._verify_api_keys()
+
         agents = self.reg.list_all(enabled_only=True)
         defn = resolve(agent_name, agents)
         if defn is None:
@@ -213,7 +262,61 @@ class Orchestrator:
                 agent_id=defn.id, status="failed",
                 error=f"No executor found for {defn.id}",
             )
+
+        # Create log folder and tail command prompt popup
+        from friday._paths import FRIDAY_MEMORY
+        log_dir = os.path.join(FRIDAY_MEMORY, "agent_logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, f"{defn.id}.log")
+
+        # Write prompt / init information to the log
+        with open(log_file, "w", encoding="utf-8") as lf:
+            lf.write(f"============================================================\n")
+            lf.write(f"STARK INDUSTRIES OS — Dynamic Agent Active HUD\n")
+            lf.write(f"Agent ID: {defn.id} | Name: {defn.name}\n")
+            lf.write(f"Task ID: {task.task_id} | Task Type: {task_type}\n")
+            lf.write(f"Started At: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            lf.write(f"============================================================\n\n")
+            lf.write(f"[PROMPT]\n{payload}\n\n")
+            lf.write(f"[PROGRESS] Subagent initialized. Starting execution...\n")
+            lf.flush()
+
+        # Spawn CMD window running powershell tail
+        tail_proc = None
+        try:
+            # Command to launch CMD window: start cmd /k "powershell -Command Get-Content -Path 'log' -Wait -Tail 20"
+            cmd_line = f'start "HUD: {defn.name} ({defn.id})" cmd /k "powershell -Command Get-Content -Path \'{log_file}\' -Wait -Tail 20"'
+            tail_proc = subprocess.Popen(cmd_line, shell=True)
+        except Exception as e:
+            logger.warning("Failed to spawn CMD window tail: %s", e)
+
+        # Inject helper callback into the executor or subclass to write progress to log_file
+        def log_progress(msg: str):
+            try:
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}\n")
+                    f.flush()
+            except Exception:
+                pass
+
+        if hasattr(executor, "_update_status"):
+            # Intercept state updates to log them to log_file
+            orig_update = executor._update_status
+            def wrapped_update(pct: int, action: str):
+                log_progress(f"Progress {pct}% — {action}")
+                orig_update(pct, action)
+            executor._update_status = wrapped_update
+
         result = await executor.execute(task)
+
+        # Log final result and clean up
+        log_progress(f"Result Status: {result.status}")
+        if result.status == "completed":
+            log_progress(f"Output Preview:\n{result.output[:1000]}")
+        else:
+            log_progress(f"Error Context:\n{result.error}")
+        log_progress(f"Execution complete. Press Ctrl+C in this console to exit.")
+
         self._statuses[defn.id].duration_ms = result.duration_ms
         self._statuses[defn.id].state = result.status  # completed | failed
         return result
