@@ -30,6 +30,7 @@ from google import genai
 from google.genai import types
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 from rich import box
 
@@ -592,24 +593,56 @@ Boss does not want essays. Get to the point.
 
 
 def stark_initialization():
-    console.print(Text(BANNER, style="bold cyan"))
-    console.print(Panel(
-        Text("Vault: ACTIVE | Tools: LOADED | Voice: READY", style="bold green"),
+    """Display the Stark Industries boot sequence with rich styling."""
+    console.print()
+    console.rule("[bold cyan]⚡ F.R.I.D.A.Y. Boot Sequence ⚡[/bold cyan]", style="cyan")
+    console.print()
+
+    # ASCII art banner in a panel
+    banner_panel = Panel(
+        Text(BANNER, style="bold cyan", justify="center"),
         border_style="bright_blue",
-        box=box.ROUNDED,
-    ))
-    console.print(
-        "[dim white]Stark Tools Online: App, Research, DeepResearch, Alexa, Home Assistant, "
-        "TaskQueue, File, Vision, Desktop, Media, Spotify, Sovereign Core.[/]"
+        box=box.HEAVY_EDGE,
+        padding=(0, 2),
     )
-    console.print("\n[bold cyan]--- NEURAL UPLINK DISPATCHED ---[/]")
-    console.print("[yellow]Running diagnostic...[/]")
+    console.print(banner_panel)
+
+    # Status grid
+    status_grid = Table.grid(padding=(0, 4))
+    status_grid.add_column(style="bold green", width=14)
+    status_grid.add_column(style="green")
+    status_grid.add_row("🧠 Model", f"[bold cyan]{MODEL_ID}[/bold cyan]")
+    status_grid.add_row("🔊 Voice", "[bold]Leda[/bold] (audio-only)")
+    status_grid.add_row("📡 Vault", "[bold green]● ACTIVE[/bold green]")
+    status_grid.add_row("🛠  Tools", f"[bold]{len(TOOL_MAP) + 196} loaded[/bold]")
+    status_grid.add_row("🎤 Mic", "[bold]Porcupine wake word[/bold]")
+    status_grid.add_row("🖥  Screen", "[bold]Live 720p ~1 FPS[/bold]")
+
+    console.print(Panel(
+        status_grid,
+        title="[bold]System Status[/bold]",
+        border_style="green",
+        box=box.ROUNDED,
+        padding=(1, 2),
+    ))
+
+    console.print()
+    console.rule("[dim]Diagnostic Scan[/dim]", style="dim")
     try:
         report = stark_doctor()
-        console.print(report)
+        summary = report[:300] if len(report) > 300 else report
+        console.print(Panel(
+            Text(summary, style="dim white"),
+            border_style="grey35",
+            box=box.MINIMAL,
+            padding=(0, 1),
+        ))
     except Exception as e:
-        console.print(f"[red]Diagnostic Failed:[/] {e}")
-    console.print("\n")
+        console.print(f"[red]⚠ Diagnostic Failed:[/] {e}")
+
+    console.print()
+    console.rule("[bold green]✅ Neural Uplink Dispatched[/bold green]", style="green")
+    console.print()
 
 
 # AUDIO PLAYBACK THREAD - zero async overhead
@@ -730,22 +763,100 @@ def _stop_audio_playback():
 class ChatDisplay:
     def __init__(self, console: Console):
         self.console = console
+        self._last_speaker: str | None = None
+        self._thinking_panel_open = False
+
+    def _ts(self) -> str:
+        return datetime.datetime.now().strftime("%H:%M:%S")
 
     def add_user_message(self, text: str):
-        self.console.print(f"\n[bold green]---Boss---[/]")
-        self.console.print(f"  {text}")
+        ts = self._ts()
+        self._last_speaker = "user"
+        panel = Panel(
+            Text(text, style="bold green", overflow="fold"),
+            title=f"[bold green]👤 Boss  [/bold green]",
+            subtitle=f"[dim]{ts}[/dim]",
+            border_style="green",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        )
+        self.console.print(panel)
 
     def add_friday_message(self, text: str):
-        self.console.print(f"\n[bold cyan]---Friday---[/]")
-        self.console.print(f"  {text}")
+        ts = self._ts()
+        self._last_speaker = "friday"
+        panel = Panel(
+            Text(text, style="bold cyan", overflow="fold"),
+            title=f"[bold cyan]🤖 FRIDAY[/bold cyan]",
+            subtitle=f"[dim]{ts}[/dim]",
+            border_style="cyan",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        )
+        self.console.print(panel)
 
     def add_thought(self, text: str):
-        self.console.print()
-        self.console.rule("[dim grey37]Thought[/]", align="left", style="dim grey37")
-        self.console.print(f"  [italic dim grey37]{text}[/]")
+        ts = self._ts()
+        self._thinking_panel_open = True
+        panel = Panel(
+            Text(text, style="italic dim grey74", overflow="fold"),
+            title=f"[dim]💭 Thought  ({ts})[/dim]",
+            border_style="grey46",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        )
+        self.console.print(panel)
 
     def add_system(self, text: str):
-        self.console.print(f"  [dim cyan][SYSTEM] {text}[/]")
+        ts = self._ts()
+        icon = "⚡"
+        lower = text.lower()
+        if "mic" in lower or "listen" in lower:
+            icon = "🎤"
+        elif "standby" in lower:
+            icon = "💤"
+        elif "execut" in lower:
+            icon = "🔧"
+        elif "interrupt" in lower or "mute" in lower:
+            icon = "⏹"
+        elif "ready" in lower or "online" in lower:
+            icon = "✅"
+        self.console.print(f"  [dim]{ts}[/]  [{icon}][dim]{text}[/][/]")
+
+    def add_tool_call(self, name: str, args: dict | None = None) -> None:
+        ts = self._ts()
+        args_str = ""
+        if args:
+            parts = []
+            for k, v in list(args.items())[:3]:
+                v_str = str(v)[:40]
+                parts.append(f"{k}={v_str}")
+            if len(args) > 3:
+                parts.append(f"...+{len(args)-3}")
+            args_str = "  " + ", ".join(parts)
+        self.console.print(
+            f"  [dim]{ts}[/]  [bright_yellow]▶ {name}{args_str}[/bright_yellow]"
+        )
+
+    def add_tool_result(self, name: str, result: str) -> None:
+        ts = self._ts()
+        r = str(result)[:120].replace("\n", " ")
+        self.console.print(
+            f"  [dim]{ts}[/]  [bright_green]✓ {name} → {r}[/bright_green]"
+        )
+
+    def add_error(self, text: str) -> None:
+        ts = self._ts()
+        panel = Panel(
+            Text(text, style="bold red"),
+            title=f"[bold red]✗ Error  ({ts})[/bold red]",
+            border_style="red",
+            box=box.ROUNDED,
+        )
+        self.console.print(panel)
+
+    def add_turn_divider(self) -> None:
+        self.console.rule(style="dim grey35")
 
 
 # BUILD ALL 54 TOOLS
@@ -3267,7 +3378,8 @@ async def friday_live_engine():
                                             new_text = sc.output_transcription.text.strip()
                                             if new_text and new_text != displayed_transcript:
                                                 if not displayed_transcript:
-                                                    console.print(f"\n[bold cyan]---Friday---[/]")
+                                                    ts = chat._ts()
+                                                    console.print(f"\n[bold cyan]🤖 FRIDAY  [dim]{ts}[/dim][/bold cyan]")
                                                 if new_text.startswith(displayed_transcript):
                                                     delta = new_text[len(displayed_transcript):]
                                                     if delta:
@@ -3348,13 +3460,18 @@ async def friday_live_engine():
                                         for fc in tc.function_calls:
                                             name = fc.name
                                             args = fc.args or {}
-                                            chat.add_system(f"Executing: {name}")
+                                            chat.add_tool_call(name, args)
                                             from friday.comms import live_to_dashboard_queue
                                             live_to_dashboard_queue.put({
                                                 "type": "system",
                                                 "payload": {"content": f"Executing: {name}"}
                                             })
                                             result = _invoke_tool(name, args, session)
+                                            result_str = str(result.get("result", result.get("error", "")))
+                                            if "error" in result:
+                                                chat.add_error(f"{name}: {result_str[:100]}")
+                                            else:
+                                                chat.add_tool_result(name, result_str)
                                             responses.append(
                                                 types.FunctionResponse(name=name, id=fc.id, response=result)
                                             )
