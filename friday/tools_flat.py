@@ -1410,7 +1410,9 @@ def reasoning_tool_handler(action: str = "cot", problem: str = None, max_steps: 
 
 
 def status_check(include: str = "all") -> str:
-    """Quick system status overview: goals, calendar, email, notifications, CPU, RAM, active window. Call this ONCE instead of 5 separate tools."""
+    """Quick system status overview: goals, calendar, email, notifications, CPU, RAM, active window. Call this ONCE instead of 5 separate tools.
+    Only includes sections that return data — unavailable services are silently skipped.
+    """
     parts = []
     checks = [s.strip() for s in include.split(",")] if include != "all" else []
     def _should(key):
@@ -1418,27 +1420,35 @@ def status_check(include: str = "all") -> str:
     try:
         if _should("goals"):
             from friday.goals import goals_tool_handler
-            parts.append("--- GOALS ---\n" + goals_tool_handler("list"))
+            r = goals_tool_handler("list")
+            if r and "[UNAVAILABLE]" not in r and "[FAIL]" not in r:
+                parts.append("--- GOALS ---\n" + r)
     except Exception:
-        parts.append("--- GOALS ---\n[UNAVAILABLE]")
+        pass
     try:
         if _should("calendar"):
-            from friday.goals import fetch_calendar_events
-            parts.append("--- CALENDAR ---\n" + fetch_calendar_events(max_results=10, days_ahead=7))
+            from friday.goals import fetch_calendar_events, get_calendar_service
+            svc, err = get_calendar_service(auto_auth=False)
+            if not err:
+                parts.append("--- CALENDAR ---\n" + fetch_calendar_events(max_results=10, days_ahead=7))
     except Exception:
-        parts.append("--- CALENDAR ---\n[UNAVAILABLE]")
+        pass
     try:
         if _should("email"):
-            from friday.gmail import read_emails
-            parts.append("--- EMAIL ---\n" + read_emails(max_results=3))
+            from friday.gmail import gmail_list_messages as _gmail_list
+            r = _gmail_list(query="", max_results=3)
+            if r and "not configured" not in r.lower() and "[fail]" not in r.lower() and "error" not in r.lower():
+                parts.append("--- EMAIL ---\n" + r)
     except Exception:
-        parts.append("--- EMAIL ---\n[UNAVAILABLE]")
+        pass
     try:
         if _should("notifications"):
             from friday.notify import get_pending_notifications
-            parts.append("--- NOTIFICATIONS ---\n" + get_pending_notifications())
+            r = get_pending_notifications()
+            if r and r.strip():
+                parts.append("--- NOTIFICATIONS ---\n" + r)
     except Exception:
-        parts.append("--- NOTIFICATIONS ---\n[UNAVAILABLE]")
+        pass
     try:
         if _should("system"):
             from friday.system_monitor import get_cpu_usage, get_memory_usage
@@ -1446,14 +1456,14 @@ def status_check(include: str = "all") -> str:
             mem = get_memory_usage()
             parts.append(f"--- SYSTEM ---\nCPU: {cpu}% | RAM: {mem.get('used_gb', '?')}GB/{mem.get('total_gb', '?')}GB ({mem.get('percent', '?')}%)")
     except Exception:
-        parts.append("--- SYSTEM ---\n[UNAVAILABLE]")
+        pass
     try:
         if _should("window"):
             from friday.screen_watcher import get_active_window_info
             info = get_active_window_info()
             parts.append(f"--- ACTIVE WINDOW ---\n{info.get('title', 'Unknown')} ({info.get('process_name', 'Unknown')})")
     except Exception:
-        parts.append("--- ACTIVE WINDOW ---\n[UNAVAILABLE]")
+        pass
     return "\n\n".join(parts)
 
 

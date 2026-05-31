@@ -106,8 +106,10 @@ def _run_local_server_with_fallback(flow) -> Any:
     return flow.credentials
 
 
-def _get_credentials() -> Any | None:
-    """Get cached OAuth credentials (Gmail + Calendar scopes)."""
+def _get_credentials(auto_auth: bool = True) -> Any | None:
+    """Get cached OAuth credentials (Gmail + Calendar scopes).
+    If auto_auth=False, skips OAuth flow and returns None if no cached token exists.
+    """
     try:
         from google.oauth2.credentials import Credentials
         from google_auth_oauthlib.flow import InstalledAppFlow
@@ -120,7 +122,7 @@ def _get_credentials() -> Any | None:
             if creds and creds.expired and creds.refresh_token:
                 from google.auth.transport.requests import Request
                 creds.refresh(Request())
-            else:
+            elif auto_auth:
                 creds_path = os.path.join(_ROOT, "credentials.json")
                 if not os.path.exists(creds_path):
                     return None
@@ -131,17 +133,21 @@ def _get_credentials() -> Any | None:
                     creds = flow.run_local_server(port=8080, open_browser=True)
                 except Exception:
                     creds = _run_local_server_with_fallback(flow)
-            with open(_TOKEN_PATH, "w") as f:
-                f.write(creds.to_json())
+                with open(_TOKEN_PATH, "w") as f:
+                    f.write(creds.to_json())
+            else:
+                return None
         return creds
     except Exception:
         return None
 
 
-def _get_gmail_service():
-    """Get authenticated Gmail service (uses unified .gmail_token.json)."""
+def _get_gmail_service(auto_auth: bool = True):
+    """Get authenticated Gmail service (uses unified .gmail_token.json).
+    If auto_auth=False, skips OAuth flow if no cached token exists.
+    """
     try:
-        creds = _get_credentials()
+        creds = _get_credentials(auto_auth=auto_auth)
         if not creds:
             return None
         from googleapiclient.discovery import build

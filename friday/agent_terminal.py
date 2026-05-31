@@ -173,7 +173,7 @@ def _write_env_file(updates: dict[str, str]) -> bool:
 
 
 def _build_agent_terminal_display(data: dict[str, Any]) -> str:
-    """Build the ANSI display string for an agent terminal window."""
+    """Build the themed ANSI display string for an agent terminal window."""
     agent_id = data.get("agent_id", "unknown")
     name = data.get("name", agent_id)
     role = data.get("role", "general")
@@ -185,39 +185,44 @@ def _build_agent_terminal_display(data: dict[str, Any]) -> str:
     steps_completed = data.get("steps_completed", 0)
     total_steps = data.get("total_steps", 0)
 
-    color = _agent_color(agent_id)
-    icon = _agent_icon(agent_id)
-    status_color = {
-        "starting": ANSI_YELLOW,
-        "running": ANSI_GREEN,
-        "completed": ANSI_CYAN,
-        "failed": ANSI_RED,
-        "idle": ANSI_DIM,
-    }.get(status, ANSI_WHITE)
+    ac = _agent_color(agent_id)
+    status_colors = {
+        "starting": ANSI_YELLOW, "running": ANSI_GREEN,
+        "completed": ANSI_CYAN, "failed": ANSI_RED, "idle": ANSI_DIM,
+    }
+    sc = status_colors.get(status, ANSI_WHITE)
 
     bar_len = 30
     filled = int(bar_len * progress / 100) if progress else 0
-    bar = "█" * filled + "░" * (bar_len - filled)
+    bar_fill = f"{ANSI_GREEN}{'█' * filled}{ANSI_RESET}" if filled else ""
+    bar_empty = f"{ANSI_DIM}{'░' * (bar_len - filled)}{ANSI_RESET}"
 
     lines: list[str] = []
     lines.append("")
-    lines.append(f"{'=' * 60}")
-    lines.append(f"{color}{icon} {name}{' ' * max(1, 5 - len(name))}({role}){ANSI_RESET}")
-    lines.append(f"{'Status:':<12}{status_color}{status.upper()}{ANSI_RESET}")
+    lines.append(f"{ANSI_CYAN}{ANSI_BOLD}╔{'═' * 58}╗{ANSI_RESET}")
+    lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {ac}{ANSI_BOLD}{name}{ANSI_RESET}  {ANSI_DIM}({role}){ANSI_RESET}{' ' * max(0, 49 - len(name) - len(role))}{ANSI_CYAN}║{ANSI_RESET}")
+    lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {ANSI_DIM}Agent ID:{ANSI_RESET} {agent_id}{' ' * max(0, 47 - len(agent_id))}{ANSI_CYAN}║{ANSI_RESET}")
+    lines.append(f"{ANSI_CYAN}╠{'═' * 58}╣{ANSI_RESET}")
+    # Status
+    status_icons = {"starting": "◉", "running": "▶", "completed": "✔", "failed": "✘", "idle": "○"}
+    si = status_icons.get(status, "●")
+    lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {sc}{ANSI_BOLD}{si}{ANSI_RESET} {sc}{ANSI_BOLD}{status.upper()}{ANSI_RESET}{' ' * (50 - len(status))}{ANSI_CYAN}║{ANSI_RESET}")
     if task:
-        wrapped = textwrap.shorten(task, width=55, placeholder="...")
-        lines.append(f"{'Task:':<12}{wrapped}")
+        t = task[:56]
+        lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {ANSI_BOLD}Task:{ANSI_RESET} {t}{' ' * (56 - len(t))}{ANSI_CYAN}║{ANSI_RESET}")
     if action:
-        wrapped = textwrap.shorten(action, width=55, placeholder="...")
-        lines.append(f"{'Action:':<12}{wrapped}")
+        a = action[:56]
+        lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {ANSI_BOLD}Action:{ANSI_RESET} {a}{' ' * (54 - len(a))}{ANSI_CYAN}║{ANSI_RESET}")
+    # Progress
+    lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {ANSI_BOLD}Progress:{ANSI_RESET}  {bar_fill}{bar_empty}  {ANSI_BOLD}{progress:.0f}%{ANSI_RESET}{' ' * max(0, 43 - len(str(int(progress))))}{ANSI_CYAN}║{ANSI_RESET}")
     if total_steps > 0:
-        lines.append(f"{'Steps:':<12}{steps_completed}/{total_steps}")
-    lines.append(f"{'Progress:':<12}[{bar}] {progress:.0f}%")
+        lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {ANSI_BOLD}Steps:{ANSI_RESET} {steps_completed}/{total_steps}{' ' * (51 - len(f'{steps_completed}/{total_steps}'))}{ANSI_CYAN}║{ANSI_RESET}")
     if result_summary:
-        wrapped = textwrap.shorten(result_summary, width=55, placeholder="...")
-        lines.append(f"{'Result:':<12}{wrapped}")
-    lines.append(f"{'─' * 60}")
-    lines.append(f"{ANSI_DIM}Last update: {_timestamp()}{ANSI_RESET}")
+        r = result_summary[:56]
+        lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {ANSI_BOLD}Result:{ANSI_RESET} {r}{' ' * (54 - len(r))}{ANSI_CYAN}║{ANSI_RESET}")
+    # Bottom
+    lines.append(f"{ANSI_CYAN}║{ANSI_RESET}  {ANSI_DIM}Last: {_timestamp()}{ANSI_RESET}{' ' * max(0, 50 - len(_timestamp()))}{ANSI_CYAN}║{ANSI_RESET}")
+    lines.append(f"{ANSI_CYAN}╚{'═' * 58}╝{ANSI_RESET}")
     return "\n".join(lines)
 
 
@@ -585,7 +590,7 @@ class AgentTerminalManager:
         script_dir = _ensure_terminal_temp_dir()
         script_path = os.path.join(script_dir, "agent_terminal_watchdog.py")
         script_content = r'''"""
-FRIDAY Agent Terminal Watchdog — displays live agent status in a CMD window.
+FRIDAY Agent Terminal Watchdog — themed live agent status in CMD window.
 Usage: python agent_terminal_watchdog.py <status_file> <refresh_interval> <title>
 """
 import json
@@ -594,80 +599,118 @@ import sys
 import time
 
 
-def clear_screen():
+# ANSI
+R = "\033[0m"
+B = "\033[1m"
+D = "\033[2m"
+I = "\033[3m"
+K = "\033[90m"
+Rc = "\033[91m"
+G = "\033[92m"
+Y = "\033[93m"
+Bl = "\033[94m"
+M = "\033[95m"
+C = "\033[96m"
+W = "\033[97m"
+
+
+def clear():
     os.system("cls" if os.name == "nt" else "clear")
 
 
-def set_title(title: str):
+def set_title(t: str):
     if os.name == "nt":
-        os.system(f"title {title}")
+        os.system(f"title {t}")
+
+
+def bar(filled: int, total: int = 30) -> str:
+    f = min(filled, total)
+    e = total - f
+    return f"{G}{chr(9608) * f}{D}{chr(9617) * e}{R}"
+
+
+def status_tag(s: str) -> str:
+    tags = {
+        "starting": f"{Y}{B}◉ STARTING{R}",
+        "running":  f"{G}{B}▶ RUNNING{R}",
+        "completed":f"{C}{B}✔ COMPLETED{R}",
+        "failed":   f"{Rc}{B}✘ FAILED{R}",
+        "idle":     f"{K}{B}○ IDLE{R}",
+        "waiting":  f"{Bl}{B}◌ WAITING{R}",
+    }
+    return tags.get(s, f"{W}{s.upper()}{R}")
+
+
+def agent_color(aid: str) -> str:
+    colors = {
+        "veronica": Y, "forge": Bl, "ghost": Rc,
+        "atlas": C, "orchestrator": M, "friday": G,
+    }
+    return colors.get(aid.lower(), W)
 
 
 def main():
     if len(sys.argv) < 3:
-        input("Usage: watchdog.py <status_file> <interval> [title]\nPress Enter to exit...")
+        input(f"{D}Usage: watchdog.py <status_file> <interval> [title]{R}\nPress Enter...")
         return
     status_file = sys.argv[1]
-    try:
-        interval = float(sys.argv[2])
-    except ValueError:
-        interval = 1.0
+    interval = max(0.5, float(sys.argv[2])) if len(sys.argv) > 2 else 1.0
     title = sys.argv[3] if len(sys.argv) > 3 else "FRIDAY Agent"
     set_title(title)
-    last_display = ""
+    last = ""
     while True:
         try:
             if os.path.exists(status_file):
                 with open(status_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                    d = json.load(f)
             else:
-                data = {"agent_id": "?", "name": "?", "status": "waiting", "action": "", "progress": 0}
-            clear_screen()
-            agent_id = data.get("agent_id", "?")
-            name = data.get("name", agent_id)
-            role = data.get("role", "general")
-            status = data.get("status", "?")
-            action = data.get("action", "")
-            progress = data.get("progress", 0)
-            task = data.get("task", "")
-            steps_completed = data.get("steps_completed", 0)
-            total_steps = data.get("total_steps", 0)
-            result_summary = data.get("result_summary", "")
-            color_map = {
-                "starting": 93, "running": 92, "completed": 96, "failed": 91, "idle": 90,
-            }
-            sc = color_map.get(status, 97)
-            bar_len = 30
-            filled = int(bar_len * progress / 100) if progress else 0
-            bar = chr(9608) * filled + chr(9617) * (bar_len - filled)
+                d = {"agent_id": "?", "name": "?", "status": "waiting", "action": "", "progress": 0}
+            clear()
+            aid = d.get("agent_id", "?")
+            name = d.get("name", aid)
+            role = d.get("role", "general")
+            status = d.get("status", "?")
+            action = d.get("action", "")
+            prog = d.get("progress", 0)
+            task = d.get("task", "")
+            sc = d.get("steps_completed", 0)
+            ts = d.get("total_steps", 0)
+            res = d.get("result_summary", "")
+            ac = agent_color(aid)
+
             lines = []
-            lines.append("")
-            lines.append("=" * 60)
-            lines.append(f"  FRIDAY AGENT TERMINAL")
-            lines.append(f"  Agent: {name} ({role})")
-            lines.append(f"  Status: {status.upper()}")
+            # ── Top border ──
+            lines.append(f"{C}{B}╔{'═' * 58}╗{R}")
+            # ── Header ──
+            lines.append(f"{C}║{R}  {ac}{B}{chr(9608)}{R}  {B}{name}{R}  {D}({role}){R}{' ' * max(0, 44 - len(name) - len(role))}{C}║{R}")
+            lines.append(f"{C}║{R}  {D}Agent ID:{R} {aid}{' ' * max(0, 47 - len(aid))}{C}║{R}")
+            lines.append(f"{C}╠{'═' * 58}╣{R}")
+            # ── Status ──
+            lines.append(f"{C}║{R}  {status_tag(status)}{' ' * max(0, 53 - len(status_tag(status)) + 10)}{C}║{R}")
             if task:
-                lines.append(f"  Task: {task[:55]}{'...' if len(task) > 55 else ''}")
+                t = task[:56]
+                lines.append(f"{C}║{R}  {B}Task:{R} {t}{' ' * (56 - len(t))}{C}║{R}")
             if action:
-                lines.append(f"  Action: {action[:55]}{'...' if len(action) > 55 else ''}")
-            if total_steps > 0:
-                lines.append(f"  Steps: {steps_completed}/{total_steps}")
-            lines.append(f"  Progress: [{bar}] {progress:.0f}%")
-            if result_summary:
-                lines.append(f"  Result: {result_summary[:55]}{'...' if len(result_summary) > 55 else ''}")
-            lines.append("-" * 60)
-            lines.append(f"  Last update: {data.get('timestamp', '?')}")
-            lines.append("")
-            lines.append("  [This window updates automatically. Close to stop watching.]")
+                a = action[:56]
+                lines.append(f"{C}║{R}  {B}Action:{R} {a}{' ' * (54 - len(a))}{C}║{R}")
+            # ── Progress ──
+            lines.append(f"{C}║{R}  {B}Progress:{R}  {bar(int(prog * 30 / 100))}  {B}{prog:.0f}%{R}{' ' * max(0, 43 - len(str(int(prog))))}{C}║{R}")
+            if ts > 0:
+                lines.append(f"{C}║{R}  {B}Steps:{R} {sc}/{ts}{' ' * (51 - len(f'{sc}/{ts}'))}{C}║{R}")
+            if res:
+                r = res[:56]
+                lines.append(f"{C}║{R}  {B}Result:{R} {r}{' ' * (54 - len(r))}{C}║{R}")
+            # ── Bottom ──
+            lines.append(f"{C}║{R}  {D}Last: {d.get('timestamp', '?')}{R}{' ' * max(0, 50 - len(d.get('timestamp', '?')))}{C}║{R}")
+            lines.append(f"{C}╚{'═' * 58}╝{R}")
+            lines.append(f" {D}[This window auto-updates. Close to stop watching.]{R}")
+
             display = "\n".join(lines)
-            if display != last_display:
+            if display != last:
                 print(display)
-                last_display = display
+                last = display
             if status in ("completed", "failed"):
-                try:
-                    time.sleep(interval * 3)
-                except KeyboardInterrupt:
-                    break
+                time.sleep(interval * 3)
             time.sleep(interval)
         except (KeyboardInterrupt, SystemExit):
             break

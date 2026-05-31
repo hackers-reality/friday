@@ -1096,6 +1096,37 @@ class TownhallUI:
 # ── Entry Point ────────────────────────────────────────────────────────────
 
 
+def launch_townhall() -> dict:
+    """Launch Townhall UI in a new terminal window (non-blocking).
+
+    FRIDAY calls this tool to open the inter-agent chat UI.
+    Can also be triggered via ``!townhall`` command.
+    """
+    import subprocess
+    import sys
+
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "townhall.py")
+    title = "FRIDAY Townhall - Inter-Agent Terminal"
+
+    try:
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        proc = subprocess.Popen(
+            ["cmd.exe", "/c", "start", title, "cmd.exe", "/k", f"python \"{script}\""],
+            startupinfo=startupinfo,
+        )
+        return {"success": True, "pid": proc.pid, "message": "Townhall launched in new window"}
+    except Exception as e:
+        try:
+            proc = subprocess.Popen(
+                ["start", title, "cmd.exe", "/k", f"python \"{script}\""],
+                shell=True,
+            )
+            return {"success": True, "pid": proc.pid, "message": "Townhall launched (fallback)"}
+        except Exception as e2:
+            return {"success": False, "error": f"Failed to launch townhall: {e}; fallback: {e2}"}
+
+
 async def run_townhall() -> None:
     """Start the Townhall terminal UI.
 

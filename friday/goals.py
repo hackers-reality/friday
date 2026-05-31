@@ -225,9 +225,10 @@ def list_goals(status_filter: Optional[str] = None) -> str:
 
 # ─── Google Calendar Integration (Phase 4.2) ────────────────────
 
-def get_calendar_service():
+def get_calendar_service(auto_auth: bool = True):
     """Get authenticated Google Calendar service.
     Uses unified .gmail_token.json (Gmail + Calendar) first, falls back to calendar_token.json.
+    If auto_auth=False, skips OAuth flow and returns error if no cached token exists.
     """
     try:
         from google.oauth2.credentials import Credentials
@@ -259,12 +260,14 @@ def get_calendar_service():
             if os.path.exists(token_path):
                 creds = Credentials.from_authorized_user_file(token_path, SCOPES)
         
-        # 3. If still no valid creds, run OAuth
+        # 3. If still no valid creds, run OAuth (unless auto_auth=False)
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 from google.auth.transport.requests import Request
                 creds.refresh(Request())
             else:
+                if not auto_auth:
+                    return None, "Calendar not authorized. Run google_authorize first."
                 if not os.path.exists(credentials_path):
                     return None, "Google Calendar not configured. Place credentials.json in the project root."
                 flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)

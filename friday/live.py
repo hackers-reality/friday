@@ -13,7 +13,6 @@ Gemini 3.1 Flash Live API with:
 
 from __future__ import annotations
 
-import importlib
 import asyncio
 import datetime
 import json
@@ -33,6 +32,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich import box
+from rich.markup import escape
+from friday.tui import FRIDAYTUI
 
 import pvporcupine
 from pvrecorder import PvRecorder
@@ -202,32 +203,8 @@ console = Console()
 
 # ─── Module Loading ───────────────────#
 
-print("Loading Friday modules...")
-
-for _mod_name in [
-    "friday.core", "friday.voice", "friday.web", "friday.ai",
-    "friday.tools", "friday.vision", "friday.browser_history",
-    "friday.filegen", "friday.security", "friday.database",
-    "friday.automation", "friday.monitor", "friday.scheduler",
-    "friday.tool_registry", "friday.authority", "friday.snapshots",
-    "friday.sidecar", "friday.autonomy",
-    "friday.capabilities", "friday.ironman",
-    "friday.memory_tree", "friday.model_router",
-    "friday.extension_registry", "friday.diagnostics",
-    "friday.health_monitor",     "friday.terminal_health_display",
-    "friday.metasploit_tool",
-    "friday.email_analysis_tool",
-    "friday.agent_terminal",
-    "friday.tools_osint_extra",
-]:
-    try:
-        importlib.import_module(_mod_name)
-    except Exception:
-        pass
-
-print("=" * 60)
-print("Friday Module Loading Complete!")
-print("=" * 60)
+# All module imports are now lazy — loaded on first use via importlib.
+# This keeps startup fast (~seconds) instead of scanning 20+ modules.
 
 REQUIRED_ENV_VARS = ["GOOGLE_API_KEY", "GROQ_API_KEY", "PICOVOICE_ACCESS_KEY", "FRIDAY_WEBHOOK_SECRET"]
 missing_env = [k for k in REQUIRED_ENV_VARS if not os.getenv(k)]
@@ -638,7 +615,7 @@ def stark_initialization():
             padding=(0, 1),
         ))
     except Exception as e:
-        console.print(f"[red]⚠ Diagnostic Failed:[/] {e}")
+        console.print(f"[red]⚠ Diagnostic Failed:[/] {escape(str(e))}")
 
     console.print()
     console.rule("[bold green]✅ Neural Uplink Dispatched[/bold green]", style="green")
@@ -757,106 +734,6 @@ def _start_audio_playback(pa: pyaudio.PyAudio):
 def _stop_audio_playback():
     _audio_playback_queue.put(None)
     _audio_playback_stop.set()
-
-
-# CHAT DISPLAY
-class ChatDisplay:
-    def __init__(self, console: Console):
-        self.console = console
-        self._last_speaker: str | None = None
-        self._thinking_panel_open = False
-
-    def _ts(self) -> str:
-        return datetime.datetime.now().strftime("%H:%M:%S")
-
-    def add_user_message(self, text: str):
-        ts = self._ts()
-        self._last_speaker = "user"
-        panel = Panel(
-            Text(text, style="bold green", overflow="fold"),
-            title=f"[bold green]👤 Boss  [/bold green]",
-            subtitle=f"[dim]{ts}[/dim]",
-            border_style="green",
-            box=box.ROUNDED,
-            padding=(0, 1),
-        )
-        self.console.print(panel)
-
-    def add_friday_message(self, text: str):
-        ts = self._ts()
-        self._last_speaker = "friday"
-        panel = Panel(
-            Text(text, style="bold cyan", overflow="fold"),
-            title=f"[bold cyan]🤖 FRIDAY[/bold cyan]",
-            subtitle=f"[dim]{ts}[/dim]",
-            border_style="cyan",
-            box=box.ROUNDED,
-            padding=(0, 1),
-        )
-        self.console.print(panel)
-
-    def add_thought(self, text: str):
-        ts = self._ts()
-        self._thinking_panel_open = True
-        panel = Panel(
-            Text(text, style="italic dim grey74", overflow="fold"),
-            title=f"[dim]💭 Thought  ({ts})[/dim]",
-            border_style="grey46",
-            box=box.ROUNDED,
-            padding=(0, 1),
-        )
-        self.console.print(panel)
-
-    def add_system(self, text: str):
-        ts = self._ts()
-        icon = "⚡"
-        lower = text.lower()
-        if "mic" in lower or "listen" in lower:
-            icon = "🎤"
-        elif "standby" in lower:
-            icon = "💤"
-        elif "execut" in lower:
-            icon = "🔧"
-        elif "interrupt" in lower or "mute" in lower:
-            icon = "⏹"
-        elif "ready" in lower or "online" in lower:
-            icon = "✅"
-        self.console.print(f"  [dim]{ts}[/]  [{icon}][dim]{text}[/][/]")
-
-    def add_tool_call(self, name: str, args: dict | None = None) -> None:
-        ts = self._ts()
-        args_str = ""
-        if args:
-            parts = []
-            for k, v in list(args.items())[:3]:
-                v_str = str(v)[:40]
-                parts.append(f"{k}={v_str}")
-            if len(args) > 3:
-                parts.append(f"...+{len(args)-3}")
-            args_str = "  " + ", ".join(parts)
-        self.console.print(
-            f"  [dim]{ts}[/]  [bright_yellow]▶ {name}{args_str}[/bright_yellow]"
-        )
-
-    def add_tool_result(self, name: str, result: str) -> None:
-        ts = self._ts()
-        r = str(result)[:120].replace("\n", " ")
-        self.console.print(
-            f"  [dim]{ts}[/]  [bright_green]✓ {name} → {r}[/bright_green]"
-        )
-
-    def add_error(self, text: str) -> None:
-        ts = self._ts()
-        panel = Panel(
-            Text(text, style="bold red"),
-            title=f"[bold red]✗ Error  ({ts})[/bold red]",
-            border_style="red",
-            box=box.ROUNDED,
-        )
-        self.console.print(panel)
-
-    def add_turn_divider(self) -> None:
-        self.console.rule(style="dim grey35")
 
 
 # BUILD ALL 54 TOOLS
@@ -3099,7 +2976,11 @@ async def friday_live_engine():
     _event_loop = asyncio.get_running_loop()
     stark_initialization()
     tools = _build_tools()
-    chat = ChatDisplay(console)
+    chat = FRIDAYTUI(
+        model_id=MODEL_ID,
+        tools_count=len(TOOL_MAP),
+    )
+    chat.add_system("FRIDAY TUI activated")
 
     porcupine = pvporcupine.create(
         access_key=PICOVOICE_ACCESS_KEY,
@@ -3221,6 +3102,8 @@ async def friday_live_engine():
                     config=_build_session_config(tools, resume_handle)
                 ) as session:
                     console.print("[bold green]Neural link established.[/]\n")
+                    await chat.start()
+                    chat.set_connection_status("connected")
                     try:
                         from friday._singletons import set_service_state
                         set_service_state("live_engine", status="running", pid=os.getpid())
@@ -3323,9 +3206,7 @@ async def friday_live_engine():
                             while True:
                                 async for response in session.receive():
                                     if response.go_away is not None:
-                                        console.print(
-                                            f"\n[bold yellow][SYSTEM] Session ending (GoAway), resuming with saved handle...[/]"
-                                        )
+                                        chat.add_system("Session ending (GoAway), resuming with saved handle...")
                                         return  # Exit cleanly — resume_handle already saved
 
                                     if response.session_resumption_update:
@@ -3365,7 +3246,7 @@ async def friday_live_engine():
                                                     if not hasattr(_audio_playback_queue, '_debug_printed'):
                                                         _audio_playback_queue._debug_printed = True
                                                         mt = getattr(part.inline_data, 'mime_type', 'unknown')
-                                                        console.print(f"[dim][AUDIO] mime={mt} size={len(part.inline_data.data)}b[/]")
+                                                        chat.add_system(f"[AUDIO] mime={mt} size={len(part.inline_data.data)}b")
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
                                             # Show thinking IMMEDIATELY (before speech transcription)
@@ -3378,19 +3259,20 @@ async def friday_live_engine():
                                             new_text = sc.output_transcription.text.strip()
                                             if new_text and new_text != displayed_transcript:
                                                 if not displayed_transcript:
-                                                    ts = chat._ts()
-                                                    console.print(f"\n[bold cyan]🤖 FRIDAY  [dim]{ts}[/dim][/bold cyan]")
+                                                    chat.start_stream()
                                                 if new_text.startswith(displayed_transcript):
                                                     delta = new_text[len(displayed_transcript):]
                                                     if delta:
-                                                        console.print(f"  {delta}", end="")
+                                                        chat.append_stream(delta)
                                                         from friday.comms import live_to_dashboard_queue
                                                         live_to_dashboard_queue.put({
                                                             "type": "token",
                                                             "payload": {"token": delta}
                                                         })
                                                 else:
-                                                    console.print(f"\r  {new_text}", end="")
+                                                    chat.cancel_stream()
+                                                    chat.start_stream()
+                                                    chat.append_stream(new_text)
                                                 displayed_transcript = new_text
                                             last_transcript = new_text
 
@@ -3402,7 +3284,7 @@ async def friday_live_engine():
 
                                             final_text = last_transcript.strip()
                                             if final_text:
-                                                console.print()
+                                                chat.finalize_stream(final_text)
                                                 from friday.comms import live_to_dashboard_queue
                                                 live_to_dashboard_queue.put({
                                                     "type": "complete",
@@ -3482,7 +3364,7 @@ async def friday_live_engine():
                         except asyncio.CancelledError:
                             pass
                         except Exception as e:
-                            console.print(f"\n[bold red][LISTENER ERROR] {e}[/]")
+                            chat.add_error(f"Listener error: {escape(str(e))}")
                             raise  # Propagate so the main loop knows connection is dead
 
                     receive_task = asyncio.create_task(receive_loop())
@@ -3551,11 +3433,26 @@ async def friday_live_engine():
                     video_task = asyncio.create_task(live_video_streamer(session))
                     ka_task = asyncio.create_task(keepalive_task(session))
 
-                    console.print(
-                        "\n[dim]Say Friday for voice, or type below. Enter to send, Ctrl+C to quit.[/]\n"
-                    )
+                    chat.add_system("Voice: Say Friday | Type: Enter to send | Ctrl+C to quit")
 
                     last_session_was_greeting = False
+
+                    # ── Local command handler ──
+                    async def _handle_local_command(cmd: str, sess) -> None:
+                        cmd = cmd.strip().lower()
+                        if cmd == "!townhall":
+                            from friday.townhall_app import launch_townhall
+                            result = launch_townhall()
+                            if result.get("success"):
+                                chat.add_system(f"🏛️ Townhall launched (PID {result['pid']})")
+                            else:
+                                chat.add_error(f"Townhall failed: {result.get('error')}")
+                        elif cmd in ("!help", "!h"):
+                            chat.add_system("Commands: !townhall, !status, !help")
+                        elif cmd == "!status":
+                            chat.add_system(f"Model: {MODEL_ID} | Tools: {len(TOOL_MAP)} | Follow-up: {follow_up_mode}")
+                        else:
+                            chat.add_system(f"Unknown command: {cmd}. Try !help")
 
                     # Text input via Comms queue (no blocking stdin/CLI loop)
                     async def input_reader():
@@ -3566,6 +3463,10 @@ async def friday_live_engine():
                                     text = dashboard_to_live_queue.get_nowait()
                                     text = text.strip()
                                     if text:
+                                        # Handle !commands locally
+                                        if text.startswith("!"):
+                                            await _handle_local_command(text, session)
+                                            continue
                                         if not first_interaction_event.is_set():
                                             first_interaction_event.set()
                                         await _inject_memory_context(text)
@@ -3585,6 +3486,10 @@ async def friday_live_engine():
                             await asyncio.sleep(0.5)
 
                     finally:
+                        try:
+                            await chat.stop()
+                        except Exception:
+                            pass
                         recorder.stop()
                         _stop_audio_playback()
                         receive_task.cancel()
@@ -3605,7 +3510,7 @@ async def friday_live_engine():
                 break
             except Exception as e:
                 reconnect_attempts += 1
-                console.print(f"[red]Link error:[/] {e}")
+                console.print(f"[red]Link error:[/] {escape(str(e))}")
                 # Clear protector's session reference so it doesn't use stale session
                 try:
                     from friday.protector import set_live_session
