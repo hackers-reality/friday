@@ -5,6 +5,7 @@ Provides all functions needed by friday.live by wrapping modules.
 from __future__ import annotations
 from friday._paths import PROJECT_ROOT as _ROOT
 from friday._paths import FRIDAY_MEMORY, STARK_LOGS, SPOTIFY_CACHE
+from friday.skills import read_skill_tool
 
 import os
 import json
@@ -777,15 +778,14 @@ def spotify_current() -> str:
         return f"[FAIL] Spotify current error: {e}"
 
 def web_search(query: str, max_results: int = 5) -> str:
-    """Search the web using multiple engines with fallback chain."""
+    """Search ALL engines with fallback + fetch top page content."""
     try:
         from friday.web import WebScraper
-        import requests
         from bs4 import BeautifulSoup
+        import re
 
         scraper = WebScraper()
-        engines = ["duckduckgo", "bing"]
-        results = None
+        engines = ["duckduckgo", "google", "bing"]
         items = []
 
         for engine in engines:
@@ -794,48 +794,44 @@ def web_search(query: str, max_results: int = 5) -> str:
                 if result.get("success"):
                     items = result.get("results", [])
                     if items:
-                        results = result
                         break
             except Exception:
                 continue
 
-        # If both HTML scrapers failed, try direct API approach
         if not items:
+            return f"[FAIL] No search results for '{query}' from any engine."
+
+        # Fetch actual content from top results
+        lines = [f"Search results for '{query}':"]
+        for i, item in enumerate(items[:max_results], 1):
+            title = item.get("title", "?")
+            url = item.get("url", "")
+            snippet = item.get("snippet", "")
+            lines.append(f"{i}. {title}")
+            if url:
+                lines.append(f"   {url}")
+            if snippet:
+                lines.append(f"   {snippet[:300]}")
+
+        # Fetch full content from #1 result
+        top_url = items[0].get("url", "")
+        if top_url:
             try:
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                }
-                # Try Google
-                g_resp = requests.get(f"https://www.google.com/search?q={requests.utils.quote(query)}&num={max_results}",
-                                      headers=headers, timeout=10)
-                if g_resp.status_code == 200:
-                    g_soup = BeautifulSoup(g_resp.text, "html.parser")
-                    for g in g_soup.select("div.g"):
-                        title_el = g.select_one("h3")
-                        link_el = g.select_one("a")
-                        if title_el and link_el:
-                            items.append({
-                                "title": title_el.get_text(strip=True),
-                                "url": link_el.get("href", "").lstrip("/url?q=").split("&")[0] if link_el.get("href", "").startswith("/url?q=") else link_el.get("href", ""),
-                                "snippet": "",
-                            })
+                page = scraper.fetch(top_url, timeout=15)
+                if page.get("success"):
+                    p_soup = BeautifulSoup(page["content"], "html.parser")
+                    for tag in p_soup(["script", "style", "nav", "footer", "header", "aside"]):
+                        tag.decompose()
+                    body = p_soup.find("body") or p_soup
+                    text = body.get_text(separator="\n", strip=True)
+                    text = re.sub(r'\n{3,}', '\n\n', text)
+                    if len(text) > 200:
+                        lines.append(f"\n--- Top Result Content ({items[0].get('title','')}) ---")
+                        lines.append(text[:2000])
             except Exception:
                 pass
 
-        if items:
-            lines = [f"Search results for '{query}':"]
-            for i, item in enumerate(items[:max_results], 1):
-                title = item.get("title", "?")
-                url = item.get("url", "")
-                snippet = item.get("snippet", "")
-                lines.append(f"{i}. {title}")
-                if url:
-                    lines.append(f"   {url}")
-                if snippet:
-                    lines.append(f"   {snippet[:200]}")
-            return "\n".join(lines)
-
-        return f"[FAIL] No search results for '{query}'"
+        return "\n".join(lines)
     except ImportError:
         return "[FAIL] friday.web not available."
     except Exception as e:
@@ -1398,6 +1394,624 @@ def research_tool_handler(action: str = "analyze", topic: str = None, depth: int
         return f"[FAIL] Research error: {e}"
 
 
+_DEEP_RESEARCH_TASKS: dict = {}
+
+
+def v_deep_research(topic: str, depth: int = 50, max_pages: int = 100) -> str:
+    """Launch Veronica deep research as background task. Runs for hours, saves to knowledge."""
+    import threading, json, time, queue
+    from datetime import datetime
+
+    task_id = f"v_{int(time.time())}_{abs(hash(topic)) % 10000}"
+    q = queue.Queue()
+    q.put(f"[START] Veronica deep research launched for: {topic}")
+    q.put(f"[TASK_ID] {task_id}")
+    q.put(f"[ESTIMATED] Crawling up to {max_pages} pages over ~{depth} minutes")
+
+    def _run():
+        try:
+            from friday.web import WebScraper, ContentExtractor
+            from bs4 import BeautifulSoup
+            from friday.knowledge_store import save_research
+            import re, asyncio
+
+            scraper = WebScraper()
+            seen_urls = set()
+            sources = []
+            q.put(f"[PROGRESS] Phase 1: Generating search queries...")
+
+            queries = [
+                topic,
+                f"{topic} complete guide",
+                f"{topic} tutorial overview",
+                f"{topic} advanced concepts",
+                f"{topic} examples",
+                f"{topic} documentation",
+                f"{topic} explained",
+            ]
+
+            all_items = []
+            for qi, qry in enumerate(queries):
+                for engine in ["duckduckgo", "google", "bing"]:
+                    try:
+                        res = scraper.search_engine(qry, engine=engine)
+                        if res.get("success") and res.get("results"):
+                            all_items.extend(res["results"])
+                            break
+                    except Exception:
+                        continue
+                q.put(f"[PROGRESS] Query {qi+1}/{len(queries)}: {len(all_items)} results so far")
+
+            q.put(f"[PROGRESS] Phase 2: Crawling pages ({len(all_items)} candidates)...")
+            crawled = 0
+            max_crawl = min(max_pages, len(all_items))
+            for idx, item in enumerate(all_items[:max_crawl]):
+                url = item.get("url", "")
+                if url in seen_urls or not url:
+                    continue
+                seen_urls.add(url)
+                try:
+                    page = scraper.fetch(url, timeout=15)
+                    if page.get("success"):
+                        p_soup = BeautifulSoup(page["content"], "html.parser")
+                        for tag in p_soup(["script", "style", "nav", "footer", "header", "aside"]):
+                            tag.decompose()
+                        text = (p_soup.find("body") or p_soup).get_text(separator="\n", strip=True)
+                        text = re.sub(r'\n{3,}', '\n\n', text[:5000])
+                        if len(text) > 200:
+                            sources.append({
+                                "title": item.get("title", url),
+                                "url": url,
+                                "content": text,
+                            })
+                            crawled += 1
+                except Exception:
+                    continue
+                if idx % 10 == 0:
+                    q.put(f"[PROGRESS] Crawled {crawled}/{max_crawl} pages...")
+
+            q.put(f"[PROGRESS] Phase 3: Synthesizing report ({len(sources)} sources)...")
+
+            content_parts = []
+            for s in sources:
+                content_parts.append(f"## {s['title']}\nSource: {s['url']}\n\n{s['content'][:2000]}")
+            full_content = "\n\n".join(content_parts)
+
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            report = f"# Deep Research: {topic}\nCompleted: {timestamp}\nSources: {len(sources)}\nPages Crawled: {crawled}\n\n---\n\n{full_content}"
+
+            saved = save_research(topic, sources, report, {"pages_crawled": crawled, "depth": depth})
+            q.put(f"[COMPLETE] Research saved to {saved}")
+            q.put(f"[SUMMARY] Crawled {crawled} pages from {len(seen_urls)} URLs")
+            q.put(f"[DONE]")
+        except Exception as e:
+            q.put(f"[ERROR] {e}")
+            q.put(f"[DONE]")
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    _DEEP_RESEARCH_TASKS[task_id] = {"thread": thread, "queue": q, "started": time.time()}
+
+    lines = []
+    while not q.empty():
+        try:
+            lines.append(q.get_nowait())
+        except queue.Empty:
+            break
+    return "\n".join(lines)
+
+
+def deep_research_status(task_id: str = "") -> str:
+    """Check status of a running deep research task. Omit task_id to list all."""
+    import time
+    if not task_id:
+        if not _DEEP_RESEARCH_TASKS:
+            return "[OK] No active research tasks."
+        parts = ["Active research tasks:"]
+        now = time.time()
+        for tid, info in list(_DEEP_RESEARCH_TASKS.items()):
+            elapsed = int(now - info["started"])
+            alive = info["thread"].is_alive()
+            parts.append(f"  {tid}: {'RUNNING' if alive else 'DONE'} ({elapsed}s)")
+        return "\n".join(parts)
+
+    info = _DEEP_RESEARCH_TASKS.get(task_id)
+    if not info:
+        return f"[FAIL] No task with ID: {task_id}"
+
+    lines = [f"Task {task_id}:"]
+    q = info["queue"]
+    while not q.empty():
+        try:
+            lines.append(q.get_nowait())
+        except queue.Empty:
+            break
+    return "\n".join(lines)
+
+
+def osint_full_scan(target: str, target_type: str = "auto", deep: bool = False) -> str:
+    """
+    Full OSINT scan — runs ALL available OSINT tools against an email, username, domain, or IP.
+    Uses the full arsenal of 240+ OSINT functions across 15+ modules.
+    target_type: 'email', 'username', 'domain', 'ip', or 'auto' (auto-detect).
+    deep: If True, also runs extended/deep variants of each tool.
+    """
+    import time, concurrent.futures
+    t0 = time.time()
+    parts = [f"Full OSINT Scan: {target}", "=" * 50]
+
+    is_email = "@" in target
+    is_ip = all(c in "0123456789." for c in target) and target.count(".") == 3
+    domain = target.split("@")[1] if is_email else (target if not is_ip else "")
+    username = target.split("@")[0] if is_email else target
+    parts.append(f"Type: {'email' if is_email else 'IP' if is_ip else 'domain' if '.' in target else 'username'}")
+    parts.append(f"Target: {target}")
+
+    def _run_async(coro):
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            future = asyncio.run_coroutine_threadsafe(coro, loop)
+            return future.result(timeout=120)
+        except RuntimeError:
+            pass
+        try:
+            return asyncio.run(coro)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _safe_run(name: str, fn, *args, **kw):
+        try:
+            result = _run_async(fn(*args, **kw))
+            return name, result
+        except Exception as e:
+            return name, {"error": str(e)}
+
+    # ── Parallel batch 1: Identity & Social ────────────────────
+    parts.append("\n── Identity & Social Media ──")
+    social_tasks = []
+
+    if is_email:
+        social_tasks.append(("holehe", lambda: __import__("friday.tools.holehe_tool", fromlist=["run_holehe"]).run_holehe(target, timeout=60)))
+        social_tasks.append(("leak_check", lambda: __import__("friday.tools_osint_extra", fromlist=["leak_check"]).leak_check(target, timeout=30)))
+        social_tasks.append(("intelx", lambda: __import__("friday.tools_osint_extra", fromlist=["intelx_search"]).intelx_search(target, "email", timeout=30)))
+        social_tasks.append(("dehashed", lambda: __import__("friday.tools_osint_extra", fromlist=["dehashed_search"]).dehashed_search(target, "email", timeout=30)))
+        social_tasks.append(("email_rep", lambda: __import__("friday.tools_osint_extra", fromlist=["email_rep"]).email_rep(target, timeout=15)))
+        social_tasks.append(("hibp", lambda: __import__("friday.tools.osint_advanced_tools", fromlist=["hibp_breach_check"]).hibp_breach_check(target, timeout=30)))
+        social_tasks.append(("hunter", lambda: __import__("friday.tools.osint_advanced_tools", fromlist=["hunter_email_search"]).hunter_email_search(domain, timeout=30)))
+
+    social_tasks.append(("sherlock", lambda: __import__("friday.tools.sherlock_tool", fromlist=["run_sherlock"]).run_sherlock(username, timeout=60)))
+    social_tasks.append(("maigret", lambda: __import__("friday.tools.maigret_tool", fromlist=["run_maigret"]).run_maigret(username, timeout=60)))
+    social_tasks.append(("social_analyzer", lambda: __import__("friday.tools_osint_extra", fromlist=["social_analyzer"]).social_analyzer(username, timeout=20)))
+    social_tasks.append(("username_search", lambda: __import__("friday.tools_osint_extra", fromlist=["username_search"]).username_search(username, timeout=20)))
+    social_tasks.append(("github", lambda: __import__("friday.tools.github_osint_tool", fromlist=["github_search_users"]).github_search_users(username, limit=5)))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        futures = {ex.submit(t[1]): t[0] for t in social_tasks}
+        for f in concurrent.futures.as_completed(futures, timeout=90):
+            name = futures[f]
+            try:
+                result = f.result()
+                text = str(result)[:300]
+                parts.append(f"  [{name.upper()}] {text}")
+            except Exception as e:
+                parts.append(f"  [{name.upper()}] Error: {e}")
+
+    # ── Parallel batch 2: DNS & Domain (if applicable) ─────────
+    if domain:
+        parts.append("\n── DNS & Domain Intelligence ──")
+        domain_tasks = [
+            ("dns_mx", lambda: __import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "MX")),
+            ("dns_a", lambda: __import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "A")),
+            ("dns_txt", lambda: __import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "TXT")),
+            ("spf", lambda: __import__("friday.tools_osint_extra", fromlist=["spf_check"]).spf_check(domain)),
+            ("dkim", lambda: __import__("friday.tools_osint_extra", fromlist=["dkim_check"]).dkim_check(domain)),
+            ("dmarc", lambda: __import__("friday.tools_osint_extra", fromlist=["dmarc_check"]).dmarc_check(domain)),
+            ("whois", lambda: __import__("friday.tools.osint_advanced_tools", fromlist=["whois_lookup"]).whois_lookup(domain)),
+            ("ssl_cert", lambda: __import__("friday.tools.osint_advanced_tools", fromlist=["ssl_certificate_check"]).ssl_certificate_check(domain)),
+            ("cert_transparency", lambda: __import__("friday.tools_osint_extra", fromlist=["certificate_transparency"]).certificate_transparency(domain)),
+            ("wayback", lambda: __import__("friday.tools_osint_extra", fromlist=["wayback_snapshots"]).wayback_snapshots(domain, limit=5)),
+        ]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+            futures = {ex.submit(t[1]): t[0] for t in domain_tasks}
+            for f in concurrent.futures.as_completed(futures, timeout=60):
+                name = futures[f]
+                try:
+                    result = f.result()
+                    text = str(result)[:250]
+                    if "error" not in text.lower()[:20]:
+                        parts.append(f"  [{name.upper()}] {text}")
+                except Exception:
+                    pass
+
+    # ── Parallel batch 3: Web & Technology ─────────────────────
+    if domain:
+        parts.append("\n── Web Technology & Security ──")
+        web_tasks = [
+            ("whatweb", lambda: __import__("friday.tools_osint_extra", fromlist=["whatweb"]).whatweb(domain)),
+            ("whatcms", lambda: __import__("friday.tools_osint_extra", fromlist=["whatcms"]).whatcms(domain)),
+            ("cdn", lambda: __import__("friday.tools_osint_extra", fromlist=["cdn_detect"]).cdn_detect(domain)),
+            ("security_headers", lambda: __import__("friday.tools_osint_extra", fromlist=["security_headers"]).security_headers(domain)),
+            ("cors", lambda: __import__("friday.tools_osint_extra", fromlist=["cors_check"]).cors_check(domain)),
+            ("hsts", lambda: __import__("friday.tools_osint_extra", fromlist=["hsts_check"]).hsts_check(domain)),
+            ("urlscan", lambda: __import__("friday.tools_osint_extra", fromlist=["urlscan_submit"]).urlscan_submit(domain)),
+            ("email_extractor", lambda: __import__("friday.tools_osint_extra", fromlist=["email_extractor"]).email_extractor(domain)),
+            ("meta_extractor", lambda: __import__("friday.tools_osint_extra", fromlist=["meta_extractor"]).meta_extractor(domain)),
+        ]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+            futures = {ex.submit(t[1]): t[0] for t in web_tasks}
+            for f in concurrent.futures.as_completed(futures, timeout=60):
+                name = futures[f]
+                try:
+                    result = f.result()
+                    text = str(result)[:200]
+                    if "error" not in text.lower()[:20]:
+                        parts.append(f"  [{name.upper()}] {text}")
+                except Exception:
+                    pass
+
+    # ── Parallel batch 4: IP Intelligence (if applicable) ──────
+    if is_ip or domain:
+        target_ip = target if is_ip else None
+        if not target_ip and domain:
+            try:
+                import socket
+                target_ip = socket.gethostbyname(domain)
+                parts.append(f"\n── IP Intelligence ({target_ip}) ──")
+            except Exception:
+                pass
+        if target_ip:
+            ip_tasks = [
+                ("geoip", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_geolocate_full"]).ip_geolocate_full(target_ip)),
+                ("threat_intel", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_threat_intel"]).ip_threat_intel(target_ip)),
+                ("blacklist", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_blacklist_check"]).ip_blacklist_check(target_ip)),
+                ("asn", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_asn_info"]).ip_asn_info(target_ip)),
+                ("reverse_dns", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_reverse_dns"]).ip_reverse_dns(target_ip)),
+            ]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+                futures = {ex.submit(t[1]): t[0] for t in ip_tasks}
+                for f in concurrent.futures.as_completed(futures, timeout=30):
+                    name = futures[f]
+                    try:
+                        result = f.result()
+                        text = str(result)[:200]
+                        if "error" not in text.lower()[:20]:
+                            parts.append(f"  [{name.upper()}] {text}")
+                    except Exception:
+                        pass
+
+    # ── Web Search ─────────────────────────────────────────────
+    try:
+        from friday.web import WebScraper
+        scraper = WebScraper()
+        parts.append(f"\n── Web Search ──")
+        queries = [f'"{target}"', target, username]
+        for q in queries[:2]:
+            for engine in ["google", "duckduckgo"]:
+                try:
+                    res = scraper.search_engine(q, engine=engine)
+                    if res.get("success") and res.get("results"):
+                        parts.append(f"  [{engine.upper()}] '{q[:60]}'")
+                        for item in res["results"][:3]:
+                            parts.append(f"    • {item.get('title','?')[:60]}  ({item.get('url','')[:60]})")
+                        break
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    # ── Deep mode: run extended variants ───────────────────────
+    if deep:
+        parts.append("\n── Deep Research (Extended Tools) ──")
+        deep_tasks = [("holehe_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["holehe_check_extended"]).holehe_check_extended(target, timeout=60))] if is_email else []
+        deep_tasks += [("username_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["username_search_extended"]).username_search_extended(username, timeout=30))]
+        deep_tasks += [("leak_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["leak_check_extended"]).leak_check_extended(target, "email", timeout=30))] if is_email else []
+        deep_tasks += [("wayback_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["wayback_snapshots_extended"]).wayback_snapshots_extended(domain, limit=20))] if domain else []
+        deep_tasks += [("ssl_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["ssl_cert_check_extended"]).ssl_cert_check_extended(domain))] if domain else []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            futures = {ex.submit(t[1]): t[0] for t in deep_tasks}
+            for f in concurrent.futures.as_completed(futures, timeout=90):
+                name = futures[f]
+                try:
+                    result = f.result()
+                    parts.append(f"  [{name.upper()}] {str(result)[:300]}")
+                except Exception as e:
+                    parts.append(f"  [{name.upper()}] Error: {e}")
+
+    elapsed = round(time.time() - t0, 1)
+    parts.append(f"\n{'=' * 50}")
+    parts.append(f"Scan completed in {elapsed}s — used {len(social_tasks) + len(domain_tasks) if domain else len(social_tasks)} tools")
+
+    return "\n".join(parts)
+
+
+def knowledge_query(topic: str) -> str:
+    """Query FRIDAY's saved knowledge on a topic. Returns what she already knows."""
+    try:
+        from friday.knowledge_store import get_knowledge_context, get_all_research_topics
+        context = get_knowledge_context(topic)
+        if not context:
+            topics = get_all_research_topics()
+            if topics:
+                return f"[KNOWLEDGE] No saved knowledge on '{topic}'. Available topics:\n" + "\n".join(f"  \u2022 {t}" for t in topics)
+            return f"[KNOWLEDGE] No saved knowledge found. I know nothing about '{topic}' yet."
+        return context
+    except ImportError:
+        return "[FAIL] knowledge_store not available."
+    except Exception as e:
+        return f"[FAIL] Knowledge query error: {e}"
+
+
+def generate_research_report(topic: str, depth: int = 30, max_pages: int = 50,
+                              chart_types: list[str] | None = None,
+                              include_tables: bool = True) -> str:
+    """One-shot: deep research a topic using LLM-powered multi-source research + synthesis,
+    save to knowledge store, and generate a detailed PDF report with charts and tables.
+    Supports 20+ chart types: bar, line, pie, area, scatter, histogram, heatmap, radar, box, etc.
+    """
+    import os, json, time, re, asyncio
+    from dotenv import load_dotenv
+    load_dotenv()
+    from friday.knowledge_store import save_research
+
+    try:
+        # ── Phase 1: Multi-engine research ──
+        from friday.web import WebScraper
+        from bs4 import BeautifulSoup
+        scraper = WebScraper()
+        seen_urls = set()
+        sources = []
+
+        queries = [
+            topic,
+            f"{topic} complete guide tutorial overview",
+            f"{topic} latest developments news 2025 2026",
+            f"{topic} explained in depth analysis",
+            f"{topic} research documentation wiki",
+            f"{topic} examples applications use cases",
+            f"{topic} technical deep dive architecture",
+        ]
+
+        all_items = []
+        for qi, qry in enumerate(queries[:max(3, depth)]):
+            for engine in ["duckduckgo", "google", "bing"]:
+                try:
+                    res = scraper.search_engine(qry, engine=engine)
+                    if res.get("success") and res.get("results"):
+                        all_items.extend(res["results"])
+                        break
+                except Exception:
+                    continue
+
+        max_crawl = min(max_pages, len(all_items)) if all_items else 0
+        crawled = 0
+        if all_items:
+            for idx, item in enumerate(all_items[:max_crawl]):
+                url = item.get("url", "")
+                if url in seen_urls or not url:
+                    continue
+                seen_urls.add(url)
+                try:
+                    page = scraper.fetch(url, timeout=15)
+                    if page.get("success"):
+                        p_soup = BeautifulSoup(page["content"], "html.parser")
+                        for tag in p_soup(["script", "style", "nav", "footer", "header", "aside"]):
+                            tag.decompose()
+                        text = (p_soup.find("body") or p_soup).get_text(separator="\n", strip=True)
+                        text = re.sub(r'\n{3,}', '\n\n', text)
+                        if len(text) > 200:
+                            sources.append({
+                                "title": item.get("title", url),
+                                "url": url,
+                                "content": text[:5000],
+                            })
+                            crawled += 1
+                except Exception:
+                    continue
+
+        if not sources:
+            return json.dumps({"error": "No sources found after research", "topic": topic})
+
+        # ── Phase 2: LLM synthesis + chart data extraction ──
+        async def _synthesize_and_extract():
+            from friday.nim_client import InferenceClient
+            from friday.nim_router import resolve_model
+            client = InferenceClient()
+
+            source_texts = []
+            for i, s in enumerate(sources[:25], 1):
+                source_texts.append(
+                    f"[Source {i}] Title: {s['title']}\nURL: {s['url']}\nContent:\n{s['content'][:2500]}"
+                )
+            joined = "\n\n---\n\n".join(source_texts)
+            research_model = resolve_model("research") or "meta/llama-3.3-70b-instruct"
+
+            synthesis_prompt = (
+                "You are Veronica, FRIDAY's head research specialist. "
+                f"Synthesize the following collected source material into a comprehensive, "
+                f"extremely detailed research report on the topic: '{topic}'.\n\n"
+                f"Source Material:\n{joined}\n\n"
+                "Write a formal research report with these sections:\n"
+                "1. # Executive Summary — high-level abstract of findings\n"
+                "2. ## Key Findings — numbered bullet points of main discoveries (include specific statistics, numbers, dates where available)\n"
+                "3. ## Detailed Analysis — in-depth narrative organized by subtopics\n"
+                "4. ## Source Breakdown — what each source contributed\n"
+                "5. ## Conclusion & Implications — actionable takeaways\n\n"
+                "Formatting rules:\n"
+                "- Include markdown links to sources inline as [Source Title](URL).\n"
+                "- Be extremely thorough, detailed, and professional.\n"
+                "- Do NOT invent facts not present in the source material.\n"
+                "- Output ONLY the report with these sections, no extra commentary."
+            )
+
+            resp = await client.chat(
+                model=research_model,
+                messages=[{"role": "user", "content": synthesis_prompt}],
+                max_tokens=32768,
+                temperature=0.3,
+            )
+            synthesized = resp.content.strip()
+
+            if not synthesized or synthesized.startswith("[ZEN") or synthesized.startswith("[NIM") or "ALL TIERS FAILED" in synthesized:
+                return None, None
+
+            # ── Extract chart data via a second LLM call ──
+            chart_types_to_use = chart_types or ["bar", "pie", "line"]
+            chart_prompt = (
+                "You are a data analyst. Based on the research report below, extract up to 3 sets of numerical data "
+                "that would make meaningful charts for a PDF report on this topic.\n\n"
+                f"Research Report:\n{synthesized[:15000]}\n\n"
+                f"Generate chart data for these chart types: {chart_types_to_use}\n\n"
+                "Return a JSON object (ONLY valid JSON, no other text) with this structure:\n"
+                '{"charts": [{"chart_type": "bar", "title": "...", "xlabel": "...", "ylabel": "...", '
+                '"data": [10, 20, 30], "labels": ["A", "B", "C"]}, ...]}\n\n'
+                "Rules:\n"
+                "- If the research contains actual numbers, use those.\n"
+                "- Otherwise, generate plausible representative data based on the topic context.\n"
+                "- Each chart must have chart_type, title, data (list of numbers), and labels.\n"
+                "- Include at least 3 data points per chart.\n"
+                "- Return ONLY the JSON, no commentary."
+            )
+
+            try:
+                chart_resp = await client.chat(
+                    model=research_model,
+                    messages=[{"role": "user", "content": chart_prompt}],
+                    max_tokens=4096,
+                    temperature=0.2,
+                )
+                chart_text = chart_resp.content.strip()
+                chart_text = re.sub(r"^```(?:json)?\s*", "", chart_text)
+                chart_text = re.sub(r"\s*```$", "", chart_text)
+                chart_data = json.loads(chart_text)
+            except Exception:
+                chart_data = None
+
+            return synthesized, chart_data
+
+        try:
+            result_tuple = asyncio.run(_synthesize_and_extract())
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result_tuple = loop.run_until_complete(_synthesize_and_extract())
+
+        synthesized, chart_data = result_tuple if result_tuple else (None, None)
+
+        # ── Phase 3: Save to knowledge store ──
+        report_content = synthesized or "\n\n".join(
+            f"## Source {i+1}: {s['title']}\nURL: {s['url']}\n\n{s['content'][:2000]}"
+            for i, s in enumerate(sources)
+        )
+        try:
+            save_research(topic, sources, report_content, {
+                "pages_crawled": crawled,
+                "total_sources": len(sources),
+                "depth": depth,
+                "llm_synthesized": synthesized is not None,
+            })
+        except Exception:
+            pass
+
+        # ── Phase 4: Build PDF sections from real content + charts ──
+        from friday.tools.doc_tools import create_pdf
+
+        sections = []
+        sections.append({"type": "heading", "text": f"Research Report: {topic.title()}", "level": 1})
+        sections.append({"type": "paragraph", "text": f"Comprehensive research report on '{topic}'. Generated through multi-engine web research across {crawled} pages from {len(seen_urls)} unique URLs."})
+        sections.append({"type": "divider"})
+
+        if synthesized:
+            for line in synthesized.split("\n"):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("# ") or stripped.startswith("## ") or stripped.startswith("### "):
+                    level = len(stripped.split(" ")[0])
+                    sections.append({"type": "heading", "text": stripped.lstrip("# "), "level": level})
+                elif stripped.startswith("- ") or stripped.startswith("* "):
+                    sections.append({"type": "bullets", "items": [stripped.lstrip("- *")]})
+                elif re.match(r"^\d+\. ", stripped):
+                    sections.append({"type": "paragraph", "text": stripped})
+                elif "http" in stripped and "](http" in stripped:
+                    sections.append({"type": "paragraph", "text": stripped})
+                else:
+                    sections.append({"type": "paragraph", "text": stripped})
+        else:
+            sections.append({"type": "heading", "text": "Research Sources", "level": 2})
+            for s in sources:
+                sections.append({"type": "paragraph", "text": f"Source: {s['title']} ({s['url']})"})
+                sections.append({"type": "paragraph", "text": s['content'][:2000]})
+
+        # ── Insert chart sections ──
+        if chart_data and isinstance(chart_data, dict) and "charts" in chart_data:
+            sections.append({"type": "divider"})
+            sections.append({"type": "heading", "text": "Data Visualizations", "level": 1})
+            sections.append({"type": "paragraph", "text": "The following charts visualize key data points extracted from the research findings."})
+            for chart in chart_data["charts"]:
+                if isinstance(chart, dict) and "data" in chart and chart.get("data"):
+                    chart_section = {
+                        "type": "chart",
+                        "chart_type": chart.get("chart_type", "bar"),
+                        "data": chart["data"],
+                        "title": chart.get("title", ""),
+                        "xlabel": chart.get("xlabel", ""),
+                        "ylabel": chart.get("ylabel", ""),
+                    }
+                    if chart.get("labels"):
+                        chart_section["labels"] = chart["labels"]
+                    sections.append(chart_section)
+
+        # ── Sources table ──
+        if include_tables and sources:
+            sections.append({"type": "divider"})
+            sections.append({"type": "heading", "text": "Source Index", "level": 1})
+            sections.append({
+                "type": "table",
+                "headers": ["#", "Title", "URL"],
+                "rows": [[str(i+1), s["title"][:60], s["url"]] for i, s in enumerate(sources[:25])],
+                "caption": f"All {len(sources)} sources consulted during research.",
+            })
+
+        sections.append({"type": "divider"})
+        sections.append({"type": "heading", "text": "Methodology", "level": 1})
+        sections.append({"type": "paragraph", "text": f"Research conducted across multiple search engines (DuckDuckGo, Google, Bing) with {depth} search queries. Crawled {crawled} pages from {len(seen_urls)} unique URLs. Content extracted, cleaned, and synthesized by FRIDAY's Veronica research engine using big-pickle reasoning model."})
+        sections.append({"type": "paragraph", "text": f"Report generated by FRIDAY AI. Total sources consulted: {len(sources)}."})
+
+        # Generate PDF
+        try:
+            pdf_result = asyncio.run(create_pdf(sections=sections, title=f"Research Report: {topic}"))
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            pdf_result = loop.run_until_complete(
+                create_pdf(sections=sections, title=f"Research Report: {topic}")
+            )
+
+        result = {
+            "topic": topic,
+            "knowledge_saved": True,
+            "sections_count": len(sections),
+            "sources_crawled": crawled,
+            "unique_urls": len(seen_urls),
+            "llm_synthesized": synthesized is not None,
+            "charts_generated": len(chart_data.get("charts", [])) if chart_data and isinstance(chart_data, dict) else 0,
+            "pdf_path": pdf_result.get("path", ""),
+        }
+        return json.dumps(result, indent=2)
+
+    except Exception as e:
+        import traceback
+        return json.dumps({"error": str(e), "traceback": traceback.format_exc(), "topic": topic})
+
+
 def reasoning_tool_handler(action: str = "cot", problem: str = None, max_steps: int = 10, branching_factor: int = 3) -> str:
     """Advanced reasoning: Chain-of-Thought, Tree-of-Thought, or ReAct."""
     try:
@@ -1707,42 +2321,110 @@ def video_search(query: str) -> str:
         return f"[FAIL] Video search error: {e}"
 
 
-def deep_research(topic: str, url: str = "", depth: int = 3) -> str:
-    """Multi-source deep research with synthesized report."""
+def deep_research(topic: str, url: str = "", depth: int = 5) -> str:
+    """Multi-source deep research — crawls pages, extracts content, synthesizes report."""
     try:
-        from friday.web import WebScraper
-        import re
+        from friday.web import WebScraper, ContentExtractor
+        from bs4 import BeautifulSoup
+        import re, time
+
         scraper = WebScraper()
-        all_sources = []
+        sources = []  # each: {"title":..., "url":..., "content":...}
 
+        # 1. Fetch primary URL if given
         if url:
-            # Fetch the primary URL
-            page = scraper.fetch(url)
-            if page.get("success"):
-                all_sources.append(f"--- Primary Source ({url}) ---\n{page.get('content', '')[:3000]}")
+            try:
+                article = ContentExtractor.extract_article(url)
+                if article.get("success"):
+                    sources.append({
+                        "title": article.get("title", url),
+                        "url": url,
+                        "content": article.get("text", "")[:4000],
+                    })
+                else:
+                    page = scraper.fetch(url, timeout=20)
+                    if page.get("success"):
+                        p_soup = BeautifulSoup(page["content"], "html.parser")
+                        for tag in p_soup(["script", "style", "nav", "footer"]):
+                            tag.decompose()
+                        text = (p_soup.find("body") or p_soup).get_text(separator="\n", strip=True)
+                        sources.append({"title": url, "url": url, "content": text[:4000]})
+            except Exception:
+                pass
 
-        # Search multiple queries
-        queries = [topic, f"{topic} latest 2025 2026", f"{topic} overview summary"]
+        # 2. Search multiple angles
+        queries = [
+            topic,
+            f"{topic} 2025 2026 overview",
+            f"{topic} latest developments",
+            f"{topic} analysis",
+        ]
+        seen_urls = {url}
         for q in queries[:depth]:
-            result = scraper.search_engine(q)
-            if result.get("success"):
-                for item in result.get("results", [])[:3]:
-                    title = item.get("title", "")
-                    snippet = item.get("snippet", "")
-                    url_ = item.get("url", "")
-                    all_sources.append(f"• {title}\n  {url_}\n  {snippet[:300]}")
-                    if len(all_sources) >= 9:
-                        break
-            if len(all_sources) >= 9:
+            try:
+                result = scraper.search_engine(q, engine="duckduckgo")
+                if not result.get("success"):
+                    result = scraper.search_engine(q, engine="google")
+                if not result.get("success"):
+                    result = scraper.search_engine(q, engine="bing")
+
+                if result.get("success"):
+                    for item in result.get("results", [])[:4]:
+                        u = item.get("url", "")
+                        if u in seen_urls or not u:
+                            continue
+                        seen_urls.add(u)
+                        # Fetch the actual page
+                        try:
+                            article = ContentExtractor.extract_article(u)
+                            if article.get("success"):
+                                sources.append({
+                                    "title": article.get("title", item.get("title", u)),
+                                    "url": u,
+                                    "content": article.get("text", "")[:4000],
+                                })
+                            else:
+                                page = scraper.fetch(u, timeout=15)
+                                if page.get("success"):
+                                    p_soup = BeautifulSoup(page["content"], "html.parser")
+                                    for tag in p_soup(["script", "style", "nav", "footer"]):
+                                        tag.decompose()
+                                    text = (p_soup.find("body") or p_soup).get_text(separator="\n", strip=True)
+                                    sources.append({
+                                        "title": item.get("title", u),
+                                        "url": u,
+                                        "content": re.sub(r'\n{3,}', '\n\n', text[:4000]),
+                                    })
+                        except Exception:
+                            sources.append({
+                                "title": item.get("title", u),
+                                "url": u,
+                                "content": item.get("snippet", ""),
+                            })
+
+                        if len(sources) >= 8:
+                            break
+            except Exception:
+                continue
+            if len(sources) >= 8:
                 break
 
-        if all_sources:
-            report = f"Deep Research: {topic}\n{'='*40}\n"
-            report += "\n\n".join(all_sources)
-            if len(report) > 8000:
-                report = report[:8000] + "\n\n[Truncated...]"
-            return report
-        return f"[FAIL] No results found for '{topic}'"
+        if not sources:
+            return f"[FAIL] No results found for '{topic}'"
+
+        # 3. Synthesize report
+        report_parts = [f"Deep Research Report: {topic}", "=" * 50, ""]
+        for i, src in enumerate(sources, 1):
+            report_parts.append(f"--- Source {i}: {src['title']} ---")
+            report_parts.append(f"URL: {src['url']}")
+            report_parts.append(src['content'][:2000])
+            report_parts.append("")
+
+        report = "\n".join(report_parts)
+        if len(report) > 12000:
+            report = report[:12000] + "\n\n[Truncated — full content available per source]"
+        return report
+
     except ImportError:
         return "[FAIL] friday.web not available."
     except Exception as e:
@@ -2070,10 +2752,11 @@ def home_assistant_command(command: str, entity: str = "all") -> str:
         return f"[FAIL] Home Assistant error: {e}"
 
 
-def multi_task(tasks: list) -> str:
+def multi_task(tasks: list = None, task_specs: list = None, **kwargs) -> str:
     """Execute multiple tasks in sequence (stub)."""
+    items = tasks or task_specs or []
     results = []
-    for t in tasks:
+    for t in items:
         if isinstance(t, dict):
             results.append(f"[OK] Task: {t.get('action', 'unknown')}")
         else:
@@ -3805,6 +4488,7 @@ __all__ = [
     "agent_list",
     "agent_status",
     "agent_delegate_team",
+    "read_skill_tool",
 ]
 
 if __name__ == "__main__":

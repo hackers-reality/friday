@@ -27,9 +27,6 @@ logger = configure_logging(__name__)
 _DREAM_STATE_DIR = os.path.join(FRIDAY_MEMORY, "dreaming")
 os.makedirs(_DREAM_STATE_DIR, exist_ok=True)
 
-_LOCK: asyncio.Lock = asyncio.Lock()
-
-
 # ── Enums ────────────────────────────────────────────────────────────
 
 
@@ -130,7 +127,7 @@ class DreamEngine:
     interaction when the user returns.
     """
 
-    SILENCE_THRESHOLD: int = 5
+    SILENCE_THRESHOLD: int = 20
 
     def __init__(self) -> None:
         self.user_inactivity_counter: int = 0
@@ -141,25 +138,46 @@ class DreamEngine:
         self._past_sessions: List[DreamSession] = []
         self._background_tasks: List[asyncio.Task] = []
         self._dream_loop_task: Optional[asyncio.Task] = None
+        self._lock = threading.RLock()
         self._load_state()
+        # Always reset dream/silent flags on boot — never carry over across restarts
+        self.is_dreaming = False
+        self.is_silent = False
+        self._state = DreamingState.inactive
+        self._current_session = None
 
     # ── Public API ──────────────────────────────────────────────────
 
-    def on_user_message(self, count_since_last_response: int) -> None:
+    def on_user_message(self, count_since_last_response: int = 0) -> None:
         """Called every time the user sends a message.
 
-        Updates the inactivity counter. If the counter exceeds the silence
-        threshold and we are not already dreaming, trigger dream mode.
+        Immediately resets inactivity, and if dreaming, exits dream mode
+        right away by cancelling the loop and resetting flags synchronously.
         """
-        if self.is_silent:
-            logger.info("User returned — exiting dream mode.")
-            asyncio.ensure_future(self.exit_dream_mode())
+        with self._lock:
+            self.user_inactivity_counter = count_since_last_response
 
-        self.user_inactivity_counter = count_since_last_response
-        logger.debug("User inactivity counter: %d", self.user_inactivity_counter)
-
-        if count_since_last_response >= self.SILENCE_THRESHOLD and not self.is_dreaming:
-            asyncio.ensure_future(self.enter_dream_mode())
+            if self.is_dreaming or self.is_silent:
+                logger.info("User returned — exiting dream mode.")
+                self.is_silent = False
+                self._state = DreamingState.active
+                if self._dream_loop_task is not None:
+                    self._dream_loop_task.cancel()
+                    self._dream_loop_task = None
+                for task in self._background_tasks:
+                    task.cancel()
+                self._background_tasks.clear()
+                if self._current_session is not None:
+                    self._current_session.end_time = datetime.now(timezone.utc).isoformat()
+                    self._past_sessions.append(self._current_session)
+                    if len(self._past_sessions) > 50:
+                        self._past_sessions = self._past_sessions[-50:]
+                session_id = self._current_session.id if self._current_session else "unknown"
+                self._current_session = None
+                self.is_dreaming = False
+                self.user_inactivity_counter = 0
+                self._save_state()
+                logger.info("Exited dream mode (session=%s)", session_id)
 
     def on_friday_response(self) -> None:
         """Reset the inactivity counter because FRIDAY responded."""
@@ -171,9 +189,10 @@ class DreamEngine:
 
         Returns True if dream mode was entered.
         """
-        if self.user_inactivity_counter >= self.SILENCE_THRESHOLD and not self.is_dreaming:
-            await self.enter_dream_mode()
-            return True
+        with self._lock:
+            if self.user_inactivity_counter >= self.SILENCE_THRESHOLD and not self.is_dreaming:
+                await self.enter_dream_mode()
+                return True
         return False
 
     async def enter_dream_mode(self) -> None:
@@ -182,24 +201,25 @@ class DreamEngine:
         Sets is_silent=True so FRIDAY stops responding to the user.
         Starts a dream session and kicks off the background activity loop.
         """
-        if self.is_dreaming:
-            return
+        with self._lock:
+            if self.is_dreaming:
+                return
 
-        self.is_dreaming = True
-        self.is_silent = True
-        self._state = DreamingState.silent
+            self.is_dreaming = True
+            self.is_silent = True
+            self._state = DreamingState.silent
 
-        self._current_session = DreamSession(
-            id=f"dream_{uuid.uuid4().hex[:12]}",
-            start_time=datetime.now(timezone.utc).isoformat(),
-            messages_exchanged_before_silence=self.user_inactivity_counter,
-        )
+            self._current_session = DreamSession(
+                id=f"dream_{uuid.uuid4().hex[:12]}",
+                start_time=datetime.now(timezone.utc).isoformat(),
+                messages_exchanged_before_silence=self.user_inactivity_counter,
+            )
 
-        logger.info(
-            "Entered dream mode (session=%s, silence_threshold=%d)",
-            self._current_session.id,
-            self.user_inactivity_counter,
-        )
+            logger.info(
+                "Entered dream mode (session=%s, silence_threshold=%d)",
+                self._current_session.id,
+                self.user_inactivity_counter,
+            )
 
         self._dream_loop_task = asyncio.create_task(self._dream_loop())
 
@@ -510,11 +530,29 @@ class DreamEngine:
     # ── Dream Loop ─────────────────────────────────────────────────
 
     async def run_forever(self) -> None:
-        """Daemon thread entry point. Keeps the engine alive to accept
-        external triggers without blocking."""
+        """Daemon thread entry point. Periodically checks inactivity and
+        runs dream cycles when in dream mode."""
+        # Reset counter at boot so we don't immediately re-enter dream mode
+        self.user_inactivity_counter = 0
         try:
             while True:
-                await asyncio.sleep(30)
+                with self._lock:
+                    # Gradually accumulate inactivity so dream mode triggers naturally
+                    if not self.is_dreaming and not self.is_silent:
+                        self.user_inactivity_counter += 1
+                        if self.user_inactivity_counter >= self.SILENCE_THRESHOLD:
+                            logger.info("Inactivity threshold reached — entering dream mode.")
+                            try:
+                                await self.enter_dream_mode()
+                            except Exception as e:
+                                logger.warning(f"enter_dream_mode failed: {e}")
+
+                    # If dreaming, run a cycle
+                    if self.is_dreaming and self._dream_loop_task is None:
+                        self._dream_loop_task = asyncio.create_task(self._dream_loop())
+                        logger.info("Dream loop started.")
+
+                await asyncio.sleep(15)
         except asyncio.CancelledError:
             pass
 
@@ -722,10 +760,10 @@ def generate_dream_activities(goal_context: str) -> List[Dict[str, str]]:
 
 
 def start_dreaming_if_idle() -> None:
-    """Sync entry point called at boot. Creates the DreamEngine singleton
+    """Sync entry point called at boot. Initializes the DreamEngine singleton
     and kicks off background dreaming in a daemon thread."""
     try:
-        engine = DreamEngine()
+        engine = get_engine()
         engine._loop = asyncio.new_event_loop()
         t = threading.Thread(target=_run_engine_daemon, args=(engine,), daemon=True)
         t.start()
@@ -741,3 +779,69 @@ def _run_engine_daemon(engine: DreamEngine) -> None:
         engine._loop.run_until_complete(engine.run_forever())
     except Exception:
         pass
+
+
+# ── dream_tool — bridge for tools_flat.py import ─────────────────
+
+
+def dream_tool(action: str = "status") -> str:
+    """Tool-callable bridge into the DreamEngine.
+
+    Actions:
+      status       — return current dream state summary
+      cycle        — force a single dream cycle now
+      enter        — force enter dream mode
+      exit         — force exit dream mode
+      activities   — list current background activities
+    """
+    engine = get_engine()
+    try:
+        if action == "status":
+            state = engine._state.value if engine._state else "inactive"
+            dreaming = engine.is_dreaming
+            silent = engine.is_silent
+            activities = engine.get_current_activities()
+            act_summary = "; ".join(a.description for a in activities[:3]) if activities else "none"
+            summary = engine.get_dream_summary() or "No dreams yet."
+            return (
+                f"[DREAM] state={state}, dreaming={dreaming}, silent={silent}, "
+                f"activities: {act_summary} | {summary}"
+            )
+
+        elif action == "enter":
+            if engine.is_dreaming:
+                return "[DREAM] Already dreaming."
+            fut = asyncio.run_coroutine_threadsafe(
+                engine.enter_dream_mode(), engine._loop
+            )
+            fut.result(timeout=10)
+            return "[DREAM] Entered dream mode."
+
+        elif action == "exit":
+            if not engine.is_dreaming:
+                return "[DREAM] Not dreaming."
+            fut = asyncio.run_coroutine_threadsafe(
+                engine.exit_dream_mode(), engine._loop
+            )
+            fut.result(timeout=10)
+            return "[DREAM] Exited dream mode."
+
+        elif action == "cycle":
+            fut = asyncio.run_coroutine_threadsafe(
+                engine._run_dream_cycle(), engine._loop
+            )
+            result = fut.result(timeout=30)
+            return f"[DREAM] Cycle complete: {result or 'done'}"
+
+        elif action == "activities":
+            activities = engine.get_current_activities()
+            if not activities:
+                return "[DREAM] No active background activities."
+            lines = [f"  {a.type.value}: {a.description} ({a.status.value})" for a in activities]
+            return "[DREAM] Background activities:\n" + "\n".join(lines)
+
+        else:
+            return f"[DREAM] Unknown action: {action}. Try: status, enter, exit, cycle, activities"
+
+    except Exception as e:
+        return f"[DREAM] Error: {e}"

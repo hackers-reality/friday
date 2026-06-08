@@ -124,6 +124,48 @@ def find_free_port(start: int = 8080, max_attempts: int = 20) -> int:
     return start + max_attempts  # Give up, return last
 
 
+# ─── Townhall Bother/Return Signals ─────────────────────
+_BOTHER_FLAG = os.path.join(FRIDAY_MEMORY, "_townhall_bother.flag")
+_RETURN_FLAG = os.path.join(FRIDAY_MEMORY, "_townhall_return.flag")
+
+def signal_townhall_bother():
+    """Signal: user messaging FRIDAY — she leaves agent chat."""
+    _ensure_dir()
+    with open(_BOTHER_FLAG, "w") as f:
+        f.write(str(time.time()))
+    for p in [_RETURN_FLAG]:
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+
+def signal_townhall_return():
+    """Signal: FRIDAY idle — can return to agent chat."""
+    _ensure_dir()
+    with open(_RETURN_FLAG, "w") as f:
+        f.write(str(time.time()))
+    for p in [_BOTHER_FLAG]:
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+
+def check_townhall_bother() -> bool:
+    return os.path.exists(_BOTHER_FLAG)
+
+def check_townhall_return() -> bool:
+    return os.path.exists(_RETURN_FLAG)
+
+def clear_townhall_signals():
+    for p in [_BOTHER_FLAG, _RETURN_FLAG]:
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+
 # ─── Service Convenience ─────────────────────────────────
 
 def get_dashboard_state() -> dict:

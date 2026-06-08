@@ -1,7 +1,10 @@
 """Generate the tools_osint_extra.py file with comprehensive OSINT tools."""
-import os
+import sys, os
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from friday.paths import get_osint_extra_path
 
-OUTPUT = r'E:\open-interpreter\friday\tools_osint_extra.py'
+OUTPUT = str(get_osint_extra_path())
 
 HEADER = r'''"""
 FRIDAY OSINT Extra Tools — 15+ Intelligence Gathering Modules.

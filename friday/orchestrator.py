@@ -12,11 +12,17 @@ Core patterns:
 from __future__ import annotations
 
 import asyncio
+import datetime
+import logging
+import os
+import subprocess
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+logger = logging.getLogger(__name__)
 
 from friday.agent_registry import AgentRegistry
 from friday.base_agent import AgentDef, AgentTask, AgentResult
@@ -186,7 +192,8 @@ class Orchestrator:
 
     def _verify_api_keys(self):
         """Interactively request missing API keys and save them to .env."""
-        env_path = "e:/open-interpreter/.env"
+        from friday.paths import get_env_path
+        env_path = str(get_env_path())
         keys_updated = False
         
         nim_key = os.getenv("NVIDIA_NIM_API_KEY")
@@ -232,7 +239,7 @@ class Orchestrator:
                 print(f"[STARK INDUSTRIES] Failed to save keys: {e}\n", flush=True)
 
     async def delegate(self, agent_name: str, payload: str, task_type: str = "",
-                       **overrides) -> AgentResult:
+                       show_log_window: bool = True, **overrides) -> AgentResult:
         """Delegate a single task to a named agent. Returns AgentResult."""
         self._verify_api_keys()
 
@@ -281,14 +288,14 @@ class Orchestrator:
             lf.write(f"[PROGRESS] Subagent initialized. Starting execution...\n")
             lf.flush()
 
-        # Spawn CMD window running powershell tail
+        # Spawn CMD window running powershell tail (skip if terminal already managed externally)
         tail_proc = None
-        try:
-            # Command to launch CMD window: start cmd /k "powershell -Command Get-Content -Path 'log' -Wait -Tail 20"
-            cmd_line = f'start "HUD: {defn.name} ({defn.id})" cmd /k "powershell -Command Get-Content -Path \'{log_file}\' -Wait -Tail 20"'
-            tail_proc = subprocess.Popen(cmd_line, shell=True)
-        except Exception as e:
-            logger.warning("Failed to spawn CMD window tail: %s", e)
+        if show_log_window:
+            try:
+                cmd_line = f'start "HUD: {defn.name} ({defn.id})" cmd /k "powershell -Command Get-Content -Path \'{log_file}\' -Wait -Tail 20"'
+                tail_proc = subprocess.Popen(cmd_line, shell=True)
+            except Exception as e:
+                logger.warning("Failed to spawn CMD window tail: %s", e)
 
         # Inject helper callback into the executor or subclass to write progress to log_file
         def log_progress(msg: str):

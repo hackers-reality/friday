@@ -82,7 +82,19 @@ TOOL_META: Dict[str, dict] = {
     # ── Vision / Screen ──
     "see_screen": {"category": "vision", "risk": "read_only", "description": "Capture and analyze screen"},
     "vision_click": {"category": "vision", "risk": "local_write", "description": "Click at vision-detected coordinates"},
-    "cv_tool": {"category": "vision", "risk": "read_only", "description": "Camera: start/stop/list cameras, get scene context, describe scene"},
+    "cv_tool": {"category": "vision", "risk": "read_only", "description": "Camera management: start/stop/list/switch cameras, show/hide live feed"},
+    "ask_camera": {"category": "vision", "risk": "read_only", "description": "Ask a visual question about the current camera frame (NIM VL model)"},
+    "show_camera_feed": {"category": "vision", "risk": "read_only", "description": "Open a window showing the live camera feed"},
+    "hide_camera_feed": {"category": "vision", "risk": "read_only", "description": "Close the live camera feed window"},
+    "start_camera_cycle": {"category": "vision", "risk": "read_only", "description": "Auto-cycle through all cameras, building unified scene description"},
+    "stop_camera_cycle": {"category": "vision", "risk": "read_only", "description": "Stop camera cycling, return to single-camera mode"},
+    "locate_on_camera": {"category": "vision", "risk": "read_only", "description": "Find which camera last detected a specific object"},
+    "ask_camera_smart": {"category": "vision", "risk": "read_only", "description": "Ask about camera view, auto-switching to best camera"},
+    "nim_describe_screen": {"category": "vision", "risk": "read_only", "description": "Detailed screen analysis using NVIDIA NIM VL model"},
+    "show_pointer": {"category": "vision", "risk": "read_only", "description": "Show circular pointer at screen coordinates (Clicky-style)"},
+    "show_cursor_hint": {"category": "vision", "risk": "read_only", "description": "Show text hint near cursor position"},
+    "show_annotation_box": {"category": "vision", "risk": "read_only", "description": "Highlight screen region with border"},
+    "clear_overlays": {"category": "vision", "risk": "read_only", "description": "Clear all visual screen overlays"},
 
     # ── Memory ──
     "memory_store": {"category": "memory", "risk": "local_write", "description": "Store a fact into memory"},

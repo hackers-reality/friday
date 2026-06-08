@@ -1,7 +1,10 @@
-import sys, py_compile
-sys.path.insert(0, '.')
-py_compile.compile('E:/open-interpreter/friday/live.py', doraise=True)
-print('live.py compiles clean')
+import sys, py_compile, os
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from friday.paths import get_friday_dir
+live_path = str(get_friday_dir() / "live.py")
+py_compile.compile(live_path, doraise=True)
+print(f'{live_path} compiles clean')
 
 from friday.tools import *
 print('OK: 337 tools ready')

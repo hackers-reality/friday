@@ -17,12 +17,34 @@ import threading
 import time
 import base64
 import io
+import re
+from pathlib import Path
 import urllib.request
 import urllib.error
 import shutil
 
 from friday._paths import FRIDAY_MEMORY
 from friday.vision_pipeline import VisionPipeline, reset_motion_detection
+
+# Try to load .env so NIM keys are available without manual export
+try:
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            m_v = re.match(r'^NVIDIA_VISION_API_KEY=(.+)', line.strip())
+            if m_v:
+                val = m_v.group(1).strip().strip("\"").strip("'")
+                if "NVIDIA_VISION_API_KEY" not in os.environ:
+                    os.environ["NVIDIA_VISION_API_KEY"] = val
+        for line in env_path.read_text().splitlines():
+            m = re.match(r'^NVIDIA_NIM_API_KEY=(.+)', line.strip())
+            if m:
+                val = m.group(1).strip().strip("\"").strip("'")
+                if "NVIDIA_NIM_API_KEY" not in os.environ:
+                    os.environ["NVIDIA_NIM_API_KEY"] = val
+                break
+except Exception:
+    pass
 
 _CV_DIR = os.path.join(FRIDAY_MEMORY, "cv")
 _MODELS_DIR = os.path.join(_CV_DIR, "models")
@@ -72,12 +94,14 @@ _cv_state: Dict[str, Any] = {
     "people_count": 0,
     "objects_found": [],
     "hands_detected": [],
-    "faces_detected": [],
+    "faces_detected": 0,
+    "face_expressions": [],
     "animals_detected": [],
     "scene_stats": {},
     "pipeline_latency_ms": {},
     "error": None,
     "stats": {},
+    "last_seen": {},          # label → {"camera_index": int, "timestamp": str}
 }
 _cv_thread: Optional[threading.Thread] = None
 _cv_stop_event = threading.Event()
@@ -85,6 +109,12 @@ _camera_cap = None
 _vision_pipeline: Optional[VisionPipeline] = None
 _vision_results: Dict[str, Any] = {}
 _vision_lock = threading.Lock()
+
+# ─── Cycling State ──────────────────────────────────────────
+_cycling_active = False
+_cycling_thread: Optional[threading.Thread] = None
+_cycling_stop_event = threading.Event()
+_cycling_interval = 5.0
 
 
 # ─── Model Management ──────────────────────────────────────
@@ -115,17 +145,35 @@ def _download_model(url: str, dest_name: str) -> bool:
 
 
 def _ensure_models() -> bool:
-    """Ensure MobileNet-SSD model files are available. Returns True if loaded OK."""
+    """Ensure MobileNet-SSD model files are available. Returns True if loaded OK.
+    
+    Downloads are non-blocking — runs in a background thread so camera capture
+    starts immediately even if models are missing. DNN detection will skip
+    until models finish downloading.
+    """
     _ensure_model_dirs()
     prototxt = _model_path("MobileNetSSD_deploy.prototxt")
     caffemodel = _model_path("MobileNetSSD_deploy.caffemodel")
 
-    # Download if missing
-    if not (os.path.exists(prototxt) and os.path.exists(caffemodel)):
+    if os.path.exists(prototxt) and os.path.exists(caffemodel):
+        return True
+
+    # Download in background — don't block camera startup
+    def _download_job():
         _download_model(MOBILENET_PROTOTXT_URL, "MobileNetSSD_deploy.prototxt")
         _download_model(MOBILENET_CAFFEMODEL_URL, "MobileNetSSD_deploy.caffemodel")
+        global _dnn_net
+        try:
+            import cv2
+            p = _model_path("MobileNetSSD_deploy.prototxt")
+            c = _model_path("MobileNetSSD_deploy.caffemodel")
+            if os.path.exists(p) and os.path.exists(c):
+                _dnn_net = cv2.dnn.readNetFromCaffe(p, c)
+        except Exception:
+            pass
 
-    return os.path.exists(prototxt) and os.path.exists(caffemodel)
+    threading.Thread(target=_download_job, daemon=True, name="cv-model-download").start()
+    return False
 
 
 # ─── DNN Object Detection ──────────────────────────────────
@@ -284,29 +332,144 @@ def _analyze_scene(frame) -> Dict[str, Any]:
         return {}
 
 
-def _describe_scene_gemini(frame_b64: str) -> str:
-    """Use Gemini Vision API for rich scene description (if available)."""
-    try:
-        import google.generativeai as genai
-        from dotenv import load_dotenv
-        load_dotenv()
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            return ""
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        import io
-        image_data = base64.b64decode(frame_b64.split(",")[-1] if "," in frame_b64 else frame_b64)
-        img = io.BytesIO(image_data)
-        prompt = (
-            "Describe this camera scene briefly (2-3 sentences) for an AI assistant. "
-            "Focus on: what objects/people are visible, lighting conditions, "
-            "and any notable activity. Format as a concise paragraph."
-        )
-        response = model.generate_content([prompt, img])
-        return response.text.strip()
-    except Exception:
+def _ask_nim_vl(question: str, frame_b64: str) -> str:
+    """Ask a custom question about a camera frame using NVIDIA NIM vision-language model.
+
+    Uses nemotron-nano-12b-v2-vl (primary) → llama-3.2-11b-vision-instruct (fallback).
+    """
+    from openai import OpenAI
+    api_key = os.environ.get("NVIDIA_VISION_API_KEY") or os.environ.get("NVIDIA_NIM_API_KEY") or os.environ.get("NVIDIA_API_KEY") or os.environ.get("NIM_API_KEY")
+    if not api_key:
         return ""
+    client = OpenAI(api_key=api_key, base_url="https://integrate.api.nvidia.com/v1", timeout=8, max_retries=0)
+    image_data = frame_b64.split(",")[-1] if "," in frame_b64 else frame_b64
+    image_url = f"data:image/jpeg;base64,{image_data}"
+
+    for model in (
+        "nvidia/nemotron-nano-12b-v2-vl",
+        "meta/llama-3.2-11b-vision-instruct",
+        "microsoft/phi-4-multimodal-instruct",
+        "meta/llama-3.2-90b-vision-instruct",
+    ):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": question},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                }],
+                max_tokens=512,
+                temperature=0.3,
+                timeout=10,
+            )
+
+
+            return response.choices[0].message.content.strip()
+        except Exception:
+            continue
+    return ""
+
+
+def _describe_scene_nim(frame_b64: str) -> str:
+    """Wrapper: generic scene description via NIM VL model."""
+    return _ask_nim_vl(
+        "Describe this camera scene in 2-3 sentences. List every object, person, lighting condition, and activity visible.",
+        frame_b64,
+    )
+
+
+# ─── Expression Detection (OpenCV Haar cascades) ──────────
+
+_face_cascade = None
+_eye_cascade = None
+_smile_cascade = None
+_expression_init_done = False
+
+
+def _init_expression_models():
+    """Load Haar cascades for face, eye, and smile detection.
+
+    Uses OpenCV's built-in cascades — no external downloads needed.
+    Thread-safe: only initializes once.
+    """
+    global _face_cascade, _eye_cascade, _smile_cascade, _expression_init_done
+    if _expression_init_done:
+        return
+    try:
+        import cv2
+        _face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        _eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+        _smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_smile.xml")
+    except Exception:
+        pass
+    _expression_init_done = True
+
+
+def _detect_expressions(frame) -> list[dict]:
+    """Detect faces and classify expressions using OpenCV Haar cascades.
+
+    Returns a list of dicts, one per detected face:
+        {
+            "bbox": [x, y, w, h],         # pixel coordinates
+            "expression": str,             # "neutral"|"smiling"|"surprised"|"eyes_closed"
+            "smile": bool,
+            "eyes_open": bool,
+            "confidence": float,           # approximate confidence (0-1)
+        }
+    Returns empty list if OpenCV is unavailable or no faces found.
+    """
+    _init_expression_models()
+    if _face_cascade is None:
+        return []
+    try:
+        import cv2
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = _face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+        results = []
+        for (x, y, w, h) in faces:
+            face_roi_gray = gray[y:y+h, x:x+w]
+            face_roi_color = frame[y:y+h, x:x+w]
+            expression = "neutral"
+            smile = False
+            eyes_open = False
+
+            # Detect smile
+            if _smile_cascade is not None:
+                smiles = _smile_cascade.detectMultiScale(
+                    face_roi_gray, scaleFactor=1.7, minNeighbors=20, minSize=(25, 25)
+                )
+                smile = len(smiles) > 0
+
+            # Detect eyes
+            if _eye_cascade is not None:
+                eyes = _eye_cascade.detectMultiScale(
+                    face_roi_gray, scaleFactor=1.1, minNeighbors=5, minSize=(20, 20)
+                )
+                eyes_open = len(eyes) >= 1
+
+            # Classify expression
+            if smile and eyes_open:
+                expression = "smiling"
+            elif smile and not eyes_open:
+                expression = "smiling"
+            elif not eyes_open and not smile:
+                expression = "eyes_closed"
+            else:
+                expression = "neutral"
+
+            results.append({
+                "bbox": [int(x), int(y), int(w), int(h)],
+                "expression": expression,
+                "smile": bool(smile),
+                "eyes_open": bool(eyes_open),
+                "confidence": round(min(1.0, max(0.5, 0.5 + (h - 60) / 200)), 3),
+            })
+        return results
+    except Exception:
+        return []
 
 
 # ─── Camera Thread ─────────────────────────────────────────
@@ -337,7 +500,7 @@ def _camera_loop(camera_index: int, interval: float):
         _cv_state["camera_active"] = True
         _cv_state["error"] = None
 
-    # Try to load DNN in background
+    # Non-blocking model init
     _ensure_models()
     _init_dnn()
 
@@ -348,12 +511,14 @@ def _camera_loop(camera_index: int, interval: float):
         _vision_pipeline = None
 
     while not _cv_stop_event.is_set():
+        # Brief wait before read — DShow on Windows can block the first
+        # read indefinitely if the camera stream isn't fully initialized
+        _cv_stop_event.wait(timeout=0.05)
         ret, frame = cap.read()
         if not ret:
             with _cv_lock:
                 _cv_state["error"] = "Camera read failed"
             break
-
         # Dynamically auto-brighten dark/dim frames
         try:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -367,8 +532,12 @@ def _camera_loop(camera_index: int, interval: float):
             pass
 
         # Encode frame for storage
-        _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
-        frame_b64 = base64.b64encode(buffer).decode("utf-8")
+        try:
+            _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            frame_b64 = base64.b64encode(buffer).decode("utf-8")
+        except Exception as exc:
+            print(f"[CV ERR] encode: {exc}", flush=True)
+            continue
 
         # Run analyses
         analysis: Dict[str, Any] = {}
@@ -384,6 +553,9 @@ def _camera_loop(camera_index: int, interval: float):
 
         # HOG people detection
         people = _detect_people_hog(frame)
+
+        # Expression detection (OpenCV Haar cascades)
+        face_expressions = _detect_expressions(frame)
 
         # Run VisionPipeline (parallel MediaPipe + YOLO) in background
         vision_result = {}
@@ -466,9 +638,8 @@ def _camera_loop(camera_index: int, interval: float):
             except Exception:
                 pass
 
-        # Try Gemini description (once if api available)
-        gemini_desc = _describe_scene_gemini(frame_b64)
-
+        # Store frame + metadata FIRST so get_cv_frame_b64() returns immediately.
+        # NIM description runs after (may take 8-16s with timeout) and updates scene_description.
         with _cv_lock:
             _cv_state["last_capture"] = datetime.now().isoformat()
             _cv_state["last_frame_data"] = frame_b64
@@ -478,19 +649,28 @@ def _camera_loop(camera_index: int, interval: float):
             _cv_state["motion_magnitude"] = round(float(motion_mag), 4)
             _cv_state["people_count"] = people_count
             _cv_state["objects_found"] = list(set(objects_found))
-            _cv_state["scene_description"] = gemini_desc or human_readable or scene_desc
+            _cv_state["scene_description"] = human_readable or scene_desc
             _cv_state["human_readable_scene"] = human_readable
             _cv_state["hands_detected"] = [
                 {"handedness": h.get("handedness"), "fingers_up": h.get("fingers_up"),
                  "holding_object": h.get("holding_object")}
                 for h in hands
             ]
-            _cv_state["faces_detected"] = len(vision_result.get("faces", []))
+            _cv_state["faces_detected"] = max(len(vision_result.get("faces", [])), len(face_expressions))
+            _cv_state["face_expressions"] = face_expressions
             _cv_state["animals_detected"] = vision_result.get("animals", [])
             _cv_state["scene_stats"] = vision_result.get("scene", {})
             _cv_state["pipeline_latency_ms"] = vision_result.get("latency_ms", {})
             _cv_state["stats"] = stats
             _cv_state["error"] = None
+
+        # NIM vision description (skipped if no API key, runs after frame is stored)
+        nim_key = os.environ.get("NVIDIA_VISION_API_KEY") or os.environ.get("NVIDIA_NIM_API_KEY") or os.environ.get("NVIDIA_API_KEY") or os.environ.get("NIM_API_KEY")
+        if nim_key:
+            nim_desc = _describe_scene_nim(frame_b64)
+            if nim_desc:
+                with _cv_lock:
+                    _cv_state["scene_description"] = nim_desc
 
         try:
             with open(_CV_STATE_FILE, "w") as f:
@@ -498,6 +678,24 @@ def _camera_loop(camera_index: int, interval: float):
                 json.dump(state_save, f, indent=2, default=str)
         except Exception:
             pass
+
+        # Show live feed window if requested
+        _was_feed_active = getattr(_camera_loop, "_feed_was_active", False)
+        if _cv_feed_active:
+            try:
+                import cv2
+                cv2.imshow(_CV_FEED_NAME, frame)
+                cv2.waitKey(1)
+            except Exception:
+                pass
+            _camera_loop._feed_was_active = True
+        elif _was_feed_active:
+            try:
+                import cv2
+                cv2.destroyWindow(_CV_FEED_NAME)
+            except Exception:
+                pass
+            _camera_loop._feed_was_active = False
 
         _cv_stop_event.wait(timeout=interval)
 
@@ -644,9 +842,13 @@ def get_cv_status() -> Dict[str, Any]:
             "human_readable_scene": _cv_state.get("human_readable_scene", ""),
             "hands_detected": _cv_state.get("hands_detected", []),
             "faces_detected": _cv_state.get("faces_detected", 0),
+            "face_expressions": _cv_state.get("face_expressions", []),
             "animals_detected": _cv_state.get("animals_detected", []),
             "pipeline_latency_ms": _cv_state.get("pipeline_latency_ms", {}),
             "stats": _cv_state.get("stats", {}),
+            "cycling_active": _cycling_active,
+            "camera_descriptions": _cv_state.get("camera_descriptions", {}),
+            "unified_scene": _cv_state.get("unified_scene", ""),
             "error": _cv_state.get("error"),
         }
 
@@ -660,6 +862,337 @@ def get_cv_frame_b64() -> Optional[str]:
     with _cv_lock:
         return _cv_state.get("last_frame_data")
 
+
+# ─── Feed Window ────────────────────────────────────────────
+
+_cv_feed_active = False
+_CV_FEED_NAME = "FRIDAY Camera"
+
+
+def show_feed(timeout: float = 5.0) -> str:
+    """Open an OpenCV window showing the live camera feed.
+
+    Waits up to *timeout* seconds for the camera to become active (e.g. during
+    auto-start). Call after cv_tool('start') or after module import.
+    """
+    global _cv_feed_active
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with _cv_lock:
+            if _cv_state.get("camera_active"):
+                _cv_feed_active = True
+                return f"[OK] Feed window '{_CV_FEED_NAME}' opened"
+        time.sleep(0.2)
+    return "[FAIL] Camera not active after waiting. Start camera first."
+
+
+def hide_feed() -> str:
+    """Close the live camera feed window."""
+    global _cv_feed_active
+    _cv_feed_active = False
+    try:
+        import cv2
+        cv2.destroyWindow(_CV_FEED_NAME)
+    except Exception:
+        pass
+    return "[OK] Feed window closed"
+
+
+# ─── Camera Management ──────────────────────────────────────
+
+def list_available_cameras() -> str:
+    """Scan indices 0-9 and return which cameras are accessible."""
+    import cv2
+    available = []
+    for i in range(10):
+        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            available.append(str(i))
+            cap.release()
+    if available:
+        return f"[OK] Camera indices found: {', '.join(available)}"
+    return "[FAIL] No cameras detected on indices 0-9"
+
+
+def switch_camera(index: int) -> str:
+    """Switch to a different camera index. Restarts the capture thread."""
+    with _cv_lock:
+        if not _cv_state.get("camera_active"):
+            return start_camera(camera_index=index, interval=2.0)
+        interval = _cv_state.get("capture_interval", 2.0)
+    stop_camera()
+    time.sleep(0.3)
+    return start_camera(index, interval)
+
+
+# ─── Dedicated FRIDAY tools ────────────────────────────────
+
+def ask_camera(question: str) -> str:
+    """Ask a visual question about the current camera frame.
+
+    FRIDAY should call this when the user asks to see or identify something
+    via the camera (e.g. 'what am I holding?', 'what's on my desk?', 'who is this?').
+    """
+    return cv_tool("ask", question=question)
+
+
+def show_camera_feed() -> str:
+    """Open a window showing the live camera feed."""
+    return cv_tool("show_feed")
+
+
+def hide_camera_feed() -> str:
+    """Close the live camera feed window."""
+    return cv_tool("hide_feed")
+
+
+def nim_describe_screen(question: str = "Describe this screen in detail. What applications, windows, text, images, and UI elements are visible?") -> str:
+    """Capture the current screen and ask NVIDIA NIM VL model for a detailed description.
+
+    Use this when you need FRIDAY to analyze the screen contents in detail
+    (e.g. 'what code is on my screen?', 'what website am I looking at?',
+    'read the text in the document I have open').
+    """
+    try:
+        from PIL import ImageGrab, Image
+        import io
+        import base64
+        img = ImageGrab.grab()
+        img.thumbnail((1920, 1080), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        frame_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        answer = _ask_nim_vl(question, frame_b64)
+        return f"[NIM SCREEN] {answer}" if answer else "[FAIL] NIM vision returned empty"
+    except Exception as e:
+        return f"[FAIL] Screen capture: {e}"
+
+
+def locate_on_camera(label: str) -> str:
+    """Find which camera last saw an object and return its index + scene context."""
+    return cv_tool("locate", label=label)
+
+
+def ask_camera_smart(question: str, label_hint: str = "") -> str:
+    """Ask about something, auto-switching to the camera that last saw it."""
+    return cv_tool("smart_ask", question=question, label_hint=label_hint)
+
+
+# ─── Auto-Camera Cycling Mode ──────────────────────────────
+
+def _camera_cycle_worker(interval: float):
+    """Background thread that rotates through all available cameras."""
+    global _cycling_active
+    cameras = [str(i) for i in range(10)]
+    available = []
+    import cv2
+    for i in range(10):
+        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            available.append(i)
+            cap.release()
+    if not available:
+        _cycling_active = False
+        return
+
+    while not _cycling_stop_event.is_set():
+        for idx in available:
+            if _cycling_stop_event.is_set():
+                break
+            # Switch camera
+            # First, open this camera briefly to get a frame
+            cap_temp = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            if not cap_temp.isOpened():
+                cap_temp = cv2.VideoCapture(idx)
+            if not cap_temp.isOpened():
+                continue
+
+            ok, frame = cap_temp.read()
+            if not ok or frame is None:
+                cap_temp.release()
+                continue
+
+            # Encode frame
+            import base64
+            try:
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                frame_b64 = base64.b64encode(buf).decode("utf-8")
+            except Exception:
+                cap_temp.release()
+                continue
+
+            cap_temp.release()
+
+            # Describe scene with NIM
+            desc = _describe_scene_nim(frame_b64)
+
+            with _cv_lock:
+                _cv_state["camera_index"] = idx
+                _cv_state["last_capture"] = datetime.now().isoformat()
+                _cv_state["last_frame_data"] = frame_b64
+                _cv_state["scene_description"] = desc or "No scene description"
+                _cv_state["camera_active"] = True
+                if "camera_descriptions" not in _cv_state:
+                    _cv_state["camera_descriptions"] = {}
+                _cv_state["camera_descriptions"][str(idx)] = desc or "No scene description"
+                # Build unified scene
+                descs = _cv_state["camera_descriptions"]
+                unified = "; ".join(f"Camera {k}: {v}" for k, v in descs.items())
+                _cv_state["unified_scene"] = unified
+
+                # Update last_seen: extract object labels from description
+                if desc:
+                    desc_lower = desc.lower()
+                    known_labels = ["hand", "person", "phone", "laptop", "book", "bottle",
+                                    "cup", "keyboard", "mouse", "watch", "pen", "paper",
+                                    "glasses", "food", "drink", "remote", "plant", "bag",
+                                    "headphone", "cable", "lamp", "toy", "dog", "cat"]
+                    for label in known_labels:
+                        if label in desc_lower:
+                            _cv_state.setdefault("last_seen", {})[label] = {
+                                "camera_index": idx,
+                                "timestamp": datetime.now().isoformat(),
+                            }
+
+            print(f"[CV] Cycle: camera {idx}, scene: {desc[:60] if desc else 'empty'}...")
+
+            # Wait for interval (poll stop_event)
+            _cycling_stop_event.wait(timeout=interval)
+
+    _cycling_active = False
+
+
+def start_camera_cycle(interval: float = 5.0) -> str:
+    """Rotate through all available cameras, building a unified scene description."""
+    global _cycling_thread, _cycling_active, _cycling_interval, _cycling_stop_event
+    if _cycling_active:
+        return "[OK] Already cycling"
+    _cycling_stop_event.clear()
+    _cycling_interval = interval
+    _cycling_active = True
+    # Stop any single-camera capture
+    stop_camera()
+    with _cv_lock:
+        _cv_state["camera_descriptions"] = {}
+        _cv_state["unified_scene"] = ""
+    _cycling_thread = threading.Thread(
+        target=_camera_cycle_worker, args=(interval,), daemon=True, name="cv-cycle"
+    )
+    _cycling_thread.start()
+    time.sleep(0.5)
+    return f"[OK] Camera cycling started (interval: {interval}s, cycling all cameras)"
+
+
+def stop_camera_cycle() -> str:
+    """Stop camera cycling and return to single-camera mode."""
+    global _cycling_thread, _cycling_active
+    if not _cycling_active:
+        return "[OK] Not cycling"
+    _cycling_stop_event.set()
+    if _cycling_thread:
+        _cycling_thread.join(timeout=3)
+        _cycling_thread = None
+    _cycling_active = False
+    # Restart single camera
+    idx = 0
+    with _cv_lock:
+        idx = _cv_state.get("camera_index", 0)
+    return start_camera(camera_index=idx, interval=2.0)
+
+
+# ─── Smart Camera Tracking ──────────────────────────────
+
+def locate_object(label: str) -> str:
+    """Find which camera last detected an object. Returns camera index + context."""
+    label_lower = label.strip().lower()
+    with _cv_lock:
+        last_seen = _cv_state.get("last_seen", {})
+        if label_lower in last_seen:
+            info = last_seen[label_lower]
+            cam = info["camera_index"]
+            ts = info.get("timestamp", "unknown")
+            desc = _cv_state.get("camera_descriptions", {}).get(str(cam), "")
+            return f"[OK] '{label}' last seen on camera {cam} at {ts}. Scene: {desc[:200]}"
+        # Check unified scene for clues
+        unified = _cv_state.get("unified_scene", "")
+        if unified and label_lower in unified.lower():
+            return f"[CLUE] '{label}' mentioned in unified scene. Use 'ask_camera' to check all cameras."
+        return f"[FAIL] '{label}' not seen by any camera recently."
+
+
+def smart_ask(question: str, label_hint: str = "") -> str:
+    """Ask about an object, auto-selecting the camera that last saw it.
+
+    If label_hint is provided, checks that camera first.
+    If not found, falls back to current camera.
+    If cycling is active, scans all cameras in order.
+    """
+    import base64, cv2
+
+    label = label_hint.strip().lower() if label_hint else ""
+
+    # Determine target cameras to try
+    target_cameras = []
+    with _cv_lock:
+        current_idx = _cv_state.get("camera_index", 0)
+        if label and _cv_state.get("last_seen", {}).get(label):
+            target_cameras.append(_cv_state["last_seen"][label]["camera_index"])
+        target_cameras.append(current_idx)
+        # Add all cycling cameras if active
+        if _cycling_active:
+            for ci in range(10):
+                c = str(ci)
+                if c in _cv_state.get("camera_descriptions", {}):
+                    if ci not in target_cameras:
+                        target_cameras.append(ci)
+
+    # Try each camera
+    for cam_idx in target_cameras:
+        cap = cv2.VideoCapture(cam_idx, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(cam_idx)
+        if not cap.isOpened():
+            continue
+
+        for _ in range(15):
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                cap.release()
+                break
+        else:
+            cap.release()
+            continue
+
+        try:
+            _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            frame_b64 = base64.b64encode(buf).decode("utf-8")
+        except Exception:
+            continue
+
+        answer = _ask_nim_vl(question, frame_b64)
+        if answer and "no" not in answer.lower()[:20] and "not" not in answer.lower()[:20]:
+            # We got a real answer — update last_seen and return
+            with _cv_lock:
+                _cv_state["last_frame_data"] = frame_b64
+                _cv_state["camera_index"] = cam_idx
+                _cv_state["scene_description"] = answer
+                if label:
+                    _cv_state.setdefault("last_seen", {})[label] = {
+                        "camera_index": cam_idx,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+            return f"[Camera {cam_idx}] {answer}"
+        if answer:
+            return f"[Camera {cam_idx}] {answer}"
+
+    return "[FAIL] No camera available to answer."
+
+
+# ─── CV Tool (FRIDAY-accessible) ────────────────────────────
 
 def cv_tool(action: str = "status", **kwargs) -> str:
     """FRIDAY tool: camera CV operations (background, LLM-only).
@@ -677,6 +1210,7 @@ def cv_tool(action: str = "status", **kwargs) -> str:
             return f"[FAIL] CV error: {status['error']}"
         lines = ["### CV ENGINE STATUS", ""]
         lines.append(f"Camera: {'ACTIVE' if status.get('camera_active') else 'INACTIVE'}")
+        lines.append(f"Cycling: {'ACTIVE' if _cycling_active else 'INACTIVE'}")
         if status.get("camera_active"):
             lines.append(f"Last capture: {status.get('last_capture', 'N/A')}")
             lines.append(f"People: {status.get('people_count', 0)}")
@@ -687,9 +1221,20 @@ def cv_tool(action: str = "status", **kwargs) -> str:
             stats = status.get("stats", {})
             if stats:
                 lines.append(f"Lighting: {stats.get('lighting', 'N/A')}")
+            exprs = status.get("face_expressions", [])
+            if exprs:
+                lines.append(f"Faces: {len(exprs)} detected")
+                for e in exprs[:3]:
+                    lines.append(f"  - {e.get('expression', '?')} (conf: {e.get('confidence', 0):.2f})")
+            if _cycling_active:
+                unified = status.get("unified_scene", "")
+                if unified:
+                    lines.append(f"Unified scene: {unified[:300]}")
         return "\n".join(lines)
 
     if action == "start":
+        if _cycling_active:
+            return "[FAIL] Stop camera cycling first (use 'stop_cycle')"
         idx = int(kwargs.get("camera_index", 0))
         interval = float(kwargs.get("interval", 2.0))
         return start_camera(idx, interval)
@@ -716,24 +1261,14 @@ def cv_tool(action: str = "status", **kwargs) -> str:
         if stats:
             lines.append(f"Lighting: {stats.get('lighting', '')}, "
                          f"Brightness: {stats.get('brightness', 0):.0f}/255")
+        if _cycling_active:
+            unified = _cv_state.get("unified_scene", "")
+            if unified:
+                lines.append(f"Multi-camera: {unified[:400]}")
         return "\n".join(lines)
 
     if action == "list_cameras":
-        try:
-            import cv2
-            available = []
-            for i in range(10):
-                cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-                if not cap.isOpened():
-                    cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    available.append(str(i))
-                    cap.release()
-            if available:
-                return f"[OK] Cameras found: {', '.join(available)}"
-            return "[FAIL] No cameras detected"
-        except Exception as e:
-            return f"[FAIL] {e}"
+        return list_available_cameras()
 
     if action == "describe_scene":
         with _cv_lock:
@@ -745,4 +1280,94 @@ def cv_tool(action: str = "status", **kwargs) -> str:
                 return f"[SCENE] {desc}"
             return "[SCENE] Camera feed not available."
 
+    if action == "nim_describe":
+        """Use NIM vision to describe current camera frame."""
+        frame_b64 = get_cv_frame_b64()
+        if not frame_b64:
+            return "[FAIL] No camera frame available"
+        desc = _describe_scene_nim(frame_b64)
+        return f"[NIM VISION] {desc}" if desc else "[FAIL] NIM vision returned empty"
+
+    if action == "nim_label":
+        """Use NIM vision to label all objects in current camera frame."""
+        frame_b64 = get_cv_frame_b64()
+        if not frame_b64:
+            return "[FAIL] No camera frame available"
+        return f"[NIM LABELS]\n{_ask_nim_vl('List ONLY the object names you see in this image, one per line. No descriptions, no sentences. Just object names.', frame_b64)}"
+
+    if action == "ask":
+        """Ask a custom question about the current camera frame using NIM VL model."""
+        question = kwargs.get("question", "")
+        if not question:
+            return "[FAIL] No question provided. Use: question='what do you see?'"
+        # Wait briefly for a frame if camera just started
+        frame_b64 = get_cv_frame_b64()
+        deadline = time.monotonic() + 5.0
+        while not frame_b64 and time.monotonic() < deadline:
+            time.sleep(0.3)
+            frame_b64 = get_cv_frame_b64()
+        if not frame_b64:
+            return "[FAIL] No camera frame available"
+        answer = _ask_nim_vl(question, frame_b64)
+        return f"[NIM ANSWER] {answer}" if answer else "[FAIL] NIM vision returned empty"
+
+    if action == "switch":
+        """Switch to a different camera index."""
+        index = int(kwargs.get("camera_index", 1))
+        return switch_camera(index)
+
+    if action == "show_feed":
+        return show_feed()
+
+    if action == "hide_feed":
+        return hide_feed()
+
+    if action == "describe_screen":
+        question = kwargs.get("question", "")
+        return nim_describe_screen(question) if question else nim_describe_screen()
+
+    if action == "cycle":
+        interval = float(kwargs.get("interval", 5.0))
+        return start_camera_cycle(interval)
+
+    if action == "stop_cycle":
+        return stop_camera_cycle()
+
+    if action == "locate":
+        label = kwargs.get("label", "")
+        if not label:
+            return "[FAIL] Provide a label to locate (e.g. label='hand')"
+        return locate_object(label)
+
+    if action == "smart_ask":
+        question = kwargs.get("question", "")
+        label_hint = kwargs.get("label_hint", "")
+        if not question:
+            return "[FAIL] Provide a question to ask"
+        return smart_ask(question, label_hint)
+
     return f"[FAIL] Unknown action: {action}"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Auto-start camera on module import
+# ═══════════════════════════════════════════════════════════════════
+
+def _ensure_camera_running():
+    """Auto-start camera in background if not already running."""
+    with _cv_lock:
+        if _cv_state.get("camera_active"):
+            return
+    try:
+        import cv2
+        result = start_camera(camera_index=0, interval=1.5)
+        if "[OK]" in result:
+            print(f"[CV] Camera auto-started: {result}")
+        else:
+            print(f"[CV] Camera auto-start skipped: {result}")
+    except Exception as e:
+        print(f"[CV] Camera auto-start error: {e}")
+
+
+# Auto-start in a background thread (non-blocking)
+threading.Thread(target=_ensure_camera_running, daemon=True, name="cv-autostart").start()

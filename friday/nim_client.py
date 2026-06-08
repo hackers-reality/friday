@@ -20,10 +20,10 @@ from typing import Optional
 import httpx
 
 NIM_API_BASE = os.getenv("NIM_API_BASE", "https://integrate.api.nvidia.com/v1")
-ZEN_API_BASE = os.getenv("ZEN_API_BASE", "https://api.opencode.ai/v1")
+ZEN_API_BASE = os.getenv("ZEN_API_BASE", "https://opencode.ai/zen/v1")
 GEMINI_FALLBACK_MODEL = os.getenv(
     "GEMINI_MODEL",
-    os.getenv("FRIDAY_GEMINI_MODEL", "gemini-3.1-flash-live-preview"),
+    os.getenv("FRIDAY_GEMINI_MODEL", "gemini-2.0-flash"),
 )
 
 
@@ -94,15 +94,21 @@ class InferenceClient:
     """
 
     def __init__(self, nim_api_base: str = NIM_API_BASE, zen_api_base: str = ZEN_API_BASE):
+        # Ensure .env is loaded (safe to call multiple times)
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except Exception:
+            pass
         self.nim_api_base = nim_api_base.rstrip("/")
         self.zen_api_base = zen_api_base.rstrip("/")
         self._keys = _collect_nim_keys()
         self._key_index = 0
         self._key_lock = asyncio.Lock()
         self._buckets: dict[str, TokenBucket] = {}
-        self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0))
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0))
         self._zen_key = _env_first("ZEN_API_KEY", "OPENCODE_ZEN_API_KEY", "OPENCODE_API_KEY")
-        self._zen_model = os.getenv("OPENCODE_ZEN_MODEL", "opencode/big-pickle")
+        self._zen_model = os.getenv("OPENCODE_ZEN_MODEL", "big-pickle")
 
     def _bucket(self, model: str) -> TokenBucket:
         if model not in self._buckets:
@@ -132,7 +138,7 @@ class InferenceClient:
         """
         # ── Tier 1: NVIDIA NIM ──
         if self._keys:
-            result = await self._nim_chat(model, messages, max_tokens, temperature)
+            result = await self._nim_chat(model, messages, max_tokens, temperature, tools)
             if result and not result.content.startswith("[NIM"):
                 return result
             reason = result.content[:200] if result else "No NIM keys"
@@ -150,7 +156,8 @@ class InferenceClient:
         return await self._gemini_fallback(model, messages, reason)
 
     async def _nim_chat(self, model: str, messages: list[dict],
-                        max_tokens: int, temperature: float) -> Optional[NIMResult]:
+                        max_tokens: int, temperature: float,
+                        tools: list[dict] | None = None) -> Optional[NIMResult]:
         """Tier 1: NVIDIA NIM with retries and rate limiting."""
         key = await self._next_key()
         bucket = self._bucket(model)

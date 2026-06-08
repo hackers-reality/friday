@@ -40,33 +40,111 @@ SCOPE_CLOUD_PLATFORM = "https://www.googleapis.com/auth/cloud-platform"
 
 # Consumer API scopes (NOT covered by cloud-platform)
 SCOPES = [
-    # ── YouTube ──
-    "https://www.googleapis.com/auth/youtube.force-ssl",       # Full YouTube access
-    "https://www.googleapis.com/auth/youtube.readonly",        # Read-only YouTube
-    "https://www.googleapis.com/auth/yt-analytics.readonly",   # YouTube Analytics
-    "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",  # Monetization data
+    # ── YouTube (5 scopes) ──
+    "https://www.googleapis.com/auth/youtube",                            # Full YouTube Data API
+    "https://www.googleapis.com/auth/youtube.force-ssl",                  # YouTube Data API v3
+    "https://www.googleapis.com/auth/youtube.readonly",                   # Read-only YouTube
+    "https://www.googleapis.com/auth/youtube.upload",                     # Upload videos
+    "https://www.googleapis.com/auth/youtubepartner-channel-audit",       # YouTube partner audit
+    "https://www.googleapis.com/auth/yt-analytics.readonly",              # YouTube Analytics
+    "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",     # Monetization data
 
-    # ── Google Workspace ──
-    "https://www.googleapis.com/auth/gmail.modify",            # Read/send email
-    "https://www.googleapis.com/auth/drive",                   # Google Drive full access
-    "https://www.googleapis.com/auth/spreadsheets",            # Google Sheets
-    "https://www.googleapis.com/auth/documents",               # Google Docs
-    "https://www.googleapis.com/auth/presentations",           # Google Slides
-    "https://www.googleapis.com/auth/calendar",                # Google Calendar
-    "https://www.googleapis.com/auth/contacts",                # Google People/Contacts
+    # ── Gmail (8 scopes) ──
+    "https://www.googleapis.com/auth/gmail.readonly",                     # Read emails
+    "https://www.googleapis.com/auth/gmail.send",                         # Send emails
+    "https://www.googleapis.com/auth/gmail.modify",                       # Read/send/trash
+    "https://www.googleapis.com/auth/gmail.compose",                      # Draft/compose
+    "https://www.googleapis.com/auth/gmail.insert",                       # Import messages
+    "https://www.googleapis.com/auth/gmail.labels",                       # Manage labels
+    "https://www.googleapis.com/auth/gmail.metadata",                     # Read metadata only
+    "https://www.googleapis.com/auth/gmail.settings.basic",               # Settings
+    "https://www.googleapis.com/auth/gmail.settings.sharing",             # Settings sharing
 
-    # ── Firebase ──
-    "https://www.googleapis.com/auth/firebase",                # Firebase services
-    "https://www.googleapis.com/auth/firebase.readonly",       # Firebase read-only
+    # ── Google Drive (12 scopes) ──
+    "https://www.googleapis.com/auth/drive",                              # Full Drive access
+    "https://www.googleapis.com/auth/drive.file",                         # Per-file access
+    "https://www.googleapis.com/auth/drive.readonly",                     # Drive read-only
+    "https://www.googleapis.com/auth/drive.metadata.readonly",            # Drive metadata only
+    "https://www.googleapis.com/auth/drive.appdata",                      # App data folder
+    "https://www.googleapis.com/auth/drive.scripts",                      # Apps Script
+    "https://www.googleapis.com/auth/drive.photos.readonly",              # Drive photos
+    "https://www.googleapis.com/auth/drive.activity",                     # Drive activity
+    "https://www.googleapis.com/auth/drive.activity.readonly",            # Drive activity read-only
+    "https://www.googleapis.com/auth/drive.metadata",                     # Drive metadata
+    "https://www.googleapis.com/auth/drive.install",                      # Drive Apps Script install
+    "https://www.googleapis.com/auth/drive.meet.readonly",                # Meet recordings in Drive
 
-    # ── Google Classroom ──
-    "https://www.googleapis.com/auth/classroom.courses",       # Classroom management
+    # ── Google Sheets (2 scopes) ──
+    "https://www.googleapis.com/auth/spreadsheets",                       # Full Sheets
+    "https://www.googleapis.com/auth/spreadsheets.readonly",              # Sheets read-only
 
-    # ── Google Books ──
-    "https://www.googleapis.com/auth/books",                   # Google Books
+    # ── Google Docs (2 scopes) ──
+    "https://www.googleapis.com/auth/documents",                          # Full Docs
+    "https://www.googleapis.com/auth/documents.readonly",                 # Docs read-only
 
-    # ── Google Maps (read-only geocoding/places) ──
-    "https://www.googleapis.com/auth/maps.readonly",           # Maps read-only
+    # ── Google Slides (2 scopes) ──
+    "https://www.googleapis.com/auth/presentations",                      # Full Slides
+    "https://www.googleapis.com/auth/presentations.readonly",             # Slides read-only
+
+    # ── Google Calendar (9 scopes) ──
+    "https://www.googleapis.com/auth/calendar",                           # Full Calendar
+    "https://www.googleapis.com/auth/calendar.readonly",                  # Calendar read-only
+    "https://www.googleapis.com/auth/calendar.events",                    # Events management
+    "https://www.googleapis.com/auth/calendar.events.readonly",           # Events read-only
+    "https://www.googleapis.com/auth/calendar.settings.readonly",         # Calendar settings
+    "https://www.googleapis.com/auth/calendar.addons.execute",            # Calendar add-ons
+    "https://www.googleapis.com/auth/calendar.acls",                      # Calendar ACLs
+    "https://www.googleapis.com/auth/calendar.acls.readonly",             # Calendar ACLs read-only
+    "https://www.googleapis.com/auth/calendar.freebusy",                  # Free/busy info
+
+    # ── Google People / Contacts (3 scopes) ──
+    "https://www.googleapis.com/auth/contacts",                           # Full contacts
+    "https://www.googleapis.com/auth/contacts.readonly",                  # Contacts read-only
+    "https://www.googleapis.com/auth/contacts.other.readonly",            # Other contacts
+
+    # ── Google Tasks (2 scopes) ──
+    "https://www.googleapis.com/auth/tasks",                              # Full Tasks
+    "https://www.googleapis.com/auth/tasks.readonly",                     # Tasks read-only
+
+
+    # ── Google Forms (4 scopes) ──
+    "https://www.googleapis.com/auth/forms",                              # Full Forms
+    "https://www.googleapis.com/auth/forms.responses.readonly",           # Form responses
+    "https://www.googleapis.com/auth/forms.body",                         # Form body edit
+    "https://www.googleapis.com/auth/forms.body.readonly",                # Form body read
+
+    # ── Google Photos (4 scopes) ──
+    "https://www.googleapis.com/auth/photoslibrary",                      # Photos library
+    "https://www.googleapis.com/auth/photoslibrary.sharing",              # Photos sharing
+    "https://www.googleapis.com/auth/photoslibrary.readonly",             # Photos read-only
+    "https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata",      # App data
+    "https://www.googleapis.com/auth/photoslibrary.appendonly",           # Photos upload only
+
+    # ── Firebase (3 scopes) ──
+    "https://www.googleapis.com/auth/firebase",                           # Firebase services
+    "https://www.googleapis.com/auth/firebase.readonly",                  # Firebase read-only
+    "https://www.googleapis.com/auth/firebase.database",                  # Firebase Realtime DB
+
+    # ── Google Books (2 scopes) ──
+    "https://www.googleapis.com/auth/books",                              # Full Books
+
+    # ── Google Analytics (2 scopes) ──
+    "https://www.googleapis.com/auth/analytics.readonly",                 # Analytics read-only
+    "https://www.googleapis.com/auth/analytics",                          # Full Analytics
+
+    # ── Google Search Console (1 scope) ──
+    "https://www.googleapis.com/auth/webmasters.readonly",                # Search Console
+
+    # ── Google Cloud Natural Language (1 scope, free tier through cloud-platform) ──
+    "https://www.googleapis.com/auth/cloud-language",                     # Natural Language API
+
+    # ── Google Cloud Pub/Sub (1 scope, free tier) ──
+    "https://www.googleapis.com/auth/pubsub",                             # Pub/Sub
+
+    # ── OpenID / Identity (3 scopes) ──
+    "openid",                                                             # OpenID Connect
+    "https://www.googleapis.com/auth/userinfo.email",                     # User email
+    "https://www.googleapis.com/auth/userinfo.profile",                   # User profile
 ]
 
 # Combined scopes string

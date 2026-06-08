@@ -33,7 +33,7 @@ class AgentRegistry:
         self.unavailable_models: set[str] = set()
         self.loaded = False
 
-    async def load(self, path: Optional[Path] = None) -> int:
+    def load(self, path: Optional[Path] = None) -> int:
         """Load agent definitions from config.yaml. Returns count loaded."""
         path = path or Path.cwd() / "config.yaml"
         if not path.exists():
@@ -110,4 +110,5 @@ def get_registry() -> AgentRegistry:
     global _REGISTRY
     if _REGISTRY is None:
         _REGISTRY = AgentRegistry()
+        _REGISTRY.load()
     return _REGISTRY

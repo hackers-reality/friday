@@ -84,7 +84,7 @@ AGENT_ICONS: dict[str, str] = {
 ENV_PATH = os.path.join(PROJECT_ROOT, ".env")
 
 NVIDIA_API_BASE = os.getenv("NIM_API_BASE", "https://integrate.api.nvidia.com/v1")
-ZEN_API_BASE = os.getenv("ZEN_API_BASE", "https://api.opencode.ai/v1")
+ZEN_API_BASE = os.getenv("ZEN_API_BASE", "https://opencode.ai/zen/v1")
 NVIDIA_MODEL_CHECK = os.getenv("NVIDIA_MODEL_CHECK", "meta/llama-3.3-70b-instruct")
 
 _TERMINAL_WATCHDOG_SCRIPT: Optional[str] = None
@@ -352,86 +352,45 @@ class KeyManager:
             return result
 
     def have_valid_keys(self) -> bool:
-        """Return True if both keys are present and verified."""
-        return bool(self._nvidia_key and self._nvidia_verified and self._opencode_key and self._opencode_verified)
+        """Return True if at least one key is present and verified (OpenCode or NVIDIA)."""
+        opencode_ok = bool(self._opencode_key and self._opencode_verified)
+        nvidia_ok = bool(self._nvidia_key and self._nvidia_verified)
+        return opencode_ok or nvidia_ok
 
     def have_keys_present(self) -> bool:
-        """Return True if both keys are present (whether verified or not)."""
-        return bool(self._nvidia_key and self._opencode_key)
+        """Return True if at least one key is present."""
+        return bool(self._opencode_key) or bool(self._nvidia_key)
 
     async def prompt_for_missing_keys(self) -> dict[str, Any]:
-        """Interactive CLI prompt asking user to paste missing keys.
-
-        Returns dict with keys_updated (bool), nvidia_result, opencode_result.
-        """
+        """Auto-verify existing keys, silently skip if missing."""
         result: dict[str, Any] = {"keys_updated": False, "nvidia_result": None, "opencode_result": None}
         print(f"\n{ANSI_BOLD}{ANSI_CYAN}╔══════════════════════════════════════════════╗{ANSI_RESET}")
         print(f"{ANSI_BOLD}{ANSI_CYAN}║     FRIDAY API KEY VERIFICATION              ║{ANSI_RESET}")
         print(f"{ANSI_BOLD}{ANSI_CYAN}╚══════════════════════════════════════════════╝{ANSI_RESET}{ANSI_RESET}")
 
         nvidia_key = self._nvidia_key
-        if not nvidia_key or not self._nvidia_verified:
-            if nvidia_key and not self._nvidia_verified:
-                print(f"\n{ANSI_YELLOW}⚠ Stored NVIDIA NIM key is present but NOT verified.{ANSI_RESET}")
-                verify_now = input(f"  Verify it now? (Y/n): ").strip().lower()
-                if verify_now in ("", "y", "yes"):
-                    v = await self.verify_nvidia_key(nvidia_key)
-                    if v["verified"]:
-                        self._nvidia_verified = True
-                        result["nvidia_result"] = v
-                        print(f"  {ANSI_GREEN}✔ NVIDIA NIM key verified!{ANSI_RESET}")
-                    else:
-                        print(f"  {ANSI_RED}✘ Verification failed: {v['error']}{ANSI_RESET}")
-                        nvidia_key = None
-                else:
-                    nvidia_key = None
-            if not nvidia_key or not self._nvidia_verified:
-                print(f"\n{ANSI_BOLD}NVIDIA NIM API Key{ANSI_RESET}")
-                print(f"  Get one at: https://build.nvidia.com/")
-                new_key = input(f"  Paste key (or press Enter to skip): ").strip()
-                if new_key:
-                    v = await self.set_nvidia_key(new_key)
-                    result["nvidia_result"] = v
-                    if v["verified"]:
-                        self._nvidia_verified = True
-                        print(f"  {ANSI_GREEN}✔ Key verified and saved!{ANSI_RESET}")
-                    else:
-                        print(f"  {ANSI_RED}✘ Verification failed: {v['error']}{ANSI_RESET}")
+        if nvidia_key and not self._nvidia_verified:
+            print(f"\n{ANSI_YELLOW}⚠ Verifying stored NVIDIA NIM key...{ANSI_RESET}")
+            v = await self.verify_nvidia_key(nvidia_key)
+            if v["verified"]:
+                self._nvidia_verified = True
+                result["nvidia_result"] = v
+                print(f"  {ANSI_GREEN}✔ NVIDIA NIM key verified!{ANSI_RESET}")
+            else:
+                print(f"  {ANSI_RED}✘ Verification failed: {v['error']}{ANSI_RESET}")
 
         opencode_key = self._opencode_key
-        if not opencode_key or not self._opencode_verified:
-            if opencode_key and not self._opencode_verified:
-                print(f"\n{ANSI_YELLOW}⚠ Stored OpenCode Zen key is present but NOT verified.{ANSI_RESET}")
-                verify_now = input(f"  Verify it now? (Y/n): ").strip().lower()
-                if verify_now in ("", "y", "yes"):
-                    v = await self.verify_opencode_key(opencode_key)
-                    if v["verified"]:
-                        self._opencode_verified = True
-                        result["opencode_result"] = v
-                        print(f"  {ANSI_GREEN}✔ OpenCode Zen key verified!{ANSI_RESET}")
-                    else:
-                        print(f"  {ANSI_RED}✘ Verification failed: {v['error']}{ANSI_RESET}")
-                        opencode_key = None
-                else:
-                    opencode_key = None
-            if not opencode_key or not self._opencode_verified:
-                print(f"\n{ANSI_BOLD}OpenCode Zen API Key{ANSI_RESET}")
-                print(f"  Get one at: https://opencode.ai")
-                new_key = input(f"  Paste key (or press Enter to skip): ").strip()
-                if new_key:
-                    v = await self.set_opencode_key(new_key)
-                    result["opencode_result"] = v
-                    if v["verified"]:
-                        self._opencode_verified = True
-                        print(f"  {ANSI_GREEN}✔ Key verified and saved!{ANSI_RESET}")
-                    else:
-                        print(f"  {ANSI_RED}✘ Verification failed: {v['error']}{ANSI_RESET}")
+        if opencode_key and not self._opencode_verified:
+            print(f"\n{ANSI_YELLOW}⚠ Verifying stored OpenCode Zen key...{ANSI_RESET}")
+            v = await self.verify_opencode_key(opencode_key)
+            if v["verified"]:
+                self._opencode_verified = True
+                result["opencode_result"] = v
+                print(f"  {ANSI_GREEN}✔ OpenCode Zen key verified!{ANSI_RESET}")
+            else:
+                print(f"  {ANSI_RED}✘ Verification failed: {v['error']}{ANSI_RESET}")
 
         result["keys_updated"] = self.have_valid_keys()
-        if result["keys_updated"]:
-            print(f"\n{ANSI_GREEN}✔ All required API keys are present and verified!{ANSI_RESET}")
-        else:
-            print(f"\n{ANSI_YELLOW}⚠ Some keys are missing or not verified.{ANSI_RESET}")
         return result
 
     def get_key_status(self) -> dict[str, Any]:
@@ -506,7 +465,7 @@ class AgentTerminalManager:
         """
         term_id = f"term_{agent_name}_{_short_id()}"
         status_file = os.path.join(self._status_dir, f"{term_id}.json")
-        refresh_interval = 1.0
+        refresh_interval = 0.2
 
         initial_data = {
             "agent_id": agent_name,
@@ -520,6 +479,7 @@ class AgentTerminalManager:
             "steps_completed": 0,
             "total_steps": 0,
             "result_summary": "",
+            "logs": [],
             "timestamp": _iso_now(),
         }
         try:
@@ -533,28 +493,22 @@ class AgentTerminalManager:
             return {"success": False, "error": "Failed to create watchdog script"}
 
         title = f"FRIDAY Agent: {agent_name} [{role}]"
-        powershell_cmd = (
-            f'powershell.exe -NoExit -Command '
-            f'& "{watchdog_script}" "{status_file}" "{refresh_interval}" "{title}"'
-        )
+        python_exe = sys.executable or "python"
         try:
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             proc = subprocess.Popen(
-                ["cmd.exe", "/c", "start", title, "cmd.exe", "/k", powershell_cmd],
-                shell=True,
-                startupinfo=startupinfo,
+                [python_exe, watchdog_script, status_file, str(refresh_interval), title],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
             pid = proc.pid
-        except Exception as e1:
+        except Exception as e:
             try:
                 proc = subprocess.Popen(
-                    ["start", title, "cmd.exe", "/k", powershell_cmd],
-                    shell=True,
+                    [python_exe, watchdog_script, status_file, str(refresh_interval), title],
+                    creationflags=0x00000010,
                 )
                 pid = proc.pid
             except Exception as e2:
-                return {"success": False, "error": f"Failed to spawn terminal: {e1}; {e2}"}
+                return {"success": False, "error": f"Failed to spawn terminal: {e2}"}
 
         term_info = {
             "agent_name": agent_name,
@@ -585,8 +539,6 @@ class AgentTerminalManager:
         Returns path to the script file.
         """
         global _TERMINAL_WATCHDOG_SCRIPT
-        if _TERMINAL_WATCHDOG_SCRIPT and os.path.exists(_TERMINAL_WATCHDOG_SCRIPT):
-            return _TERMINAL_WATCHDOG_SCRIPT
         script_dir = _ensure_terminal_temp_dir()
         script_path = os.path.join(script_dir, "agent_terminal_watchdog.py")
         script_content = r'''"""
@@ -654,7 +606,7 @@ def main():
         input(f"{D}Usage: watchdog.py <status_file> <interval> [title]{R}\nPress Enter...")
         return
     status_file = sys.argv[1]
-    interval = max(0.5, float(sys.argv[2])) if len(sys.argv) > 2 else 1.0
+    interval = max(0.1, float(sys.argv[2])) if len(sys.argv) > 2 else 0.2
     title = sys.argv[3] if len(sys.argv) > 3 else "FRIDAY Agent"
     set_title(title)
     last = ""
@@ -665,7 +617,6 @@ def main():
                     d = json.load(f)
             else:
                 d = {"agent_id": "?", "name": "?", "status": "waiting", "action": "", "progress": 0}
-            clear()
             aid = d.get("agent_id", "?")
             name = d.get("name", aid)
             role = d.get("role", "general")
@@ -676,6 +627,7 @@ def main():
             sc = d.get("steps_completed", 0)
             ts = d.get("total_steps", 0)
             res = d.get("result_summary", "")
+            logs = d.get("logs", [])
             ac = agent_color(aid)
 
             lines = []
@@ -700,6 +652,13 @@ def main():
             if res:
                 r = res[:56]
                 lines.append(f"{C}║{R}  {B}Result:{R} {r}{' ' * (54 - len(r))}{C}║{R}")
+            # ── Log section ──
+            if logs:
+                lines.append(f"{C}╠{'═' * 58}╣{R}")
+                recent = logs[-5:]
+                for log_line in recent:
+                    l = log_line[:56]
+                    lines.append(f"{C}║{R} {D}{l}{R}{' ' * (57 - len(l))}{C}║{R}")
             # ── Bottom ──
             lines.append(f"{C}║{R}  {D}Last: {d.get('timestamp', '?')}{R}{' ' * max(0, 50 - len(d.get('timestamp', '?')))}{C}║{R}")
             lines.append(f"{C}╚{'═' * 58}╝{R}")
@@ -707,6 +666,7 @@ def main():
 
             display = "\n".join(lines)
             if display != last:
+                clear()
                 print(display)
                 last = display
             if status in ("completed", "failed"):
@@ -743,6 +703,11 @@ if __name__ == "__main__":
         with self._lock:
             term = self._terminals.get(agent_name)
             if not term:
+                for key in self._terminals:
+                    if key.lower() == agent_name.lower():
+                        term = self._terminals[key]
+                        break
+            if not term:
                 return False
             status_file = term.get("status_file")
             if not status_file or not os.path.exists(status_file):
@@ -759,6 +724,11 @@ if __name__ == "__main__":
                     self._terminals[agent_name]["current_status"] = status
         if action is not None:
             data["action"] = action
+            logs = data.setdefault("logs", [])
+            ts = _iso_now().split(".")[0]
+            logs.append(f"[{ts}] {action}")
+            if len(logs) > 50:
+                logs[:] = logs[-50:]
         if progress is not None:
             data["progress"] = progress
         if result_summary is not None:
@@ -1806,41 +1776,83 @@ async def agent_spawn_and_track(name: str, task: str, role: str = "general") -> 
     """Spawn an agent and open its terminal window for tracking.
 
     FRIDAY calls this to create a visible, trackable agent session.
-
-    Args:
-        name: Agent name (e.g., 'veronica', 'forge', 'ghost').
-        task: Task description/prompt for the agent.
-        role: Agent role (e.g., 'research', 'code', 'security').
-
-    Returns:
-        Dict with spawn result and terminal info.
+    If the orchestrator runs the agent synchronously, the result is written
+    to the terminal status file immediately on return.
     """
     tm = get_terminal_manager()
     term = tm.spawn_agent_terminal(name, task, role, role)
     if not term.get("success"):
         return {"success": False, "error": term.get("error", "Failed to spawn terminal")}
-    tm.update_agent_terminal(name, status="starting", action="Agent spawned, beginning task...", progress=0)
+    tm.update_agent_terminal(name, status="starting", action="Spawning agent...", progress=0)
+    # Enable deep research mode for researcher agents
+    if role == "researcher" and not task.lower().startswith("deep"):
+        task = f"deep {task}"
     try:
-        from friday.agents_manager import spawn_agent
-        agent_result = spawn_agent(name, task, role)
-        status = "running" if agent_result.get("status") == "scheduled" else "failed"
-        tm.update_agent_terminal(
-            name,
-            status=status,
-            action=agent_result.get("message", "Task delegated"),
-            progress=50,
-        )
-        return {
-            "success": True,
-            "agent_name": name,
-            "task": task,
-            "role": role,
-            "spawn_result": agent_result,
-            "terminal": term,
-        }
+        from friday.agents_manager import spawn_agent as _sa
+        loop = asyncio.get_running_loop()
+        agent_result = await loop.run_in_executor(None, _sa, name, task, role)
+        if agent_result.get("error"):
+            tm.update_agent_terminal(name, status="failed", action=agent_result["error"][:80])
+            return {"success": False, "error": agent_result["error"], "terminal": term}
+
+        # If orchestrator already returned a result (synchronous path), write it now
+        orchestrator_result = agent_result.get("result")
+        if orchestrator_result is not None:
+            output_text = ""
+            if hasattr(orchestrator_result, "output") and orchestrator_result.output:
+                output_text = str(orchestrator_result.output)
+            elif isinstance(orchestrator_result, dict):
+                output_text = orchestrator_result.get("output", "") or orchestrator_result.get("text", "") or json.dumps(orchestrator_result)
+            else:
+                output_text = str(orchestrator_result)
+            summary = output_text[:300] if output_text else "Task complete"
+            tm.update_agent_terminal(name, status="completed", action="Task complete!",
+                                     progress=100, result_summary=summary,
+                                     steps_completed=1, total_steps=1)
+            return {"success": True, "agent_name": name, "task": task, "role": role,
+                    "status": "completed",
+                    "output": output_text,
+                    "terminal": term}
+
+        agent_id = agent_result.get("id")
+        if agent_id:
+            asyncio.create_task(_poll_agent_completion(name, agent_id, tm, term))
+            return {"success": True, "agent_name": name, "task": task, "role": role,
+                    "status": "spawning",
+                    "message": f"Agent '{name}' spawned, tracking in terminal.",
+                    "terminal": term}
+        else:
+            tm.update_agent_terminal(name, status="running", action=agent_result.get("message", "Delegated"))
+            return {"success": True, "agent_name": name, "task": task, "role": role,
+                    "spawn_result": agent_result, "terminal": term}
     except Exception as e:
         tm.update_agent_terminal(name, status="failed", action=f"Error: {str(e)[:80]}")
         return {"success": False, "error": str(e), "terminal": term}
+
+
+async def _poll_agent_completion(name: str, agent_id: str, tm, term: dict):
+    """Background task: poll bridge for agent completion, update terminal."""
+    try:
+        from friday.agents_manager import get_manager
+        bridge = get_manager()
+        for _ in range(120):
+            await asyncio.sleep(3)
+            status = bridge.get_agent_result(agent_id)
+            if not status:
+                continue
+            if status.status == "completed":
+                tm.update_agent_terminal(name, status="completed", action="Task complete!", progress=100,
+                                        result_summary=(status.result or "")[:200],
+                                        steps_completed=1, total_steps=1)
+                return
+            elif status.status == "failed":
+                tm.update_agent_terminal(name, status="failed", action=(status.result or "Unknown error")[:80])
+                return
+            else:
+                tm.update_agent_terminal(name, status="running", action="Working...", progress=30)
+        tm.update_agent_terminal(name, status="failed", action="Timed out waiting for agent result")
+    except Exception:
+        tm.update_agent_terminal(name, status="failed", action="Error in agent polling")
 
 
 async def agent_delegate_with_terminal(name: str, task: str, role: str = "general") -> dict[str, Any]:
@@ -2069,6 +2081,85 @@ async def close_all_agent_resources() -> dict[str, Any]:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# Odysseus-style Parallel Quick Delegate (no terminal windows)
+# ═══════════════════════════════════════════════════════════════════
+
+async def friday_quick_delegate(
+    tasks: list[dict[str, str]],
+    deep: bool = False,
+) -> dict[str, Any]:
+    """Delegate multiple tasks to sub-agents in parallel without terminal windows.
+
+    Odysseus-style lightweight agent spawning. Runs agents concurrently using
+    a thread pool, collects all results. No terminal windows, no polling.
+
+    When deep=True, each agent's task gets prepended with instructions to
+    exhaustively try ALL relevant tools before returning — no single-tool
+    failures, retry with alternatives, search across every available source.
+
+    Args:
+        tasks: List of dicts, each with:
+            - name: Agent name (e.g., "veronica", "forge", "ghost")
+            - task: Task description
+            - role: Agent role (default: "general")
+        deep: If True, prepend deep research instructions to each task.
+
+    Returns:
+        Dict with all agent results keyed by name.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from friday.agents_manager import spawn_agent
+
+    results: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+    loop = asyncio.get_running_loop()
+
+    DEEP_PREAMBLE = (
+        "[DEEP RESEARCH MODE]\n"
+        "You MUST try EVERY relevant tool available to you — do NOT stop after one attempt.\n"
+        "If a tool returns empty, try a different tool. Search across ALL sources.\n"
+        "Use web_search, browser history, file search, database queries — everything at your disposal.\n"
+        "Only report 'no data found' after ALL tools have been exhausted.\n"
+        "Do not give up after a single failure. Be thorough and exhaustive.\n"
+    )
+
+    def _run_agent(task_def: dict[str, str]) -> tuple[str, Any]:
+        name = task_def.get("name", "unknown")
+        task_desc = task_def.get("task", "")
+        role = task_def.get("role", "general")
+        if deep:
+            task_desc = DEEP_PREAMBLE + task_desc
+        try:
+            result = spawn_agent(name, task_desc, role)
+            return name, result
+        except Exception as e:
+            return name, {"error": str(e)}
+
+    with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+        futures = {executor.submit(_run_agent, t): t.get("name", "unknown") for t in tasks}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                _, result = future.result()
+                if result.get("error"):
+                    errors[name] = result["error"]
+                else:
+                    results[name] = result
+            except Exception as e:
+                errors[name] = str(e)
+
+    return {
+        "success": len(errors) == 0,
+        "results": results,
+        "errors": errors if errors else None,
+        "total": len(tasks),
+        "succeeded": len(results),
+        "failed": len(errors),
+        "timestamp": _iso_now(),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
 # AGENT_TERMINAL_TOOL_DESCRIPTIONS — For FRIDAY's tool map
 # ═══════════════════════════════════════════════════════════════════
 
@@ -2151,6 +2242,30 @@ AGENT_TERMINAL_TOOL_DESCRIPTIONS: dict[str, dict[str, Any]] = {
         "description": "Cleanup all agent resources: close terminal windows, remove temp files, close HTTP connections. Call on shutdown.",
         "parameters": {},
         "returns": {"type": "dict", "description": "Cleanup result"},
+    },
+    "friday_quick_delegate": {
+        "name": "friday_quick_delegate",
+        "description": "Odysseus-style lightweight parallel delegate. Spawns multiple sub-agents concurrently WITHOUT terminal windows. Use for quick parallel research/code/security tasks that don't need visual tracking.",
+        "parameters": {
+            "tasks": {
+                "type": "array",
+                "description": "List of task definitions, each with: name (str), task (str), role (str, default 'general')",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Agent name (veronica, forge, ghost, atlas)"},
+                        "task": {"type": "string", "description": "Task description"},
+                        "role": {"type": "string", "description": "Agent role", "default": "general"},
+                    },
+                },
+            },
+            "deep": {
+                "type": "boolean",
+                "description": "If True, prepend deep research instructions — exhaustively try ALL tools before reporting none found",
+                "default": False,
+            },
+        },
+        "returns": {"type": "dict", "description": "Aggregated results from all agents"},
     },
 }
 
@@ -2419,6 +2534,7 @@ __all__ = [
     "agent_chain_research_vuln_fix",
     "friday_multi_agent_task",
     "close_all_agent_resources",
+    "friday_quick_delegate",
     # Tool descriptions
     "AGENT_TERMINAL_TOOL_DESCRIPTIONS",
     # OpenCode-style delegation depth tracking

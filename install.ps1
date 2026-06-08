@@ -153,8 +153,19 @@ foreach ($pkg in $packages) {
 
 }
 
+# Install all deps from requirements.txt
+Write-Host "`n[5/6] Installing comprehensive dependencies from requirements.txt..." -ForegroundColor Yellow
+if (Test-Path "requirements.txt") {
+    python -m pip install -r requirements.txt --quiet --disable-pip-version-check
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  ✅ requirements.txt installed successfully" -ForegroundColor Green
+    } else {
+        Write-Host "  ⚠️  Some packages in requirements.txt failed. Check logs above." -ForegroundColor Yellow
+    }
+}
+
 # Optional packages
-Write-Host "`n[5/6] Installing optional packages..." -ForegroundColor Yellow
+Write-Host "`n[5b/6] Installing optional packages..." -ForegroundColor Yellow
 $optional = @(
     "pvporcupine",  # Voice wake word (already installed if main)
     "selenium",  # Legacy browser automation

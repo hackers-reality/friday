@@ -83,7 +83,7 @@ def _start_live_engine():
 
     t = threading.Thread(target=_run_live, name="FridayLiveEngine", daemon=True)
     t.start()
-    _log("[OK] Live engine thread launched (connecting to Gemini Live API…)")
+    _log("[OK] Live engine thread launched (connecting to Gemini Live APIâ€¦)")
 
     # Wait briefly then show status
     time.sleep(3)
@@ -104,6 +104,8 @@ def main():
     except Exception:
         pass
 
+    signal.signal(signal.SIGINT, _signal_handler)
+
     _log("")
     _log("=" * 50)
     _log("  F.R.I.D.A.Y   Sovereign AI Agent")
@@ -112,27 +114,32 @@ def main():
     _log("")
 
     _prepare_background_services()
-
-    # ── Launch Textual TUI (the ONLY UI) ──
-    use_textual = os.environ.get("FRIDAY_NO_TEXTUAL", "").lower() not in ("1", "true", "yes")
-
-    if use_textual:
-        try:
-            from friday.textual_runner import run_with_textual
-            run_with_textual()
-            return
-        except ImportError as e:
-            _log(f"[WARN] Textual not installed: {e}")
-        except Exception as e:
-            _log(f"[ERROR] Textual TUI crashed: {e}")
-            import traceback
-            traceback.print_exc()
+    _start_live_engine()
 
     _log("")
-    _log("ERROR: Textual TUI failed to start.")
-    _log("Run: python -m pip install textual")
-    _log("Set FRIDAY_NO_TEXTUAL=1 only as last resort.")
+    _log("=" * 50)
+    _log("FRIDAY is running")
+    _log("  Terminal is the primary interface")
+    _log("  Say 'FRIDAY' to activate voice")
+    _log("  Ctrl+C to shutdown")
+    _log("=" * 50)
     _log("")
+
+    from friday.comms import dashboard_to_live_queue
+    try:
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            text = line.strip()
+            if text:
+                dashboard_to_live_queue.put(text)
+    except KeyboardInterrupt:
+        _log("Shutting down.")
+    finally:
+        clear_all_state()
+        _log("FRIDAY shutdown complete.")
 
 
 if __name__ == "__main__":

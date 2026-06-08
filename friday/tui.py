@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
+import json
 import sys
 from typing import Callable, Awaitable
 
@@ -405,3 +405,113 @@ class FRIDAYTUI:
 
     def __exit__(self, *args):
         self._live.__exit__(*args)
+
+
+# ─── No‑Flicker ChatDisplay (plain console.print) ────────
+
+
+class ChatDisplay:
+    """Simple chat display using plain console.print — no Rich Live, no flicker.
+
+    API compatible with FRIDAYTUI for drop‑in replacement in live.py.
+    """
+
+    def __init__(
+        self,
+        *,
+        model_id: str = "gemini-3.1-flash-live-preview",
+        tools_count: int = 0,
+    ):
+        self.console = Console()
+        self.model_id = model_id
+        self.tools_count = tools_count
+        self._connection_status = "connecting"
+        self._status_message = ""
+        self._stream_buf = ""
+
+    # ── Public API ──────────────────────────────────────
+
+    def add_user_message(self, text: str):
+        self.console.print(f"\n[bold green]── Boss ──[/]")
+        self.console.print(f"  {text}")
+
+    def add_friday_message(self, text: str):
+        self.console.print(f"\n[bold cyan]── FRIDAY ──[/]")
+        self.console.print(f"  {text}")
+
+    def add_thought(self, text: str):
+        self.console.print()
+        self.console.rule("[dim]Thought[/]", align="left", style="dim grey37")
+        self.console.print(f"  [italic dim]{text}[/]")
+
+    def add_system(self, text: str):
+        self.console.print(f"  [dim cyan][SYSTEM] {text}[/]")
+
+    def add_tool_call(self, name: str, args: dict | None = None):
+        args_str = ""
+        if args:
+            args_str = f"({json.dumps(args, default=str)})"
+        self.console.print(f"  [yellow]🔧 {name}[/]{args_str}")
+
+    def add_tool_result(self, name: str, result: str):
+        preview = result[:120].replace("\n", " ")
+        self.console.print(f"  [dim green]✓ {name}[/] [dim]{preview}[/]")
+
+    def add_error(self, text: str):
+        self.console.print(f"  [bold red]⚠ {text}[/]")
+
+    def add_turn_divider(self):
+        self.console.rule(style="dim")
+
+    def clear(self):
+        self.console.clear()
+
+    # ── Streaming ───────────────────────────────────────
+
+    def start_stream(self):
+        self._stream_buf = ""
+        sys.stdout.write("── FRIDAY ── ")
+        sys.stdout.flush()
+
+    def append_stream(self, text: str):
+        self._stream_buf += text
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
+    def finalize_stream(self, text: str):
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
+    def cancel_stream(self):
+        self._stream_buf = ""
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
+    # ── Status ──────────────────────────────────────────
+
+    def set_connection_status(self, status: str):
+        self._connection_status = status
+        self.console.print(f"  [dim]Status: {status}[/]")
+
+    def set_status_message(self, msg: str):
+        self._status_message = msg
+
+    def set_model_id(self, model_id: str):
+        self.model_id = model_id
+
+    def set_tools_count(self, count: int):
+        self.tools_count = count
+
+    # ── Lifecycle ───────────────────────────────────────
+
+    async def start(self):
+        self.console.print(f"[bold cyan]⚡ F.R.I.D.A.Y[/] [dim]({self.model_id}, {self.tools_count} tools)[/]")
+
+    async def stop(self):
+        self.console.print("[dim]Session ended.[/]")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass

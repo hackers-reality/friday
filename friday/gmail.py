@@ -14,14 +14,9 @@ load_dotenv()
 
 from friday._paths import PROJECT_ROOT as _ROOT
 
-# Unified scopes — covers both Gmail and Calendar
-_SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/calendar.readonly",
-    "https://www.googleapis.com/auth/calendar.events",
-]
+# Unified scopes — single source from google_oauth.py
+from friday.google_oauth import SCOPE_CLOUD_PLATFORM, SCOPES as _OAUTH_SCOPES
+_SCOPES = [SCOPE_CLOUD_PLATFORM] + _OAUTH_SCOPES
 
 _TOKEN_PATH = os.path.join(_ROOT, ".gmail_token.json")
 
@@ -40,7 +35,7 @@ def _exchange_code_manual(code: str, flow) -> Any:
         "code": code,
         "client_id": flow.client_config["client_id"],
         "client_secret": flow.client_config["client_secret"],
-        "redirect_uri": flow.redirect_uri or "http://localhost:8080/",
+        "redirect_uri": flow.redirect_uri,
         "grant_type": "authorization_code",
     }
     resp = req.post(token_url, data=data, verify=verify, timeout=30)
@@ -63,6 +58,11 @@ def _run_local_server_with_fallback(flow) -> Any:
     auth_code = []
     server_done = threading.Event()
 
+    # Use port from flow.redirect_uri
+    parsed = urllib.parse.urlparse(flow.redirect_uri or "http://localhost:8080/")
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 8080
+
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
@@ -81,7 +81,7 @@ def _run_local_server_with_fallback(flow) -> Any:
         def log_message(self, *a):
             pass
 
-    server = http.server.HTTPServer(("localhost", 8080), Handler)
+    server = http.server.HTTPServer((host, port), Handler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
 
@@ -126,11 +126,14 @@ def _get_credentials(auto_auth: bool = True) -> Any | None:
                 creds_path = os.path.join(_ROOT, "credentials.json")
                 if not os.path.exists(creds_path):
                     return None
+                redirect_uri = _read_redirect_uri_from_config(creds_path)
+                parsed = urllib.parse.urlparse(redirect_uri)
+                port = parsed.port or 8080
                 flow = InstalledAppFlow.from_client_secrets_file(creds_path, _SCOPES)
-                flow.redirect_uri = "http://localhost:8080/"
+                flow.redirect_uri = redirect_uri
                 flow.open_browser = True
                 try:
-                    creds = flow.run_local_server(port=8080, open_browser=True)
+                    creds = flow.run_local_server(port=port, open_browser=True)
                 except Exception:
                     creds = _run_local_server_with_fallback(flow)
                 with open(_TOKEN_PATH, "w") as f:
@@ -161,10 +164,58 @@ def google_authorize() -> str:
     return gmail_authorize()
 
 
+def _read_redirect_uri_from_config(creds_path: str) -> str:
+    """Read the first redirect_uri from credentials.json, fall back to localhost:8080/."""
+    try:
+        with open(creds_path) as f:
+            cfg = json.load(f)
+        uris = cfg.get("web", cfg.get("installed", {})).get("redirect_uris", [])
+        if uris:
+            return uris[0]
+    except Exception:
+        pass
+    return "http://localhost:8080/"
+
+
+def _start_local_server_on(uri: str) -> tuple[http.server.HTTPServer, int]:
+    """Start an HTTP server on the host+port parsed from redirect URI."""
+    parsed = urllib.parse.urlparse(uri)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 8080
+    server = http.server.HTTPServer((host, port), _OAuthHandler)
+    return server, port
+
+
+class _OAuthHandler(http.server.BaseHTTPRequestHandler):
+    """Minimal OAuth callback handler — captures the code, responds OK."""
+    auth_code: list[str] = []
+    server_done: threading.Event | None = None
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        if "code" in params:
+            type(self).auth_code.append(params["code"][0])
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<html><body><h1>Authorized!</h1><p>Close this tab.</p></body></html>")
+            if type(self).server_done:
+                type(self).server_done.set()
+        else:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(b"Missing code")
+    def log_message(self, *a):
+        pass
+
+
 def gmail_authorize() -> str:
     """Run unified OAuth flow for Gmail + Calendar. Opens browser for consent.
     Only needed once — subsequent calls reuse the saved token.
-    Falls back to manual code exchange if SSL errors occur.
+
+    Starts a local server on the port from credentials.json (or 8080)
+    BEFORE opening the browser, so the OAuth redirect is caught automatically.
     """
     try:
         creds_path = os.path.join(_ROOT, "credentials.json")
@@ -177,31 +228,47 @@ def gmail_authorize() -> str:
                 "  4. Download JSON → save as credentials.json in the Friday folder"
             )
 
-        creds = _get_credentials()
-        if creds:
+        if _get_credentials(auto_auth=False):
             return f"[OK] Already authorized. Token at {_TOKEN_PATH}"
-        
-        # Force fresh authorization (with SSL fallback)
+
+        # Read the redirect URI from credentials.json so it matches the console config
+        redirect_uri = _read_redirect_uri_from_config(creds_path)
+
+        # Start local server on that URI BEFORE opening browser
+        server, port = _start_local_server_on(redirect_uri)
+        _OAuthHandler.auth_code = []
+        _OAuthHandler.server_done = threading.Event()
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+
         from google_auth_oauthlib.flow import InstalledAppFlow
         flow = InstalledAppFlow.from_client_secrets_file(creds_path, _SCOPES)
-        flow.redirect_uri = "http://localhost:8080/"
-        try:
-            creds = flow.run_local_server(port=8080, open_browser=True)
-        except Exception:
-            creds = _run_local_server_with_fallback(flow)
-        
-        with open(_TOKEN_PATH, "w") as f:
-            f.write(creds.to_json())
+        flow.redirect_uri = redirect_uri
+        auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline")
 
-        # Clean up old Calendar token (now unified)
-        old_cal_token = os.path.join(os.path.dirname(_ROOT), "friday_memory", "calendar_token.json")
-        if os.path.exists(old_cal_token):
-            os.remove(old_cal_token)
+        import webbrowser
+        webbrowser.open(auth_url)
+        print(f"\n  Browser opened to Google OAuth. Listening on {redirect_uri}")
 
-        return (
-            f"[OK] Unified authorization complete! Token saved to {_TOKEN_PATH}\n"
-            "Gmail and Google Calendar are now ready."
-        )
+        if not _OAuthHandler.server_done.wait(timeout=120):
+            server.shutdown()
+            return "[FAIL] Authorization timed out after 120 seconds. Try exchange_oauth_code() with the redirect URL from your browser."
+
+        server.shutdown()
+        code = _OAuthHandler.auth_code[0]
+
+        # Exchange manually (avoids google_auth_oauthlib SSL bugs)
+        creds = _exchange_code_manual(code, flow)
+        if not creds:
+            flow.fetch_token(code=code)
+            creds = flow.credentials
+
+        if creds:
+            with open(_TOKEN_PATH, "w") as f:
+                f.write(creds.to_json())
+            return f"[OK] Token saved! Gmail and Calendar are now ready."
+
+        return "[FAIL] Authorization failed. Try exchange_oauth_code() with the redirect URL from your browser."
     except Exception as e:
         return f"[FAIL] Authorization failed: {e}"
 
@@ -223,12 +290,28 @@ def exchange_oauth_code(redirect_url: str) -> str:
         if not code:
             return "[FAIL] No authorization code found in URL. Make sure you paste the full redirect URL."
 
+        redirect_uri = _read_redirect_uri_from_config(creds_path)
         flow = InstalledAppFlow.from_client_secrets_file(creds_path, _SCOPES)
-        flow.redirect_uri = "http://localhost:8080/"
+        flow.redirect_uri = redirect_uri
         creds = _exchange_code_manual(code, flow)
 
         with open(_TOKEN_PATH, "w") as f:
             f.write(creds.to_json())
+
+        # Sync to google_oauth credential store
+        try:
+            from friday.google_oauth import _save_credentials
+            from datetime import datetime, timedelta
+            _save_credentials({
+                "access_token": creds.token,
+                "refresh_token": creds.refresh_token,
+                "expires_at": (datetime.utcnow() + timedelta(seconds=3600)).isoformat() if creds.expiry is None else creds.expiry.isoformat(),
+                "scope": " ".join(creds.scopes),
+                "token_type": "Bearer",
+                "created_at": datetime.utcnow().isoformat(),
+            })
+        except Exception:
+            pass
 
         old_cal_token = os.path.join(os.path.dirname(_ROOT), "friday_memory", "calendar_token.json")
         if os.path.exists(old_cal_token):
@@ -242,7 +325,7 @@ def exchange_oauth_code(redirect_url: str) -> str:
 def gmail_list_messages(query: str = "is:unread", max_results: int = 10) -> str:
     """List Gmail messages matching query."""
     try:
-        service = _get_gmail_service()
+        service = _get_gmail_service(auto_auth=False)
         if not service:
             return "Gmail not configured. Place credentials.json in Friday folder."
         
@@ -272,7 +355,7 @@ def gmail_send(to: str, subject: str, body: str) -> str:
     try:
         from email.mime.text import MIMEText
         
-        service = _get_gmail_service()
+        service = _get_gmail_service(auto_auth=False)
         if not service:
             return "Gmail not configured."
         
@@ -295,7 +378,7 @@ def gmail_draft(to: str, subject: str, body: str) -> str:
     try:
         from email.mime.text import MIMEText
         
-        service = _get_gmail_service()
+        service = _get_gmail_service(auto_auth=False)
         if not service:
             return "Gmail not configured."
         
@@ -316,7 +399,7 @@ def gmail_draft(to: str, subject: str, body: str) -> str:
 def gmail_read_message(message_id: str) -> str:
     """Read a specific Gmail message."""
     try:
-        service = _get_gmail_service()
+        service = _get_gmail_service(auto_auth=False)
         if not service:
             return "Gmail not configured."
         

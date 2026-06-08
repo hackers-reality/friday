@@ -1,445 +1,633 @@
-"""FRIDAY Townhall — Textual TUI with n8n-style node connections."""
-
-from __future__ import annotations
-
-import asyncio
-import json
-import os
-import subprocess
-import sys
-from collections import deque
-from datetime import datetime
-from typing import Any
-
-from rich.text import Text as RichText
-from rich.panel import Panel as RichPanel
-from rich.columns import Columns
-from rich.style import Style
+from friday.townhall_engine import *
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container
-from textual.reactive import reactive
-from textual.widgets import Header, Input, RichLog, Static, Label, ListView, ListItem
-
-from friday._paths import FRIDAY_MEMORY
-from friday.agent_chat import (
-    AGENT_STATUS_CHATTING,
-    AGENT_STATUS_IDLE,
-    AGENT_STATUS_WAITING,
-    AGENT_STATUS_WORKING,
-    AgentProfile,
-)
-
-TOWNHALL_STATE_PATH = os.path.join(FRIDAY_MEMORY, "townhall_state.json")
-
-AGENT_PROFILES: list[tuple[str, str, str]] = [
-    ("JARVIS", "System Core & Infrastructure", "cyan"),
-    ("NOVA", "Research & Knowledge", "magenta"),
-    ("ATLAS", "Data & Analytics", "blue"),
-    ("SENTRY", "Security & Monitoring", "red"),
-    ("FORGE", "Development & Tools", "yellow"),
-    ("ECHO", "Communication & Outreach", "green"),
-    ("AEGIS", "Protection & Compliance", "bright_blue"),
-    ("CRUX", "Strategy & Planning", "bright_magenta"),
-    ("VERSE", "Creative & Media", "bright_yellow"),
-    ("LORE", "Memory & Context", "bright_green"),
-]
-
-AGENTS: list[AgentProfile] = [AgentProfile(name=n, role=r) for n, r, _ in AGENT_PROFILES]
-AGENT_COLORS: dict[str, str] = {n: c for n, _, c in AGENT_PROFILES}
-
-STATUS_SYMBOLS = {
-    AGENT_STATUS_IDLE: "○",
-    AGENT_STATUS_WORKING: "●",
-    AGENT_STATUS_WAITING: "◐",
-    AGENT_STATUS_CHATTING: "◉",
-}
-
-STATUS_COLORS = {
-    AGENT_STATUS_IDLE: "gray",
-    AGENT_STATUS_WORKING: "green",
-    AGENT_STATUS_WAITING: "yellow",
-    AGENT_STATUS_CHATTING: "cyan",
-}
+from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
+from textual.widgets import Header, Footer, Input, RichLog, Static, Label, Button, ListView, ListItem
+from textual import events
+from rich.text import Text as RTxt
+from rich.panel import Panel as RPanel
+from rich.markdown import Markdown as RMD
 
 
-class AgentNode:
-    def __init__(self, profile: AgentProfile):
-        self.profile = profile
-        self.status = AGENT_STATUS_IDLE
-        self.last_seen = datetime.now()
-        self.message_count = 0
-        self.current_task = ""
+TOWNHALL_CSS = """
+Screen { background: #050510; }
+Header { background: #0A0A1A; color: #00BFFF; border-bottom: solid #1A1A3A; }
+#row { layout: horizontal; height: 1fr; }
 
-    def to_dict(self) -> dict:
-        return {
-            "name": self.profile.name,
-            "status": self.status,
-            "last_seen": self.last_seen.isoformat(),
-            "message_count": self.message_count,
-            "current_task": self.current_task,
-        }
+#left { width: 28; height: 1fr; background: #0C0C20; border: solid #1A1A3A; margin: 1 0 1 1; padding: 0 1; overflow-y: auto; }
+#left > Label { color: #00BFFF; text-style: bold; margin: 1 0; }
+#left > Static { color: #686898; }
 
-    @classmethod
-    def from_dict(cls, d: dict, profile: AgentProfile) -> AgentNode:
-        n = cls(profile)
-        n.status = d.get("status", AGENT_STATUS_IDLE)
-        n.message_count = d.get("message_count", 0)
-        n.current_task = d.get("current_task", "")
-        return n
+#center { width: 1fr; height: 1fr; background: #050510; border-top: solid #1A1A3A; border-bottom: solid #1A1A3A; margin: 1 0 1 0; layout: vertical; }
+#circle-view { height: 1fr; padding: 0 1; }
+
+#right { width: 40; height: 1fr; background: #0C0C20; border: solid #1A1A3A; margin: 1 1 1 0; layout: vertical; padding: 0 1; }
+#right.fullscreen { dock: fill; width: 100%; height: 100%; border: thick #FFD700; }
+#main-chat { height: 1fr; layout: vertical; }
+#main-chat > Label { color: #00BFFF; text-style: bold; margin: 1 0; }
+#main-log { height: 1fr; border: none; background: #080818; padding: 0 1; }
+#task-chats { height: 12; min-height: 6; border-top: solid #1A1A3A; overflow-y: auto; }
+#task-chats > Label { color: #FFD700; text-style: bold; margin: 1 0; }
+
+#bottom { height: 1; background: #0A0A1A; color: #686898; padding: 0 1; border-top: solid #1A1A3A; }
+Footer { background: #0A0A1A; color: #686898; border-top: solid #1A1A3A; }
+.si { color: #686898; }
+.chat-msg { margin: 0 0 0 1; }
+.task-header { text-style: bold; }
+.task-header:hover { color: #FFD700!important; }
+"""
+
+
+class AgentCircleWidget(Static):
+    """Renders the n8n-style agent circle with FRIDAY at center."""
+
+    def render_agents(self, agents: dict[str, AgentNode], connections: list[tuple[str, str]]):
+        """Update the circle rendering."""
+        lines = [""]
+        lines.append("  [bold cyan]  \u2605 TOWN HALL \u2605  [/bold cyan]")
+        lines.append("")
+
+        # FRIDAY center
+        f = agents.get("FRIDAY")
+        fs = f"[bold cyan]FRIDAY[/bold cyan]" if f else "FRIDAY"
+        friday_line = f"              [{STATUS_COLORS.get(f.status, 'gray') if f else 'gray'}]\u25c9[/] {fs}"
+        lines.append(friday_line)
+        lines.append("")
+
+        # Top arc: SENTRY - FORGE - ECHO
+        s = agents.get("SENTRY")
+        fg = agents.get("FORGE")
+        e = agents.get("ECHO")
+        top = f"  [{STATUS_COLORS.get(s.status, 'gray') if s else 'gray'}]\u25cf[/] SENTRY  ---  [{STATUS_COLORS.get(fg.status, 'gray') if fg else 'gray'}]\u25cf[/] FORGE  ---  [{STATUS_COLORS.get(e.status, 'gray') if e else 'gray'}]\u25cf[/] ECHO"
+        lines.append(top)
+
+        # Lines connecting top to middle-left/right
+        lines.append("     /         |         \\")
+
+        # Mid arc: NOVA - ATLAS - (FRIDAY) - AEGIS - VERSE
+        n = agents.get("NOVA")
+        a = agents.get("ATLAS")
+        ag = agents.get("AEGIS")
+        v = agents.get("VERSE")
+        mid = f"  [{STATUS_COLORS.get(n.status, 'gray') if n else 'gray'}]\u25cf[/] NOVA  ---  [{STATUS_COLORS.get(a.status, 'gray') if a else 'gray'}]\u25cf[/] ATLAS  ---  FRIDAY  ---  [{STATUS_COLORS.get(ag.status, 'gray') if ag else 'gray'}]\u25cf[/] AEGIS  ---  [{STATUS_COLORS.get(v.status, 'gray') if v else 'gray'}]\u25cf[/] VERSE"
+        lines.append(mid)
+
+        # Lines connecting mid to bottom
+        lines.append("     \\         |         /")
+
+        # Bottom arc: JARVIS - CRUX - LORE
+        j = agents.get("JARVIS")
+        c = agents.get("CRUX")
+        l = agents.get("LORE")
+        bot = f"  [{STATUS_COLORS.get(j.status, 'gray') if j else 'gray'}]\u25cf[/] JARVIS  ---  [{STATUS_COLORS.get(c.status, 'gray') if c else 'gray'}]\u25cf[/] CRUX  ---  [{STATUS_COLORS.get(l.status, 'gray') if l else 'gray'}]\u25cf[/] LORE"
+        lines.append(bot)
+
+        lines.append("")
+        lines.append("  [dim]--- connections ---[/dim]")
+        for a1, a2 in connections[:3]:
+            col1 = self._get_color(agents, a1)
+            col2 = self._get_color(agents, a2)
+            lines.append(f"    [bold {col1}]{a1}[/bold {col1}] \u2194 [bold {col2}]{a2}[/bold {col2}]  [dim](task)[/dim]")
+
+        if not connections:
+            lines.append("  [dim]No active task connections[/dim]")
+
+        lines.append("")
+        lines.append("  [dim]\u25cb idle  \u25cf working  \u25c9 chat  \u25b6 dream[/dim]")
+        lines.append("")
+
+        self.update("\n".join(lines))
+
+    def _get_color(self, agents: dict, name: str) -> str:
+        a = agents.get(name.upper())
+        return a.color if a else "white"
+
+
+class TaskChatWidget(Static):
+    """A single task-specific chat panel."""
+    pass
 
 
 class TownhallApp(App):
-    """Townhall — n8n-style node graph with agent seating chart."""
+    TITLE = "F.R.I.D.A.Y Townhall"
+    SUB_TITLE = "Multi-Agent Living Society"
 
-    TITLE = "TOWNHALL"
-    SUB_TITLE = "Agent Command Center"
-
-    CSS = """
-    Screen {
-        background: #050510;
-    }
-
-    Header {
-        background: #0A0A1A;
-        color: #00BFFF;
-        text-style: bold;
-    }
-
-    #left-panel {
-        width: 28;
-        background: #080820;
-        border-right: solid #1A1A3A;
-        padding: 1;
-    }
-
-    #left-panel > Label {
-        color: #00BFFF;
-        text-style: bold;
-        margin-bottom: 1;
-    }
-
-    #left-panel > Static {
-        color: #AAAAAA;
-        margin-bottom: 1;
-    }
-
-    #agent-list {
-        height: 1fr;
-    }
-
-    #center-panel {
-        height: 1fr;
-        background: #050510;
-        padding: 1;
-    }
-
-    #conference-chart {
-        width: 100%;
-        height: 100%;
-    }
-
-    #right-panel {
-        width: 40;
-        background: #080820;
-        border-left: solid #1A1A3A;
-    }
-
-    #chat-log {
-        height: 1fr;
-        background: #080820;
-        padding: 0 1;
-    }
-
-    #chat-input-container {
-        height: 5;
-        background: #0A0A1A;
-        border-top: solid #1A1A3A;
-        padding: 1;
-    }
-
-    #chat-input {
-        background: #12122A;
-        color: #00BFFF;
-        border: solid #1A1A3A;
-        padding: 0 1;
-        height: 3;
-    }
-
-    #chat-input:focus {
-        border: solid #00BFFF;
-    }
-    """
+    CSS = TOWNHALL_CSS
 
     BINDINGS = [
-        Binding("ctrl+c", "quit", "Quit"),
+        Binding("ctrl+c", "quit", "Quit", priority=True),
+        Binding("ctrl+l", "clear", "Clear"),
+        Binding("ctrl+e", "expand", "Expand Chat"),
         Binding("ctrl+r", "refresh", "Refresh"),
     ]
 
     def __init__(self):
         super().__init__()
-        self.agents: list[AgentNode] = [AgentNode(p) for p in AGENTS]
-        self._friday_status = AGENT_STATUS_IDLE
-        self._current_channel = "general"
-        self._selected_agent_idx = 0
-        self._messages: deque[dict] = deque(maxlen=200)
-        self._load_state()
+        self.agents: dict[str, AgentNode] = {}
+        self.channels: dict[str, ChatChannel] = {}
+        self.dream_engine: Optional[DreamEngine] = None
+        self._fullscreen = False
+        self._selected_agent: Optional[str] = None
+        self._connections: list[tuple[str, str]] = []
+        self._expanded_task: str | None = None
+        self._init_state()
+
+    def _init_state(self):
+        saved = self._load_state()
+        chats = self._load_chats()
+
+        # Initialize agents
+        for profile in AGENT_PROFILES:
+            name = profile["name"]
+            if saved and name in saved:
+                self.agents[name] = AgentNode.from_dict(saved[name])
+            else:
+                self.agents[name] = AgentNode(profile)
+
+        # Initialize main channel
+        if chats and "main" in chats:
+            self.channels["main"] = ChatChannel.from_dict(chats["main"])
+        else:
+            self.channels["main"] = ChatChannel("main", "main")
+
+        # Restore task channels
+        if chats:
+            for name, data in chats.items():
+                if name != "main":
+                    ch = ChatChannel.from_dict(data)
+                    if ch.active:
+                        self.channels[name] = ch
+
+        self._save_state()
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
+        with Horizontal(id="row"):
+            with Container(id="left"):
+                yield Label("\ud83d\udc64 AGENT INFO")
+                yield Static("Click an agent in the hall", id="agent-detail", classes="si")
+                yield Static("")
+                yield Label("\ud83d\udcca LEGEND")
+                yield Static("  \u25cb idle   \u25cf working  \u25c9 chat", classes="si")
+                yield Static("  \u25b6 dreaming  \u25cc away", classes="si")
+                yield Static("  \u25d0 waiting", classes="si")
+                yield Static("")
+                yield Label("\u2318 COMMANDS")
+                yield Static("  @agent ping", classes="si")
+                yield Static("  @everyone broadcast", classes="si")
+                yield Static("  /task <a> <desc>", classes="si")
+                yield Static("  /info <agent>", classes="si")
+                yield Static("  /agents", classes="si")
+                yield Static("  /help", classes="si")
 
-        with Container(id="left-panel"):
-            yield Label("F.R.I.D.A.Y")
-            yield Static(id="friday-status")
-            yield Static("")
-            yield Label("AGENTS")
-            yield ListView(id="agent-list")
+            with Container(id="center"):
+                yield AgentCircleWidget(id="circle-view")
+                yield Static("", id="connections-label")
 
-        with Container(id="center-panel"):
-            yield RichLog(id="conference-chart", highlight=True, markup=True)
+            with Container(id="right"):
+                with Container(id="main-chat"):
+                    yield Label("\ud83d\udde3 MAIN CHAT")
+                    yield RichLog(id="main-log", highlight=True, markup=True, max_lines=200)
+                with Container(id="task-chats"):
+                    yield Label("\ud83d\udd17 TASK CHATS")
+                    yield Container(id="task-chats-list")
 
-        with Container(id="right-panel"):
-            yield RichLog(id="chat-log", highlight=True, markup=True)
-            with Container(id="chat-input-container"):
-                yield Input(id="chat-input", placeholder="Message or @agent...")
+        yield Container(id="bottom")
+        yield Footer()
 
     def on_mount(self):
-        self._render_conference()
-        self._render_agent_list()
-        self._render_chat()
-        self._update_friday_status()
+        self.circle = self.query_one("#circle-view", AgentCircleWidget)
+        self.main_log = self.query_one("#main-log", RichLog)
+        self.agent_detail = self.query_one("#agent-detail", Static)
+        self.task_container = self.query_one("#task-chats-list", Container)
 
-    def _render_conference(self):
-        chart = self.query_one("#conference-chart", RichLog)
-        chart.clear()
+        self._render_circle()
+        self._render_main_chat()
+        self._render_agent_info()
+        self._render_task_chats()
 
-        top_agents = self.agents[:3]
-        top_cols = [self._make_agent_node(a) for a in top_agents]
-        chart.write(Columns(top_cols, equal=True, padding=(0, 2)))
-        chart.write(RichText("       │         │         │       ", style="dim gray37"))
+        self.main_log.write("[bold cyan]Townhall initialized. Agents online.[/bold cyan]")
+        self.main_log.write(f"[dim]{datetime.datetime.now().strftime('%H:%M')}  @mentions work like Discord[/dim]")
 
-        left = self._make_agent_node(self.agents[3]) if len(self.agents) > 3 else None
-        right = self._make_agent_node(self.agents[4]) if len(self.agents) > 4 else None
-        s = STATUS_SYMBOLS.get(self._friday_status, "●")
-        c = STATUS_COLORS.get(self._friday_status, "green")
-        friday = RichPanel(
-            RichText(f" {s} F.R.I.D.A.Y\n  Sovereign AI", style=f"bold {c}", justify="center"),
-            title="[bold cyan]FRIDAY[/bold cyan]",
-            border_style="cyan",
-            width=24,
-            padding=(1, 2),
-        )
-        parts = []
-        if left:
-            parts.append(left)
-        parts.append(RichText("─── ", style="dim gray37"))
-        parts.append(friday)
-        parts.append(RichText(" ───", style="dim gray37"))
-        if right:
-            parts.append(right)
-        chart.write(Columns(parts, padding=(0, 1)))
+        self.dream_engine = DreamEngine(self.agents, self.channels, self._dream_log)
+        self.dream_engine.start()
 
-        chart.write(RichText("       │         │         │       ", style="dim gray37"))
+        self.set_interval(3, self._tick)
 
-        bottom_agents = self.agents[5:8]
-        if bottom_agents:
-            chart.write(Columns(
-                [self._make_agent_node(a) for a in bottom_agents],
-                equal=True, padding=(0, 2),
-            ))
+    def _dream_log(self, msg: str):
+        try:
+            self.main_log.write(msg)
+            self._render_task_chats()
+        except Exception:
+            pass
 
-        extra = self.agents[8:]
-        if extra:
-            chart.write(Columns(
-                [self._make_agent_node(a) for a in extra],
-                equal=True, padding=(0, 2),
-            ))
+    def _tick(self):
+        self._render_circle()
+        self._render_main_chat()
+        self._render_agent_info()
+        self._render_task_chats()
+        self._save_state()
 
-    def _make_agent_node(self, agent: AgentNode) -> RichPanel:
-        sym = STATUS_SYMBOLS.get(agent.status, "○")
-        st_color = STATUS_COLORS.get(agent.status, "gray")
-        ag_color = AGENT_COLORS.get(agent.profile.name, "white")
-        task = f"\n[dim]{agent.current_task[:20]}[/dim]" if agent.current_task else ""
-        return RichPanel(
-            RichText(
-                f" {sym} {agent.profile.name}\n [{st_color}]{agent.status.capitalize()}[/{st_color}]{task}",
-                style=f"bold {ag_color}", justify="center",
-            ),
-            title=f"[{ag_color}]{agent.profile.role[:18]}[/{ag_color}]",
-            border_style=st_color if agent.status == AGENT_STATUS_WORKING else "gray37",
-            width=22, padding=(1, 1),
-        )
+    def _render_circle(self):
+        try:
+            self.circle.render_agents(self.agents, self._connections)
+        except Exception:
+            pass
 
-    def _render_agent_list(self):
-        lst = self.query_one("#agent-list", ListView)
-        lst.clear()
-        for a in self.agents:
-            sym = STATUS_SYMBOLS.get(a.status, "○")
-            color = STATUS_COLORS.get(a.status, "gray")
-            task = f"\n  [dim]{a.current_task[:25]}[/dim]" if a.current_task else ""
-            ag_color = AGENT_COLORS.get(a.profile.name, "white")
-            lst.append(ListItem(
-                Static(f"[{color}]{sym}[/{color}] [bold {ag_color}]{a.profile.name}[/bold {ag_color}]{task}")
-            ))
+    def _render_main_chat(self):
+        try:
+            ch = self.channels.get("main")
+            if not ch:
+                return
+            recent = ch.messages[-30:]
+            # Only update if new messages
+            if hasattr(self, '_last_msg_count') and self._last_msg_count == len(ch.messages):
+                return
+            self._last_msg_count = len(ch.messages)
+            log = self.main_log
+            log.clear()
+            for msg in recent[-20:]:
+                sender = msg["from"]
+                text = msg["text"]
+                if sender == "system":
+                    log.write(f"[dim]{text}[/dim]")
+                    continue
+                agent = self.agents.get(sender)
+                color = agent.color if agent else "white"
+                ts = msg.get("time", "")[11:16] if msg.get("time") else ""
+                mention_fmt = text
+                import re
+                mention_fmt = re.sub(r'@(\w+)', r'[bold yellow]@\1[/bold yellow]', mention_fmt)
+                log.write(f"[dim]{ts}[/dim] [bold {color}]{sender}[/bold {color}]: {mention_fmt}")
+        except Exception:
+            pass
 
-    def _update_friday_status(self):
-        w = self.query_one("#friday-status")
-        sym = STATUS_SYMBOLS.get(self._friday_status, "●")
-        color = STATUS_COLORS.get(self._friday_status, "green")
-        w.update(f"[{color}]{sym}[/{color}] {self._friday_status.capitalize()}")
+    def _render_agent_info(self):
+        try:
+            if not self._selected_agent:
+                return
+            agent = self.agents.get(self._selected_agent)
+            if not agent:
+                return
+            lines = []
+            lines.append(f"[bold {agent.color}]{agent.emoji} {agent.name}[/bold {agent.color}]")
+            lines.append(f"  {agent.role}")
+            lines.append(f"  Status: [{STATUS_COLORS.get(agent.status, 'gray')}]{agent.status}[/]")
+            lines.append(f"  Mood: {agent.mood}")
+            lines.append(f"  Task: {agent.current_task or 'None'}")
+            lines.append("")
+            lines.append("[bold]Personality:[/bold]")
+            lines.append(f"  {agent.personality}")
+            lines.append("")
+            lines.append("[bold]Chats:[/bold]")
+            for ch_name in agent.channels:
+                ch = self.channels.get(ch_name)
+                if ch:
+                    lines.append(f"  \u2192 {ch.name} ({ch.type})")
+            lines.append("")
+            best_rel = sorted(agent.relationships.items(), key=lambda x: x[1]["friendship"], reverse=True)[:3]
+            if best_rel:
+                lines.append("[bold]Close relationships:[/bold]")
+                for rname, rdata in best_rel:
+                    heart = "\u2764" if rdata["friendship"] > 70 else "\ud83e\udd1d" if rdata["friendship"] > 40 else "\ud83e\udd37"
+                    lines.append(f"  {heart} {rname}: {rdata['friendship']}/100 ({rdata['interactions']} chats)")
+            lines.append("")
+            if agent.dream_log:
+                lines.append("[bold]Recent thoughts:[/bold]")
+                for thought in agent.dream_log[-3:]:
+                    lines.append(f"  [dim]{thought[:60]}[/dim]")
+            self.agent_detail.update("\n".join(lines))
+        except Exception:
+            pass
 
-    def _render_chat(self):
-        chat = self.query_one("#chat-log", RichLog)
-        chat.clear()
-        chat.write(RichText(f"Townhall — #{self._current_channel}", style="bold cyan"))
-        for msg in self._messages:
-            ts = msg.get("ts", "")
-            sender = msg.get("sender", "")
-            content = msg.get("content", "")
-            kind = msg.get("kind", "message")
-            if kind == "system":
-                chat.write(RichText(f"  {ts}  {content}", style="dim gray"))
-            elif kind == "mention":
-                chat.write(RichText(f"  {ts}  @{sender}: {content}", style="bold yellow"))
-            else:
-                c = "cyan" if sender == "FRIDAY" else "green"
-                chat.write(RichText(f"  {ts}  [{c}]{sender}[/{c}]: {content}", style="white"))
+    def _render_task_chats(self):
+        try:
+            self.task_container.remove_children()
+            task_channels = [c for c in self.channels.values()
+                             if c.type == "task" and c.active and c.messages]
+            for ch in task_channels:
+                expanded = self._expanded_task == ch.name
+                marker = "\u25bc" if expanded else "\u25b6"
+                color = "#FFD700" if expanded else "#686898"
+                header = Static(
+                    f"[bold {color}]{marker} {ch.name}[/bold {color}]  [dim]({', '.join(ch.participants)})[/dim]"
+                )
+                header._channel_name = ch.name
+                header.classes = "task-header"
+                self.task_container.mount(header)
+                msg_limit = 100 if expanded else 10
+                log = RichLog(highlight=True, markup=True, max_lines=msg_limit)
+                log.classes = "chat-msg"
+                msgs = ch.messages[-msg_limit:]
+                for msg in msgs:
+                    if msg["from"] == "system":
+                        log.write(f"[dim]{msg['text']}[/dim]")
+                        continue
+                    agent = self.agents.get(msg["from"])
+                    color = agent.color if agent else "white"
+                    log.write(f"[bold {color}]{msg['from']}[/bold {color}]: {msg['text'][:200]}")
+                self.task_container.mount(log)
+                if expanded and len(ch.messages) > 100:
+                    self.task_container.mount(
+                        Static(f"[dim]... {len(ch.messages) - 100} more messages[/dim]")
+                    )
+        except Exception:
+            pass
 
-    def _add_message(self, sender: str, content: str, kind: str = "message"):
-        self._messages.append({
-            "ts": datetime.now().strftime("%H:%M"),
-            "sender": sender,
-            "content": content,
-            "kind": kind,
-        })
-        self._render_chat()
+    def action_clear(self):
+        self.main_log.clear()
+        ch = self.channels.get("main")
+        if ch:
+            ch.messages = []
 
-    def on_input_submitted(self, event: Input.Submitted):
-        text = event.value.strip()
+    def action_expand(self):
+        self._fullscreen = not self._fullscreen
+        right = self.query_one("#right")
+        right.set_class(self._fullscreen, "fullscreen")
+        if self._fullscreen:
+            self.main_log.write("[dim]Fullscreen mode. Ctrl+E to collapse.[/dim]")
+
+    def action_refresh(self):
+        self._render_circle()
+
+    def handle_message(self, text: str):
+        ts = datetime.datetime.now().strftime("%H:%M")
+        text = text.strip()
+
         if not text:
             return
 
-        inp = self.query_one("#chat-input", Input)
-
-        if "@" in text:
-            mentioned = [a.profile.name for a in self.agents
-                         if f"@{a.profile.name.lower()}" in text.lower()]
-            if mentioned:
-                for name in mentioned:
-                    self._add_message(f"@{name}", text, "mention")
-                inp.clear()
-                self._save_state()
-                return
-
+        # Commands
         if text.startswith("/"):
-            parts = text[1:].split()
-            cmd = parts[0].lower()
-            args = parts[1:]
-
-            if cmd == "join" and args:
-                self._current_channel = args[0]
-                self._render_chat()
-            elif cmd == "agents":
-                names = "\n".join(f"  @{a.profile.name} — {a.profile.role}" for a in self.agents)
-                self._add_message("SYSTEM", f"Available agents:\n{names}")
-            elif cmd == "task" and len(args) >= 2:
-                aname = args[0]
-                task = " ".join(args[1:])
-                for a in self.agents:
-                    if a.profile.name.lower() == aname.lower():
-                        a.current_task = task
-                        a.status = AGENT_STATUS_WORKING
-                        self._render_conference()
-                        self._render_agent_list()
-                        self._add_message("SYSTEM", f"Task assigned to @{aname}: {task}")
-                        self._save_state()
-                        break
-            elif cmd == "clear":
-                self._messages.clear()
-                self._render_chat()
-            elif cmd == "help":
-                self._add_message("SYSTEM",
-                    "/join <channel> — Switch channel\n"
-                    "/task <agent> <desc> — Assign task\n"
-                    "/agents — List agents\n"
-                    "/clear — Clear chat\n"
-                    "/help — This help"
-                )
-
-            inp.clear()
+            self._handle_command(text)
             return
 
-        self._add_message("USER", text)
-        self._save_state()
-        inp.clear()
+        # @mentions in any text
+        self._handle_mention_text(text)
+
+        # Send to main chat
+        ch = self.channels.get("main")
+        if ch:
+            ch.add_message("User", text)
+            self.main_log.write(f"[dim]{ts}[/dim] [bold green]You[/bold green]: {text}")
+            self._render_main_chat()
+
+            # FRIDAY responds if in main chat
+            friday = self.agents.get("FRIDAY")
+            if friday and "main" in friday.channels:
+                reply = self._generate_user_response(text)
+                ch.add_message("FRIDAY", reply)
+                self.main_log.write(f"[dim]{ts}[/dim] [bold cyan]FRIDAY[/bold cyan]: {reply}")
+                self._render_main_chat()
+
+    def _handle_command(self, text: str):
+        ts = datetime.datetime.now().strftime("%H:%M")
+        cmd = text[1:].strip().split(maxsplit=2)
+        if not cmd:
+            return
+
+        main_cmd = cmd[0].lower()
+
+        if main_cmd == "clear":
+            self.action_clear()
+            return
+
+        if main_cmd == "help":
+            self.main_log.write(f"  {ts}  Commands: /info <agent>, /agents, /task <agent> <desc>, /create_chat <name> <agents...>, /clear, /help")
+            self.main_log.write(f"  {ts}  Mention: @agent or @everyone to ping")
+            return
+
+        if main_cmd == "agents":
+            for a in self.agents.values():
+                sc = STATUS_COLORS.get(a.status, "gray")
+                sd = STATUS_DOTS.get(a.status, "\u25cb")
+                self.main_log.write(f"  [{sc}]{sd}[/{sc}] [bold {a.color}]{a.name:8}[/bold {a.color}] [dim]{a.role}[/dim]")
+            return
+
+        if main_cmd == "info" and len(cmd) >= 2:
+            target = cmd[1].upper()
+            if target in self.agents:
+                self._selected_agent = target
+                self._render_agent_info()
+                self.main_log.write(f"  {ts}  Showing info for [bold]{target}[/bold]")
+            else:
+                self.main_log.write(f"  {ts}  [red]Unknown: {target}[/red]")
+            return
+
+        if main_cmd == "task" and len(cmd) >= 2:
+            parts = text[1:].strip().split(maxsplit=2)
+            if len(parts) >= 3:
+                target = parts[1].upper()
+                desc = parts[2]
+                if target in self.agents:
+                    self._assign_task(target, desc)
+                else:
+                    self.main_log.write(f"  {ts}  [red]Unknown agent: {target}[/red]")
+            else:
+                self.main_log.write(f"  {ts}  Usage: /task <agent> <description>")
+            return
+
+        if main_cmd == "create_chat" and len(cmd) >= 3:
+            parts = text[1:].strip().split(maxsplit=2)
+            if len(parts) >= 3:
+                chat_name = parts[1]
+                agent_names = [a.strip().upper() for a in parts[2].split(",")]
+                valid = [a for a in agent_names if a in self.agents]
+                if len(valid) >= 2:
+                    self._create_task_chat(chat_name, valid)
+                else:
+                    self.main_log.write(f"  {ts}  [red]Need 2+ valid agents[/red]")
+            return
+
+        self.main_log.write(f"  {ts}  [red]Unknown: {text}[/red]")
+
+    def _handle_mention_text(self, text: str):
+        import re
+        mentions = re.findall(r'@(\w+)', text)
+        for name in mentions:
+            name_upper = name.upper()
+            if name_upper == "EVERYONE":
+                self.main_log.write(f"[bold yellow]\u23f0 @everyone ping![/bold yellow]")
+                for agent in self.agents.values():
+                    if agent.name != "FRIDAY" and not agent.is_away and random.random() > FREE_WILL_IGNORE_CHANCE:
+                        self.main_log.write(f"[dim]{agent.name} acknowledged[/dim]")
+            elif name_upper in self.agents:
+                agent = self.agents[name_upper]
+                self.main_log.write(f"[bold yellow]\u23f0 @{agent.name} pinged![/bold yellow]")
+                if not agent.is_away and random.random() > FREE_WILL_IGNORE_CHANCE:
+                    ch = self.channels.get("main")
+                    if ch:
+                        reply = f"@{text.split('@')[0].strip() or 'someone'} I'm here. What's up?"
+                        ch.add_message(agent.name, reply)
+                        self.main_log.write(f"[bold {agent.color}]{agent.name}[/bold {agent.color}]: {reply}")
+
+    def _assign_task(self, agent_name: str, desc: str):
+        ts = datetime.datetime.now().strftime("%H:%M")
+        agent = self.agents.get(agent_name)
+        if not agent:
+            self.main_log.write(f"  {ts}  [red]Unknown: {agent_name}[/red]")
+            return
+
+        agent.set_status("working", desc)
+        agent.goals.append(desc)
+
+        # Check if another agent has a similar task
+        similar = []
+        for a in self.agents.values():
+            if a.name != agent_name and a.current_task and (
+                any(w in a.current_task.lower() for w in desc.lower().split()[:3])
+            ):
+                similar.append(a.name)
+
+        ch = self.channels.get("main")
+        if ch:
+            ch.add_message("FRIDAY", f"@{agent_name} assigned: {desc}")
+            self.main_log.write(f"  {ts}  [bold cyan]FRIDAY[/bold cyan] \u2192 [bold]{agent_name}[/bold]: {desc}")
+
+        # If similar tasks found, create a task chat
+        if similar:
+            chat_name = f"task-{agent_name.lower()}-{'-'.join(s.lower() for s in similar)}"
+            participants = [agent_name] + similar
+            if chat_name not in self.channels:
+                self._create_task_chat(chat_name, participants)
+                self.main_log.write(f"  {ts}  [bold green]\ud83d\udd17 Created task chat: {chat_name}[/bold green]")
+                ch.add_message("FRIDAY", f"@{' @'.join(participants)} you're grouped in {chat_name} for collaboration.")
+                self.main_log.write(f"  {ts}  [bold cyan]FRIDAY[/bold cyan]: @{' @'.join(participants)} grouped for {desc}")
+
+    def _create_task_chat(self, name: str, participants: list[str]):
+        ch = ChatChannel(name, "task", f"Collaboration: {', '.join(participants)}")
+        ch.participants = participants
+        ch.add_message("system", f"Task chat created. Participants: {', '.join(participants)}")
+        for p in participants:
+            agent = self.agents.get(p)
+            if agent:
+                agent.channels.append(name)
+                agent.set_status("working", f"In task: {name}")
+        self.channels[name] = ch
+        self._connections.append((participants[0], participants[1] if len(participants) > 1 else participants[0]))
+        self._render_task_chats()
+        return ch
+
+    def _generate_user_response(self, text: str) -> str:
+        text_lower = text.lower()
+        if "status" in text_lower:
+            statuses = ", ".join(f"{a.name}: {a.status}" for a in self.agents.values())
+            return f"All agents accounted for. {statuses}"
+        if "agent" in text_lower or "who" in text_lower:
+            names = ", ".join(a.name for a in self.agents.values() if a.name != "FRIDAY")
+            return f"Everyone's here: {names}"
+        if "task" in text_lower or "assign" in text_lower:
+            busy = [a for a in self.agents.values() if a.current_task]
+            if busy:
+                return f"Active: {', '.join(f'{a.name}: {a.current_task}' for a in busy[:3])}"
+            return "All agents idle. Ready for assignments."
+        if "chat" in text_lower or "talk" in text_lower:
+            return "Main channel is active. Agents are chatting. Want me to join or assign task groups?"
+        responses = [
+            "On it. Let me check with the team.",
+            "Acknowledged. Agents are on standby.",
+            "I'll delegate accordingly. Status nominal.",
+            "Team's ready whenever you need them.",
+            "I hear you. Want me to pull anyone specific?",
+        ]
+        return random.choice(responses)
+
+    def _load_state(self) -> dict | None:
+        try:
+            if TOWNHALL_STATE_PATH.exists():
+                return json.loads(TOWNHALL_STATE_PATH.read_text())
+        except Exception:
+            return None
 
     def _save_state(self):
         try:
-            os.makedirs(os.path.dirname(TOWNHALL_STATE_PATH), exist_ok=True)
-            with open(TOWNHALL_STATE_PATH, "w") as f:
-                json.dump({
-                    "agents": [a.to_dict() for a in self.agents],
-                    "current_channel": self._current_channel,
-                    "friday_status": self._friday_status,
-                }, f, indent=2)
+            TOWNHALL_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            data = {name: agent.to_dict() for name, agent in self.agents.items()}
+            data["_updated"] = datetime.datetime.now().isoformat()
+            data["_connections"] = self._connections
+            TOWNHALL_STATE_PATH.write_text(json.dumps(data, indent=2))
+            # Save chats
+            chats = {name: ch.to_dict() for name, ch in self.channels.items()}
+            TOWNHALL_CHATS_PATH.write_text(json.dumps(chats, indent=2))
         except Exception:
             pass
 
-    def _load_state(self):
+    def _load_chats(self) -> dict | None:
         try:
-            if not os.path.exists(TOWNHALL_STATE_PATH):
-                return
-            with open(TOWNHALL_STATE_PATH) as f:
-                data = json.load(f)
-            for saved in data.get("agents", []):
-                name = saved.get("name")
-                for a in self.agents:
-                    if a.profile.name == name:
-                        a.status = saved.get("status", AGENT_STATUS_IDLE)
-                        a.current_task = saved.get("current_task", "")
-                        a.message_count = saved.get("message_count", 0)
-            self._current_channel = data.get("current_channel", "general")
-            self._friday_status = data.get("friday_status", AGENT_STATUS_IDLE)
+            if TOWNHALL_CHATS_PATH.exists():
+                return json.loads(TOWNHALL_CHATS_PATH.read_text())
+        except Exception:
+            return None
+
+    def on_click(self, event):
+        channel_name = getattr(event.widget, '_channel_name', None)
+        if channel_name and channel_name in self.channels:
+            if self._expanded_task == channel_name:
+                self._expanded_task = None
+            else:
+                self._expanded_task = channel_name
+            self._render_task_chats()
+            return
+        self._handle_circle_click(event)
+
+    def on_key(self, event):
+        if event.key == "escape" and self._fullscreen:
+            self.action_expand()
+            event.prevent_default()
+
+    def _handle_circle_click(self, event):
+        """Click on circle agents to select them."""
+        try:
+            widget = self.query_one("#circle-view")
+            if event.widget == widget:
+                # Map click to agent positions
+                y = abs(event.y - widget.region.y) if hasattr(event, 'y') else 0
+                x = abs(event.x - widget.region.x) if hasattr(event, 'x') else 0
+                # Simple mapping: click zones for agents
+                if x < 10 and y < 5:
+                    self._selected_agent = "SENTRY"
+                elif x > 40 and y < 5:
+                    self._selected_agent = "ECHO"
+                elif 15 < x < 30 and y < 5:
+                    self._selected_agent = "FORGE"
+                elif x < 10 and y > 8:
+                    self._selected_agent = "JARVIS"
+                elif x > 40 and y > 8:
+                    self._selected_agent = "LORE"
+                elif x < 15 and 5 < y < 8:
+                    self._selected_agent = "NOVA"
+                elif 15 < x < 20 and 5 < y < 8:
+                    self._selected_agent = "ATLAS"
+                elif 30 < x < 35 and 5 < y < 8:
+                    self._selected_agent = "AEGIS"
+                elif x > 35 and 5 < y < 8:
+                    self._selected_agent = "VERSE"
+                elif 25 < x < 31 and 5 < y < 8:
+                    self._selected_agent = "CRUX"
+                else:
+                    self._selected_agent = "FRIDAY"
+                self._render_agent_info()
+                ts = datetime.datetime.now().strftime("%H:%M")
+                self.main_log.write(f"  {ts}  [dim]Selected: {self._selected_agent}[/dim]")
         except Exception:
             pass
 
-    def action_refresh(self):
-        self._render_conference()
-        self._render_agent_list()
-        self._render_chat()
-        self._update_friday_status()
-
-    def update_agent_status(self, name: str, status: str, task: str = ""):
-        for a in self.agents:
-            if a.profile.name.lower() == name.lower():
-                a.status = status
-                if task:
-                    a.current_task = task
-                a.last_seen = datetime.now()
-                self._render_conference()
-                self._render_agent_list()
-                self._save_state()
-                return
-
-    def set_friday_status(self, status: str):
-        self._friday_status = status
-        self._update_friday_status()
-        self._render_conference()
+    def action_townhall(self):
+        pass  # Already here
 
 
-def launch_townhall() -> dict:
-    """Launch townhall in a new terminal window."""
-    script = [
-        sys.executable or "python",
-        "-c",
-        "import asyncio; from friday.townhall_app import TownhallApp; TownhallApp().run()",
-    ]
+def launch_townhall():
+    """Launch Townhall in a separate process."""
     try:
+        script = str(Path(__file__).resolve())
         proc = subprocess.Popen(
-            ["cmd.exe", "/c", "start", "Townhall", "/wait", *script],
-            shell=True,
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            [sys.executable, "-c", f"""
+import sys; sys.path.insert(0, r'{os.path.dirname(os.path.dirname(__file__))}')
+from friday.townhall_app import TownhallApp
+TownhallApp().run()
+"""],
+            creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
         )
         return {"success": True, "pid": proc.pid}
     except Exception as e:
@@ -448,3 +636,4 @@ def launch_townhall() -> dict:
 
 if __name__ == "__main__":
     TownhallApp().run()
+

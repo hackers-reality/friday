@@ -1,0 +1,251 @@
+{
+  "timestamp": "2026-06-08T23:09:31.127028",
+  "results": [
+    {
+      "model": "moonshotai/kimi-k2.6",
+      "status": "success",
+      "quality": {
+        "total_ms": 6157,
+        "response_words": 98,
+        "has_bell": false,
+        "has_analogy": true,
+        "has_epr": false,
+        "has_computing": false,
+        "input_tokens": 131,
+        "output_tokens": 130,
+        "error": null
+      },
+      "speed": {
+        "ttft_ms": 1328,
+        "total_ms": 1328,
+        "tokens": 1,
+        "tokens_per_sec": 0.75,
+        "error": null
+      }
+    },
+    {
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "status": "success",
+      "quality": {
+        "total_ms": 4297,
+        "response_words": 623,
+        "has_bell": true,
+        "has_analogy": true,
+        "has_epr": true,
+        "has_computing": false,
+        "input_tokens": 139,
+        "output_tokens": 1024,
+        "error": null
+      },
+      "speed": {
+        "ttft_ms": 640,
+        "total_ms": 2484,
+        "tokens": 37,
+        "tokens_per_sec": 14.9,
+        "error": null
+      }
+    },
+    {
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "status": "error",
+      "error": "Timeout (180s)"
+    },
+    {
+      "model": "minimaxai/minimax-m2.7",
+      "status": "error",
+      "error": "'content'"
+    },
+    {
+      "model": "google/gemma-4-31b-it",
+      "status": "error",
+      "error": "Timeout (180s)"
+    },
+    {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "status": "success",
+      "quality": {
+        "total_ms": 25734,
+        "response_words": 706,
+        "has_bell": true,
+        "has_analogy": true,
+        "has_epr": true,
+        "has_computing": false,
+        "input_tokens": 137,
+        "output_tokens": 1024,
+        "error": null
+      },
+      "speed": {
+        "ttft_ms": 953,
+        "total_ms": 11608,
+        "tokens": 30,
+        "tokens_per_sec": 2.58,
+        "error": null
+      }
+    },
+    {
+      "model": "deepseek-ai/deepseek-v4-flash",
+      "status": "error",
+      "error": "Timeout (180s)"
+    },
+    {
+      "model": "qwen/qwen3.5-122b-a10b",
+      "status": "success",
+      "quality": {
+        "total_ms": 16219,
+        "response_words": 713,
+        "has_bell": true,
+        "has_analogy": true,
+        "has_epr": false,
+        "has_computing": true,
+        "input_tokens": 137,
+        "output_tokens": 1024,
+        "error": null
+      },
+      "speed": {
+        "ttft_ms": 1218,
+        "total_ms": 1218,
+        "tokens": 0,
+        "tokens_per_sec": 0.0,
+        "error": null
+      }
+    },
+    {
+      "model": "qwen/qwen3-next-80b-a3b-instruct",
+      "status": "success",
+      "quality": {
+        "total_ms": 24094,
+        "response_words": 699,
+        "has_bell": true,
+        "has_analogy": true,
+        "has_epr": true,
+        "has_computing": true,
+        "input_tokens": 131,
+        "output_tokens": 1024,
+        "error": null
+      },
+      "speed": {
+        "ttft_ms": 30217,
+        "total_ms": 38171,
+        "tokens": 43,
+        "tokens_per_sec": 1.13,
+        "error": null
+      }
+    },
+    {
+      "model": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+      "status": "error",
+      "error": "'NoneType' object has no attribute 'split'"
+    },
+    {
+      "model": "meta/llama-4-maverick-17b-128e-instruct",
+      "status": "success",
+      "quality": {
+        "total_ms": 53375,
+        "response_words": 567,
+        "has_bell": true,
+        "has_analogy": true,
+        "has_epr": false,
+        "has_computing": true,
+        "input_tokens": 126,
+        "output_tokens": 697,
+        "error": null
+      },
+      "speed": {
+        "ttft_ms": 39734,
+        "total_ms": 44796,
+        "tokens": 326,
+        "tokens_per_sec": 7.28,
+        "error": null
+      }
+    },
+    {
+      "model": "stepfun-ai/step-3.7-flash",
+      "status": "error",
+      "error": "'NoneType' object has no attribute 'split'"
+    },
+    {
+      "model": "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+      "status": "error",
+      "error": "HTTP 404"
+    },
+    {
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "status": "success",
+      "quality": {
+        "total_ms": 64875,
+        "response_words": 574,
+        "has_bell": true,
+        "has_analogy": true,
+        "has_epr": true,
+        "has_computing": false,
+        "input_tokens": 138,
+        "output_tokens": 1024,
+        "error": null
+      },
+      "speed": {
+        "ttft_ms": 32141,
+        "total_ms": 32687,
+        "tokens": 17,
+        "tokens_per_sec": 0.52,
+        "error": null
+      }
+    },
+    {
+      "model": "nvidia/llama-3.1-nemotron-70b-instruct",
+      "status": "error",
+      "error": "HTTP 404"
+    },
+    {
+      "model": "mistralai/mistral-large-3-675b-instruct-2512",
+      "status": "error",
+      "error": "Timeout (180s)"
+    },
+    {
+      "model": "mistralai/mistral-small-4-119b-2603",
+      "status": "error",
+      "error": "Timeout (120s)"
+    },
+    {
+      "model": "mistralai/mistral-nemotron",
+      "status": "error",
+      "error": "HTTP 400"
+    },
+    {
+      "model": "deepseek-ai/deepseek-v4-pro",
+      "status": "error",
+      "error": "Timeout (120s)"
+    },
+    {
+      "model": "qwen/qwen3-coder-480b-a35b-instruct",
+      "status": "success",
+      "quality": {
+        "total_ms": 31375,
+        "response_words": 647,
+        "has_bell": true,
+        "has_analogy": true,
+        "has_epr": true,
+        "has_computing": true,
+        "input_tokens": 130,
+        "output_tokens": 864,
+        "error": null
+      },
+      "speed": {
+        "ttft_ms": 1297,
+        "total_ms": 11422,
+        "tokens": 182,
+        "tokens_per_sec": 15.93,
+        "error": null
+      }
+    }
+  ],
+  "ranking": [
+    "qwen/qwen3-coder-480b-a35b-instruct",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "qwen/qwen3-next-80b-a3b-instruct",
+    "qwen/qwen3.5-397b-a17b",
+    "meta/llama-4-maverick-17b-128e-instruct",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "qwen/qwen3.5-122b-a10b",
+    "moonshotai/kimi-k2.6"
+  ]
+}

@@ -286,7 +286,7 @@ def get_calendar_service(auto_auth: bool = True):
 
 def fetch_calendar_events(max_results: int = 10, days_ahead: int = 7) -> str:
     """Fetch upcoming calendar events."""
-    service, error = get_calendar_service()
+    service, error = get_calendar_service(auto_auth=False)
     if error:
         return error
     
@@ -324,7 +324,7 @@ def fetch_calendar_events(max_results: int = 10, days_ahead: int = 7) -> str:
 
 def sync_calendar_to_goals() -> str:
     """Sync calendar events to goals (for classes, exams)."""
-    service, error = get_calendar_service()
+    service, error = get_calendar_service(auto_auth=False)
     if error:
         return error
     

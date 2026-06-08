@@ -214,7 +214,8 @@ async def github_search_users(
     try:
         from github import Github
 
-        g = Github(_get_token())
+        token = _get_token()
+        g = Github(token) if token else Github()
         users = await asyncio.get_event_loop().run_in_executor(
             None, lambda: list(g.search_users(query)[:limit])
         )

@@ -12,6 +12,7 @@ def get_manager():
     global _manager
     if _manager is None:
         _manager = OpencodeBridge()
+        _manager.start_server()
     return _manager
 
 def _format_agent(agent: SubAgent) -> dict:
@@ -50,11 +51,14 @@ def spawn_agent(name: str, task: str, role: str = "general") -> dict:
             # Delegate via orchestrator (non-blocking if event loop present)
             result = run_delegate_sync(task, context={"requester": "agents_manager", "role": role}, preferred_agent=profile.agent_id)
             return {"name": profile.display_name, "id": profile.agent_id, "role": role, "status": "scheduled", "message": "Delegated via orchestrator", "result": result}
-    except Exception:
-        # Fall through to legacy OpencodeBridge
-        pass
+    except Exception as _orch_err:
+        import logging
+        logging.getLogger("agents_manager").warning(f"Orchestrator path failed, falling back to bridge: {_orch_err}")
 
-    bridge = get_manager()
+    try:
+        bridge = get_manager()
+    except Exception as e:
+        return {"error": f"Failed to get manager (opencode CLI not found or no Zen key): {e}"}
     try:
         agent = bridge.spawn_agent(name, task)
         agent.role = role

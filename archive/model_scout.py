@@ -1,9 +1,12 @@
-import os
+import os, sys
 from google import genai
 from dotenv import load_dotenv
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from friday.paths import get_env_path
 
 # Load credentials
-load_dotenv(dotenv_path="e:/open-interpreter/.env")
+load_dotenv(dotenv_path=str(get_env_path()))
 api_key = os.environ.get("GOOGLE_API_KEY")
 
 def list_and_verify_models():

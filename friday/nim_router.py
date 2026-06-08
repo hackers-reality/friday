@@ -13,29 +13,29 @@ import yaml
 
 _DEFAULT_MODEL_MAP: dict[str, list[str]] = {
     "code_gen": [
-        "nvidia/llama-3.1-nemotron-70b-instruct",
+        "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
     ],
     "image_analysis": [
-        "nvidia/neva-22b",
-        "microsoft/phi-3-vision-128k-instruct",
+        "meta/llama-3.2-11b-vision-instruct",
     ],
     "research": [
-        "meta/llama-3.1-405b-instruct",
+        "big-pickle",
+        "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
     ],
     "summarization": [
-        "mistralai/mixtral-8x22b-instruct-v0.1",
+        "big-pickle",
+        "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
     ],
     "reasoning": [
-        "minimax/minimax-01",
-        "nvidia/nemotron-4-340b-instruct",
-        "meta/llama-3.1-405b-instruct",
+        "deepseek-ai/deepseek-v4-flash",
+        "meta/llama-3.3-70b-instruct",
     ],
     "general": [
+        "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
-        "nvidia/llama-3.1-nemotron-70b-instruct",
     ],
 }
 

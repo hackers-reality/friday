@@ -22,6 +22,7 @@ def _load_tools():
     """Build tool declarations and map by inspecting tools_flat.py.
     
     This is called lazily — only when we connect to Gemini.
+    Auto-discovers all public functions via __all__.
     """
     global _GEMINI_TOOLS, _TOOL_MAP
     if _GEMINI_TOOLS is not None:
@@ -29,33 +30,35 @@ def _load_tools():
 
     from google.genai import types as _t
     import friday.tools_flat as _tf
+    import inspect
 
-    # Discover public callable functions
+    _PY2GEMINI = {
+        str: "STRING",
+        int: "INTEGER",
+        float: "NUMBER",
+        bool: "BOOLEAN",
+        list: "ARRAY",
+        dict: "OBJECT",
+        bytes: "STRING",
+    }
+
+    def _to_gtype(annotation):
+        """Map a Python type annotation to a Gemini Schema type string."""
+        origin = getattr(annotation, "__origin__", None)
+        if origin is not None:
+            return _PY2GEMINI.get(origin, "STRING")
+        if isinstance(annotation, type):
+            return _PY2GEMINI.get(annotation, "STRING")
+        return "STRING"
+
     declarations = []
     tool_map = {}
 
-    # Explicit list of safe tools to expose (ones with simple args)
-    # We introspect their __code__ to get arg count
-    import inspect
-
-    safe_tools = [
-        "get_time", "system_info", "system_cpu", "system_memory", "system_disk",
-        "web_search", "open_app", "close_app", "open_url",
-        "run_cmd", "safe_run_cmd",
-        "read_file", "write_file", "list_files", "find_files",
-        "memory_store", "memory_retrieve",
-        "spotify_play", "spotify_pause", "spotify_current", "spotify_next",
-        "stark_doctor", "stark_log",
-        "get_active_window", "list_running_apps",
-        "clock_tool", "status_check",
-        "clipboard_get", "clipboard_set",
-        "take_snapshot", "recall_snapshot",
-        "send_notification", "get_pending_notifications", "clear_notifications",
-        "goals_tool_handler", "calendar_tool_handler",
-        "message_channel_tool", "dream_tool", "scheduler_tool",
+    tool_names = getattr(_tf, "__all__", None) or [
+        n for n in dir(_tf) if not n.startswith("_") and callable(getattr(_tf, n))
     ]
 
-    for name in safe_tools:
+    for name in tool_names:
         fn = getattr(_tf, name, None)
         if fn is None or not callable(fn):
             continue
@@ -63,12 +66,16 @@ def _load_tools():
             sig = inspect.signature(fn)
             params = {}
             required = []
-            for pname, param in sig.parameters.items():
-                if pname == "self" or pname == "cls":
+            for pname, p in sig.parameters.items():
+                if pname in ("self", "cls"):
                     continue
-                ptype = "STRING"
-                required.append(pname)
-                params[pname] = {"type": ptype, "description": pname}
+                if p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                    continue
+                annotation = p.annotation if p.annotation is not inspect.Parameter.empty else str
+                gtype = _to_gtype(annotation)
+                params[pname] = {"type": gtype, "description": pname}
+                if p.default is inspect.Parameter.empty:
+                    required.append(pname)
 
             decl = _t.FunctionDeclaration(
                 name=name,
@@ -105,9 +112,22 @@ def _build_session_config(tools: list, resume_handle: str | None = None):
     cfg = dict(
         response_modalities=["AUDIO"],
         system_instruction=(
-            f"You are FRIDAY, a sovereign AI assistant for {os.environ.get('USERNAME', 'the user')}."
+            "<identity>"
+            f"\nYou are FRIDAY, a sovereign AI assistant for {os.environ.get('USERNAME', 'the user')}."
             "\nYou control the user's PC. Communicate naturally and concisely."
-            "\nWhen using tools, explain what you're doing."
+            "\nWhen using tools, explain what you're doing. Never use emojis."
+            "\n</identity>"
+            "\n<skills>"
+            "\nYou have access to document generation skills at skills/SKILLS.md."
+            "\nBefore creating any document file, call read_skill_tool(name='docx'|'pptx'|'pdf'|'xlsx'|'svg'|'chart') to read the expert instructions."
+            "\nTwo-phase workflow: RESEARCH FIRST (gather facts), BUILD SECOND (read skill then create)."
+            "\n</skills>"
+            "\n<behavior>"
+            "\n- Short responses. One or two sentences. No essays."
+            "\n- If the user sends 5+ messages without reply, you enter dreaming mode and open Townhall."
+            "\n- Use status_check() instead of 5 separate tools."
+            "\n- Glance at the desktop live stream when answering questions about the screen."
+            "\n</behavior>"
         ),
     )
     if tools:
@@ -127,10 +147,7 @@ async def run_gemini(app, tools):
         app.add_error("GOOGLE_API_KEY not set. Set it in .env or environment.")
         return
 
-    client = genai.Client(
-        api_key=api_key,
-        http_options=_types.HttpOptions(api_version="v1alpha1"),
-    )
+    client = genai.Client(api_key=api_key)
 
     reconnect = 0
     resume_handle = None

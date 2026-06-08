@@ -292,8 +292,14 @@ def import_from_gemini_workspace(data: Dict) -> Dict[str, Any]:
 # ─── ZIP Import ────────────────────────────────────────────
 
 _DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
-# Also check E:\downloads
-_E_DOWNLOADS = r"E:\downloads"
+# Also check alternative downloads directories
+_E_DOWNLOADS = None
+def _get_alt_downloads():
+    global _E_DOWNLOADS
+    if _E_DOWNLOADS is None:
+        from friday.paths import get_downloads_dir
+        _E_DOWNLOADS = str(get_downloads_dir())
+    return _E_DOWNLOADS
 
 
 def import_from_zip_file(zip_path: str) -> List[Dict[str, Any]]:
@@ -485,8 +491,9 @@ def import_exports(exports_dir: str = None) -> List[Dict[str, Any]]:
     else:
         if os.path.isdir(_DOWNLOADS_DIR):
             directories.append(_DOWNLOADS_DIR)
-        if os.path.isdir(_E_DOWNLOADS):
-            directories.append(_E_DOWNLOADS)
+        alt_dl = _get_alt_downloads()
+        if os.path.isdir(alt_dl) and alt_dl != _DOWNLOADS_DIR:
+            directories.append(alt_dl)
 
     seen_zips = set()
     for d in directories:
@@ -564,8 +571,9 @@ def import_from_memory_folder() -> List[Dict[str, Any]]:
     scan_dirs = [_RAW_IMPORTS_DIR, _MEMORY_DIR]
     if os.path.isdir(_DOWNLOADS_DIR):
         scan_dirs.append(_DOWNLOADS_DIR)
-    if os.path.isdir(_E_DOWNLOADS):
-        scan_dirs.append(_E_DOWNLOADS)
+    alt_dl = _get_alt_downloads()
+    if os.path.isdir(alt_dl) and alt_dl != _DOWNLOADS_DIR:
+        scan_dirs.append(alt_dl)
 
     for d in scan_dirs:
         if not os.path.isdir(d):

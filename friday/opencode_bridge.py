@@ -15,8 +15,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 OPENCODE_ZEN_API_KEY = os.getenv("OPENCODE_ZEN_API_KEY", "")
+OPENCODE_ZEN_MODEL = os.getenv("OPENCODE_ZEN_MODEL", "big-pickle")
+NVIDIA_NIM_API_KEY = os.getenv("NVIDIA_NIM_API_KEY", "") or os.getenv("NVIDIA_API_KEY", "") or os.getenv("NIM_API_KEY", "")
+NVIDIA_API_BASE = os.getenv("NIM_API_BASE", "https://integrate.api.nvidia.com/v1")
+NVIDIA_MODEL = os.getenv("NVIDIA_SPAWN_MODEL", "meta/llama-3.1-8b-instruct")
 OPENCODE_SERVER_URL = os.getenv("OPENCODE_SERVER_URL", "http://localhost:4096")
 OPENCODE_SERVE_PORT = int(os.getenv("OPENCODE_SERVE_PORT", "4096"))
+ZEN_API_URL = os.getenv("ZEN_API_URL", "https://opencode.ai/zen/v1")
 
 @dataclass
 class SubAgent:
@@ -56,13 +61,26 @@ class OpencodeBridge:
         self.agents: dict[str, SubAgent] = {}
         self._event_listeners: list[Callable] = []
         self._lock = threading.Lock()
-        self._use_zen = bool(OPENCODE_ZEN_API_KEY)
+        self._zen_key: str = ""
+        self._nvidia_key: str = ""
+        self._use_zen = False
+        self._use_nvidia = False
+        self._spawn_counter = 0
         self._sse_thread: Optional[threading.Thread] = None
+        self._refresh_key()
+
+    def _refresh_key(self):
+        """Re-read API keys from environment at runtime."""
+        self._zen_key = os.environ.get("OPENCODE_ZEN_API_KEY", "")
+        self._use_zen = bool(self._zen_key)
+        self._nvidia_key = os.environ.get("NVIDIA_NIM_API_KEY", "") or os.environ.get("NVIDIA_API_KEY", "") or os.environ.get("NIM_API_KEY", "")
+        self._use_nvidia = bool(self._nvidia_key)
 
     def start_server(self):
-        """Start opencode serve as background process (if not using Zen API)."""
-        if self._use_zen:
-            self.client = httpx.Client(base_url="https://opencode.ai/zen/v1")
+        """Start opencode serve as background process (if not using Zen or NVIDIA)."""
+        self._refresh_key()
+        if self._use_zen or self._use_nvidia:
+            self.client = httpx.Client(base_url=ZEN_API_URL)
             return
 
         try:
@@ -84,16 +102,24 @@ class OpencodeBridge:
             self.server_process.terminate()
             self.server_process = None
 
-    def spawn_agent(self, name: str, task: str, model: str = "opencode/big-pickle") -> SubAgent:
+    def spawn_agent(self, name: str, task: str, model: str = "") -> SubAgent:
         """
         Spawn a sub-agent to work on a task.
         Returns immediately with the agent's session info.
-        The agent works in the background — poll status or listen to events.
+        Round-robins between Zen API and NVIDIA NIM if both keys are available.
         """
-        if self._use_zen:
-            return self._spawn_zen_agent(name, task, model)
-        else:
+        if not self._use_zen and not self._use_nvidia:
             return self._spawn_server_agent(name, task, model)
+
+        # Round-robin between Zen and NVIDIA when both are available
+        use_nvidia = False
+        if self._use_zen and self._use_nvidia:
+            self._spawn_counter += 1
+            use_nvidia = (self._spawn_counter % 2 == 0)
+        elif self._use_nvidia:
+            use_nvidia = True
+
+        return self._spawn_cloud_agent(name, task, model, use_nvidia)
 
     def _spawn_server_agent(self, name: str, task: str, model: str) -> SubAgent:
         """Spawn via opencode serve REST API."""
@@ -169,8 +195,8 @@ class OpencodeBridge:
             for a in self.agents.values()
         ]
 
-    def _spawn_zen_agent(self, name: str, task: str, model: str) -> SubAgent:
-        """Spawn via Zen API Chat Completions (parallel via threading)."""
+    def _spawn_cloud_agent(self, name: str, task: str, model: str = "", use_nvidia: bool = False) -> SubAgent:
+        """Spawn via cloud API (Zen or NVIDIA NIM) in background thread."""
         agent_id = f"agent_{len(self.agents)}"
         agent = SubAgent(
             id=agent_id,
@@ -183,31 +209,18 @@ class OpencodeBridge:
         with self._lock:
             self.agents[agent.id] = agent
 
-        threading.Thread(target=self._run_zen_task, args=(agent, model), daemon=True).start()
+        threading.Thread(target=self._run_cloud_task, args=(agent, model, use_nvidia), daemon=True).start()
 
         return agent
 
-    def _run_zen_task(self, agent: SubAgent, model: str):
-        """Execute a Zen API call in background."""
+    def _run_cloud_task(self, agent: SubAgent, model: str = "", use_nvidia: bool = False):
+        """Execute a cloud API call in background — Zen API or NVIDIA NIM."""
         try:
-            resp = httpx.post(
-                "https://opencode.ai/zen/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENCODE_ZEN_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": f"You are {agent.name}, a sub-agent working for FRIDAY. Complete the assigned task and return results."},
-                        {"role": "user", "content": agent.task},
-                    ],
-                    "max_tokens": 128000,
-                },
-                timeout=600,
-            )
-            result = resp.json()
-            content = result["choices"][0]["message"]["content"]
+            self._refresh_key()
+            if use_nvidia:
+                content = self._call_nvidia(agent, model)
+            else:
+                content = self._call_zen(agent, model)
 
             with self._lock:
                 agent.status = "completed"
@@ -221,6 +234,74 @@ class OpencodeBridge:
                 agent.result = f"Error: {str(e)}"
                 agent.completed_at = datetime.now().isoformat()
                 self._notify_listeners(agent)
+
+    def _call_zen(self, agent: SubAgent, model: str = "") -> str:
+        """Call Zen API chat completions. Returns content string."""
+        model_name = model or OPENCODE_ZEN_MODEL
+        resp = httpx.post(
+            f"{ZEN_API_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self._zen_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model_name,
+                "messages": [
+                    {"role": "system", "content": f"You are {agent.name}, a sub-agent working for FRIDAY. Complete the assigned task and return results."},
+                    {"role": "user", "content": agent.task},
+                ],
+                "max_tokens": 128000,
+            },
+            timeout=600,
+        )
+        result = resp.json()
+        content = result["choices"][0]["message"]["content"]
+
+        # Retry once if content is empty (reasoning-only response)
+        if not content:
+            resp = httpx.post(
+                f"{ZEN_API_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self._zen_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": f"You are {agent.name}, a sub-agent working for FRIDAY."},
+                        {"role": "user", "content": agent.task},
+                        {"role": "assistant", "content": "I will provide a complete, detailed response without extra thinking tags."},
+                    ],
+                    "max_tokens": 128000,
+                },
+                timeout=600,
+            )
+            result = resp.json()
+            content = result["choices"][0]["message"]["content"] or ""
+
+        return content
+
+    def _call_nvidia(self, agent: SubAgent, model: str = "") -> str:
+        """Call NVIDIA NIM chat completions. Returns content string."""
+        model_name = model or NVIDIA_MODEL
+        resp = httpx.post(
+            f"{NVIDIA_API_BASE}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self._nvidia_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model_name,
+                "messages": [
+                    {"role": "system", "content": f"You are {agent.name}, a sub-agent working for FRIDAY. Complete the assigned task and return results."},
+                    {"role": "user", "content": agent.task},
+                ],
+                "max_tokens": 4096,
+            },
+            timeout=600,
+        )
+        result = resp.json()
+        return result["choices"][0]["message"]["content"]
 
     def on_event(self, callback: Callable):
         """Register an event listener for agent status changes."""

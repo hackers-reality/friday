@@ -77,14 +77,15 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
 
     # ── Document Processing ──
     ("friday.tools.doc_tools", "read_docx", "Read a Word document", {"path": {"type": "STRING", "description": "Path to .docx file"}}, ["path"]),
-    ("friday.tools.doc_tools", "create_docx", "Create a Word document from text", {"content": {"type": "STRING", "description": "Document content"}}, ["content"]),
+    ("friday.tools.doc_tools", "create_docx", "Create a Word document with optional sections: headings, paragraphs, bullet lists, numbered lists, tables (with rows), charts, and code blocks. Use 'sections' for rich content, 'content' for plain text.", {"content": {"type": "STRING", "description": "Plain text content (alternative to sections)"}, "sections": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"type": {"type": "STRING", "description": "Section type: heading, paragraph, bullet_list, numbered_list, table, chart, divider, code"}, "text": {"type": "STRING", "description": "Text content"}, "level": {"type": "INTEGER", "description": "Heading level for heading type (1-3)"}, "items": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "List items for bullet_list/numbered_list"}, "rows": {"type": "ARRAY", "items": {"type": "ARRAY", "items": {"type": "STRING"}}, "description": "Table rows"}, "chart_type": {"type": "STRING", "description": "Chart type: bar, hbar, grouped_bar, stacked_bar, line, multi_line, area, pie, donut, scatter, bubble, histogram, box, violin, heatmap, radar, candlestick, kmeans, contour, 3d_scatter, 3d_surface, 3d_bar"}, "data": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Chart data"}, "data2": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Secondary chart data (for grouped/stacked bars, multi-line, bubble Y, scatter Y, box/violin series 2, histogram bins, 3d_scatter Z)"}, "data3": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Tertiary chart data (bubble sizes, box/violin series 3, K-means n_clusters[0], 3d_surface Z)"}, "labels": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Axis/pie labels"}, "title": {"type": "STRING", "description": "Chart title"}, "xlabel": {"type": "STRING", "description": "X axis label"}, "ylabel": {"type": "STRING", "description": "Y axis label"}}}, "description": "Rich content sections"}}, None),
     ("friday.tools.doc_tools", "read_excel", "Read an Excel workbook", {"path": {"type": "STRING", "description": "Path to .xlsx file"}, "sheet": {"type": "STRING", "description": "Sheet name (default first sheet)"}}, ["path"]),
     ("friday.tools.doc_tools", "create_excel", "Create an Excel spreadsheet from data", {"data": {"type": "ARRAY", "items": {"type": "ARRAY", "items": {"type": "STRING"}}, "description": "2D array of data rows (each row is an array of cell values)"}, "headers": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Column headers (optional)"}}, ["data"]),
+    ("friday.tools.doc_tools", "create_xlsx_chart", "Create an Excel workbook with data sheets and embedded chart image sheets supporting all chart types", {"sections": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"type": {"type": "STRING", "description": "Section type: data (spreadsheet data) or chart (embedded chart image)"}, "name": {"type": "STRING", "description": "Sheet name"}, "headers": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Column headers (for data type)"}, "rows": {"type": "ARRAY", "items": {"type": "ARRAY", "items": {"type": "STRING"}}, "description": "Data rows (for data type)"}, "chart_type": {"type": "STRING", "description": "Chart type (for chart type)"}, "data": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Chart data"}, "data2": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Secondary chart data"}, "data3": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Tertiary chart data"}, "labels": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Chart labels"}, "title": {"type": "STRING", "description": "Chart title"}, "xlabel": {"type": "STRING", "description": "X axis label"}, "ylabel": {"type": "STRING", "description": "Y axis label"}}}, "description": "Sections for data sheets and chart sheets"}}, ["sections"]),
     ("friday.tools.doc_tools", "analyze_csv", "Analyze a CSV file with pandas", {"path": {"type": "STRING", "description": "Path to CSV file"}}, ["path"]),
     ("friday.tools.doc_tools", "read_pdf", "Extract text from a PDF", {"path": {"type": "STRING", "description": "Path to PDF file"}}, ["path"]),
-    ("friday.tools.doc_tools", "create_pdf", "Generate a PDF document", {"content": {"type": "STRING", "description": "Text content for the PDF"}}, ["content"]),
+    ("friday.tools.doc_tools", "create_pdf", "Generate a rich PDF document with sections: headings, paragraphs, tables, 20+ chart types (bar, grouped_bar, stacked_bar, line, multi_line, area, pie, donut, scatter, bubble, histogram, box, violin, heatmap, radar, candlestick, kmeans, contour, 3d_scatter, 3d_surface, 3d_bar), bullet lists, numbered lists, dividers, code blocks, images, captions. Supports up to 100+ pages.", {"sections": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"type": {"type": "STRING", "description": "section type: heading, paragraph, table, chart, bullets, numbered, divider, code, image"}, "text": {"type": "STRING", "description": "Text content for heading/paragraph/code"}, "level": {"type": "INTEGER", "description": "Heading level: 1, 2, or 3"}, "items": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Bullet/numbered items"}, "headers": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Table column headers"}, "rows": {"type": "ARRAY", "items": {"type": "ARRAY", "items": {"type": "STRING"}}, "description": "Table data rows"}, "caption": {"type": "STRING", "description": "Table caption"}, "chart_type": {"type": "STRING", "description": "Chart type: bar, hbar, grouped_bar, stacked_bar, line, multi_line, area, pie, donut, scatter, bubble, histogram, box, violin, heatmap, radar, candlestick, kmeans, contour, 3d_scatter, 3d_surface, 3d_bar"}, "data": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Chart data values (for kmeans: X coordinates)"}, "data2": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Secondary data series (for grouped_bar/stacked_bar/multi_line/area/bubble Y/scatter Y/box violin series 2/histogram bins/candlestick OHLC/3d_scatter Z/kmeans Y)"}, "data3": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Tertiary data series (bubble sizes, box/violin series 3, kmeans n_clusters[0], 3d_surface Z matrix)"}, "labels": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Chart axis/pie labels"}, "title": {"type": "STRING", "description": "Chart/section title"}, "xlabel": {"type": "STRING", "description": "Chart X axis label"}, "ylabel": {"type": "STRING", "description": "Chart Y axis label"}, "path": {"type": "STRING", "description": "Image path (for image type)"}}}, "description": "List of content sections to include in the PDF"}, "title": {"type": "STRING", "description": "Document title (default Friday Report)"}}, ["sections"]),
     ("friday.tools.doc_tools", "read_pptx", "Read a PowerPoint presentation", {"path": {"type": "STRING", "description": "Path to .pptx file"}}, ["path"]),
-    ("friday.tools.doc_tools", "create_pptx", "Create a PowerPoint presentation", {"title": {"type": "STRING", "description": "Presentation title"}, "slides": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"title": {"type": "STRING", "description": "Slide title"}, "content": {"type": "STRING", "description": "Slide content"}}}, "description": "List of slides with title and content"}}, ["title", "slides"]),
+    ("friday.tools.doc_tools", "create_pptx", "Create a PowerPoint presentation with text slides and chart slides supporting all chart types (bar, line, pie, scatter, area, candlestick, kmeans, 3d, etc)", {"title": {"type": "STRING", "description": "Presentation title"}, "slides": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"title": {"type": "STRING", "description": "Slide title"}, "content": {"type": "STRING", "description": "Slide content (for content type)"}, "type": {"type": "STRING", "description": "Slide type: content or chart"}, "chart_type": {"type": "STRING", "description": "Chart type for chart slides"}, "data": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Chart data"}, "data2": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Secondary chart data"}, "data3": {"type": "ARRAY", "items": {"type": "NUMBER"}, "description": "Tertiary chart data"}, "labels": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Chart labels"}, "xlabel": {"type": "STRING", "description": "X axis label"}, "ylabel": {"type": "STRING", "description": "Y axis label"}, "notes": {"type": "STRING", "description": "Speaker notes"}}}, "description": "List of slides"}}, ["title", "slides"]),
 
     # ── Advanced Vision ──
     ("friday.tools.vision_advanced_tools", "ocr_image", "Extract text from image using OCR", {"image_path": {"type": "STRING", "description": "Path to image file"}, "engine": {"type": "STRING", "description": "OCR engine: tesseract, easyocr (default tesseract)"}}, ["image_path"]),
@@ -160,6 +161,7 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
     ("friday.google_clients", "people_list", "List Google Contacts", {"page_size": {"type": "INTEGER", "description": "Max contacts (default 20)"}}, None),
     ("friday.google_clients", "people_search", "Search Google Contacts by name or email", {"query": {"type": "STRING", "description": "Search query"}, "page_size": {"type": "INTEGER", "description": "Max results (default 20)"}}, ["query"]),
     ("friday.google_clients", "people_create_contact", "Create a new Google Contact", {"name": {"type": "STRING", "description": "Contact name"}, "email": {"type": "STRING", "description": "Optional email"}, "phone": {"type": "STRING", "description": "Optional phone number"}}, ["name"]),
+    ("friday.google_clients", "people_list_directories", "List available contact directories", None, None),
 
     # ── Google Maps ──
     ("friday.google_clients", "maps_geocode", "Geocode an address to lat/lng coordinates", {"address": {"type": "STRING", "description": "Street address or place name"}}, ["address"]),
@@ -184,17 +186,58 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
     ("friday.google_clients", "firestore_set", "Create or overwrite a Firestore document", {"collection": {"type": "STRING", "description": "Collection name"}, "document_id": {"type": "STRING", "description": "Document ID"}, "data": {"type": "OBJECT", "description": "Document fields as key-value pairs"}}, ["collection", "document_id", "data"]),
     ("friday.google_clients", "firestore_delete", "Delete a Firestore document", {"collection": {"type": "STRING", "description": "Collection name"}, "document_id": {"type": "STRING", "description": "Document ID"}}, ["collection", "document_id"]),
 
-    # ── Google Classroom ──
-    ("friday.google_clients", "classroom_list_courses", "List Google Classroom courses", {"page_size": {"type": "INTEGER", "description": "Max courses (default 50)"}}, None),
-    ("friday.google_clients", "classroom_list_coursework", "List coursework/assignments for a Classroom course", {"course_id": {"type": "STRING", "description": "Course ID"}, "page_size": {"type": "INTEGER", "description": "Max items (default 20)"}}, ["course_id"]),
-    ("friday.google_clients", "classroom_list_students", "List students enrolled in a Classroom course", {"course_id": {"type": "STRING", "description": "Course ID"}}, ["course_id"]),
-
     # ── Google Books ──
     ("friday.google_clients", "books_search", "Search Google Books", {"query": {"type": "STRING", "description": "Search query"}, "max_results": {"type": "INTEGER", "description": "Max results (default 10)"}}, ["query"]),
     ("friday.google_clients", "books_get_volume", "Get detailed info about a Google Books volume", {"volume_id": {"type": "STRING", "description": "Volume ID"}}, ["volume_id"]),
 
     # ── YouTube Analytics (monetization) ──
     ("friday.google_clients", "youtube_analytics_advanced", "Get advanced YouTube Analytics with monetization data (revenue, CPM, ad revenue)", {"channel_id": {"type": "STRING", "description": "YouTube channel ID"}, "start_date": {"type": "STRING", "description": "Start date YYYY-MM-DD"}, "end_date": {"type": "STRING", "description": "End date YYYY-MM-DD"}}, ["channel_id", "start_date", "end_date"]),
+
+    # ── YouTube Data API ──
+    ("friday.google_clients", "youtube_search", "Search YouTube videos by query. Supports duration filter and sort order.", {"query": {"type": "STRING", "description": "Search query"}, "max_results": {"type": "INTEGER", "description": "Max results (default 10, max 50)"}, "video_duration": {"type": "STRING", "description": "Filter: any, short (<4min), medium (4-20min), long (>20min) (optional)"}, "order": {"type": "STRING", "description": "Sort: relevance, date, rating, viewCount (default relevance)"}}, ["query"]),
+    ("friday.google_clients", "youtube_video_info", "Get detailed info about a YouTube video (stats, duration, tags, captions)", {"video_id": {"type": "STRING", "description": "YouTube video ID"}}, ["video_id"]),
+    ("friday.google_clients", "youtube_channel_info", "Get YouTube channel details (subscribers, video count, uploads playlist ID). Provide channel_id, for_username, or omit for own channel.", {"channel_id": {"type": "STRING", "description": "Channel ID (optional)"}, "for_username": {"type": "STRING", "description": "Channel username (optional)"}}, None),
+    ("friday.google_clients", "youtube_list_comments", "List top-level comments on a YouTube video", {"video_id": {"type": "STRING", "description": "Video ID"}, "max_results": {"type": "INTEGER", "description": "Max comments (default 20, max 50)"}}, ["video_id"]),
+    ("friday.google_clients", "youtube_list_playlist_items", "List videos in a YouTube playlist", {"playlist_id": {"type": "STRING", "description": "Playlist ID"}, "max_results": {"type": "INTEGER", "description": "Max results (default 20, max 50)"}}, ["playlist_id"]),
+    ("friday.google_clients", "youtube_list_channel_videos", "List videos uploaded by a YouTube channel", {"channel_id": {"type": "STRING", "description": "Channel ID"}, "max_results": {"type": "INTEGER", "description": "Max results (default 20, max 50)"}, "order": {"type": "STRING", "description": "Sort: date, rating, viewCount, title (default date)"}}, ["channel_id"]),
+
+    # ── Google Tasks ──
+    ("friday.google_clients", "tasks_list_tasklists", "List all task lists", None, None),
+    ("friday.google_clients", "tasks_list", "List tasks from a task list", {"tasklist_id": {"type": "STRING", "description": "Task list ID (default @default)"}, "max_results": {"type": "INTEGER", "description": "Max results (default 20)"}, "show_completed": {"type": "BOOLEAN", "description": "Include completed tasks (default False)"}}, None),
+    ("friday.google_clients", "tasks_create", "Create a new task in a task list", {"tasklist_id": {"type": "STRING", "description": "Task list ID (default @default)"}, "title": {"type": "STRING", "description": "Task title"}, "notes": {"type": "STRING", "description": "Optional notes"}, "due": {"type": "STRING", "description": "Optional due date ISO 8601"}}, ["title"]),
+    ("friday.google_clients", "tasks_update", "Update a task (title, notes, due, or status). Set status='completed' to mark done.", {"tasklist_id": {"type": "STRING", "description": "Task list ID"}, "task_id": {"type": "STRING", "description": "Task ID to update"}, "title": {"type": "STRING", "description": "New title (optional)"}, "notes": {"type": "STRING", "description": "New notes (optional)"}, "due": {"type": "STRING", "description": "New due date ISO 8601 (optional)"}, "status": {"type": "STRING", "description": "New status: needsAction, completed (optional)"}}, ["tasklist_id", "task_id"]),
+    ("friday.google_clients", "tasks_delete", "Delete a task", {"tasklist_id": {"type": "STRING", "description": "Task list ID"}, "task_id": {"type": "STRING", "description": "Task ID to delete"}}, ["tasklist_id", "task_id"]),
+
+    # ── Google Photos ──
+    ("friday.google_clients", "photos_list_albums", "List Google Photos albums", {"page_size": {"type": "INTEGER", "description": "Max albums (default 20)"}}, None),
+    ("friday.google_clients", "photos_list_album_contents", "List media items in a Google Photos album", {"album_id": {"type": "STRING", "description": "Album ID"}, "page_size": {"type": "INTEGER", "description": "Max items (default 50, max 100)"}}, ["album_id"]),
+    ("friday.google_clients", "photos_search_by_date", "Search Google Photos by date (year, month, day)", {"year": {"type": "INTEGER", "description": "Year e.g. 2026"}, "month": {"type": "INTEGER", "description": "Month 1-12 (optional)"}, "day": {"type": "INTEGER", "description": "Day 1-31 (optional)"}, "page_size": {"type": "INTEGER", "description": "Max results (default 50)"}}, ["year"]),
+    ("friday.google_clients", "photos_create_album", "Create a new Google Photos album", {"title": {"type": "STRING", "description": "Album title"}}, ["title"]),
+
+    # ── Google Calendar ──
+    ("friday.google_clients", "calendar_list_calendars", "List all calendars the user has access to", None, None),
+    ("friday.google_clients", "calendar_list_events", "List calendar events. Supports time range filtering.", {"calendar_id": {"type": "STRING", "description": "Calendar ID (default primary)"}, "max_results": {"type": "INTEGER", "description": "Max events (default 20)"}, "time_min": {"type": "STRING", "description": "Start of time range ISO 8601 (optional)"}, "time_max": {"type": "STRING", "description": "End of time range ISO 8601 (optional)"}}, None),
+    ("friday.google_clients", "calendar_create_event", "Create a calendar event", {"calendar_id": {"type": "STRING", "description": "Calendar ID (default primary)"}, "summary": {"type": "STRING", "description": "Event title"}, "description": {"type": "STRING", "description": "Event description (optional)"}, "start_time": {"type": "STRING", "description": "Start time ISO 8601 e.g. 2026-06-10T14:00:00"}, "end_time": {"type": "STRING", "description": "End time ISO 8601 e.g. 2026-06-10T15:00:00"}, "timezone": {"type": "STRING", "description": "Timezone (default UTC)"}, "location": {"type": "STRING", "description": "Event location (optional)"}}, ["summary", "start_time", "end_time"]),
+
+    # ── Google Analytics ──
+    ("friday.google_clients", "analytics_get_reports", "Get Google Analytics 4 report data. Requires numeric GA4 property ID.", {"property_id": {"type": "STRING", "description": "Numeric GA4 property ID"}, "start_date": {"type": "STRING", "description": "Start date e.g. 7daysAgo, 2026-01-01 (default 7daysAgo)"}, "end_date": {"type": "STRING", "description": "End date e.g. today, 2026-06-01 (default today)"}, "metrics": {"type": "STRING", "description": "Metrics: sessions,activeUsers,newUsers,totalRevenue (default sessions)"}, "dimensions": {"type": "STRING", "description": "Dimensions: date,country,deviceCategory (default date)"}}, ["property_id"]),
+
+    # ── Google Drive Extended ──
+    ("friday.google_clients", "drive_export", "Export a Google Workspace file (Doc/Sheet/Slide) to another format like PDF, DOCX, CSV", {"file_id": {"type": "STRING", "description": "Drive file ID"}, "mime_type": {"type": "STRING", "description": "Export MIME type: application/pdf, text/csv, application/vnd.openxmlformats-officedocument.wordprocessingml.document (default application/pdf)"}}, ["file_id"]),
+    ("friday.google_clients", "drive_list_comments", "List comments on a Google Drive file", {"file_id": {"type": "STRING", "description": "Drive file ID"}, "page_size": {"type": "INTEGER", "description": "Max comments (default 20)"}}, ["file_id"]),
+    ("friday.google_clients", "drive_create_comment", "Add a comment to a Google Drive file", {"file_id": {"type": "STRING", "description": "Drive file ID"}, "content": {"type": "STRING", "description": "Comment text"}}, ["file_id", "content"]),
+    ("friday.google_clients", "drive_list_permissions", "List sharing permissions for a Drive file", {"file_id": {"type": "STRING", "description": "Drive file ID"}}, ["file_id"]),
+    ("friday.google_clients", "drive_create_permission", "Share a Drive file with someone via email", {"file_id": {"type": "STRING", "description": "Drive file ID"}, "email": {"type": "STRING", "description": "User's email address"}, "role": {"type": "STRING", "description": "Role: owner, writer, commenter, reader (default reader)"}, "send_notification": {"type": "BOOLEAN", "description": "Send notification email (default False)"}}, ["file_id", "email"]),
+    ("friday.google_clients", "drive_list_revisions", "List revision history for a Drive file", {"file_id": {"type": "STRING", "description": "Drive file ID"}, "page_size": {"type": "INTEGER", "description": "Max revisions (default 20)"}}, ["file_id"]),
+
+    # ── Google Forms ──
+    ("friday.google_clients", "forms_list", "List accessible Google Forms", {"page_size": {"type": "INTEGER", "description": "Max forms (default 50)"}}, None),
+    ("friday.google_clients", "forms_get", "Get the structure of a Google Form (questions, settings, title)", {"form_id": {"type": "STRING", "description": "Form ID"}}, ["form_id"]),
+    ("friday.google_clients", "forms_list_responses", "List responses submitted to a Google Form", {"form_id": {"type": "STRING", "description": "Form ID"}}, ["form_id"]),
+
+    # ── Google Slides Extended ──
+    ("friday.google_clients", "slides_add_text_slide", "Add a slide with title and body text to a presentation", {"presentation_id": {"type": "STRING", "description": "Presentation ID"}, "title": {"type": "STRING", "description": "Slide title (optional)"}, "body": {"type": "STRING", "description": "Slide body text (optional)"}, "position": {"type": "INTEGER", "description": "Insertion index (optional)"}}, ["presentation_id"]),
+    ("friday.google_clients", "slides_add_image", "Add an image from URL to a slide in a presentation", {"presentation_id": {"type": "STRING", "description": "Presentation ID"}, "image_url": {"type": "STRING", "description": "Public URL of the image"}, "slide_object_id": {"type": "STRING", "description": "Target slide object ID (optional, uses first slide)"}, "width_pt": {"type": "NUMBER", "description": "Image width in points (default 400)"}, "height_pt": {"type": "NUMBER", "description": "Image height in points (default 300)"}}, ["presentation_id", "image_url"]),
 
     # ── WiFi & Network Security ──
     ("friday.tools.wifi_tools", "wifi_list_profiles", "List saved WiFi network profiles on Windows", None, None),
@@ -280,6 +323,85 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
     ("friday.tools.scm_tools", "analyze_git_repo", "Analyze git repository history using PyDriller (commits, developers, churn)", {"repo_path": {"type": "STRING", "description": "Path to git repository (default .)"}, "max_commits": {"type": "INTEGER", "description": "Max commits to analyze (default 100)"}}, None),
     ("friday.tools.scm_tools", "codemod_python", "Apply automated code transformations to Python files using LibCST", {"file_path": {"type": "STRING", "description": "Path to Python file"}, "transformations": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"type": {"type": "STRING", "description": "Transform type: rename_function, rename_class, add_decorator, remove_decorator, add_import, replace_call"}, "old_name": {"type": "STRING", "description": "Old name (for rename operations)"}, "new_name": {"type": "STRING", "description": "New name (for rename operations)"}, "target": {"type": "STRING", "description": "Target function/class name"}, "decorator": {"type": "STRING", "description": "Decorator text (for add/remove decorator)"}, "import_statement": {"type": "STRING", "description": "Import to add (for add_import)"}, "old_call": {"type": "STRING", "description": "Old call pattern (for replace_call)"}, "new_call": {"type": "STRING", "description": "New call pattern (for replace_call)"}}}, "description": "List of transformation operations"}}, ["file_path", "transformations"]),
     ("friday.tools.scm_tools", "audit_dependencies", "Audit Python project dependencies for known CVEs using pip-audit", {"project_path": {"type": "STRING", "description": "Path to project directory (default .)"}, "requirements_file": {"type": "STRING", "description": "Path to requirements file (optional)"}}, None),
+
+    # ── Google Cloud Natural Language ──
+    ("friday.google_clients", "nlp_extract_entities", "Extract entities (people, places, orgs, events, products) from text using Cloud NLP", {"text": {"type": "STRING", "description": "Text to analyze"}}, ["text"]),
+    ("friday.google_clients", "nlp_analyze_sentiment", "Analyze sentiment of text — returns score (-1 to 1) and magnitude", {"text": {"type": "STRING", "description": "Text to analyze"}}, ["text"]),
+    ("friday.google_clients", "nlp_classify_content", "Classify text into content categories (e.g. /Technology & Computing)", {"text": {"type": "STRING", "description": "Text to classify"}}, ["text"]),
+    ("friday.google_clients", "nlp_analyze_syntax", "Analyze syntax — tokens with part-of-speech tags and dependency parse", {"text": {"type": "STRING", "description": "Text to analyze"}}, ["text"]),
+
+    # ── Google People / Contacts — Extended ──
+    ("friday.google_clients", "people_get", "Get detailed contact info (addresses, birthdays, organizations, relations, skills, events)", {"resource_name": {"type": "STRING", "description": "Resource name e.g. people/12345"}}, ["resource_name"]),
+    ("friday.google_clients", "people_update_contact", "Update a contact's name, email, or phone", {"resource_name": {"type": "STRING", "description": "Resource name e.g. people/12345"}, "name": {"type": "STRING", "description": "New name (optional)"}, "email": {"type": "STRING", "description": "New email (optional)"}, "phone": {"type": "STRING", "description": "New phone (optional)"}}, ["resource_name"]),
+    ("friday.google_clients", "people_delete_contact", "Delete a contact", {"resource_name": {"type": "STRING", "description": "Resource name to delete"}}, ["resource_name"]),
+
+    # ── Google Photos — Extended ──
+    ("friday.google_clients", "photos_get_media_item", "Get a single photo/video with full EXIF metadata (camera make/model, GPS, aperture, ISO, flash)", {"media_item_id": {"type": "STRING", "description": "Media item ID"}}, ["media_item_id"]),
+
+    # ── Google Maps — Place Details ──
+    ("friday.google_clients", "maps_place_details", "Get place details including photos, reviews, opening hours, price level, phone, website", {"place_id": {"type": "STRING", "description": "Google Place ID"}}, ["place_id"]),
+
+    # ── Google Docs — Advanced editing ──
+    ("friday.google_clients", "docs_batch_update", "Apply multiple updates to a Google Doc (insertText, insertInlineImage, updateTextStyle, etc.)", {"document_id": {"type": "STRING", "description": "Document ID"}, "requests_list": {"type": "ARRAY", "items": {"type": "OBJECT"}, "description": "List of update requests"}}, ["document_id", "requests_list"]),
+    ("friday.google_clients", "docs_insert_image", "Insert an inline image at a position in a Google Doc", {"document_id": {"type": "STRING", "description": "Document ID"}, "image_url": {"type": "STRING", "description": "Public URL of image"}, "index": {"type": "INTEGER", "description": "Insertion position index (default 0)"}}, ["document_id", "image_url"]),
+
+    # ── Google Forms — Creator ──
+    ("friday.google_clients", "forms_create", "Create a Google Form with questions. Supports SHORT_ANSWER, PARAGRAPH, MULTIPLE_CHOICE, CHECKBOXES, DROPDOWN, LINEAR_SCALE, DATE, TIME.", {"title": {"type": "STRING", "description": "Form title"}, "description": {"type": "STRING", "description": "Form description (optional)"}, "questions": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"title": {"type": "STRING", "description": "Question text"}, "type": {"type": "STRING", "description": "Question type: SHORT_ANSWER, PARAGRAPH, MULTIPLE_CHOICE, CHECKBOXES, DROPDOWN, LINEAR_SCALE, DATE, TIME"}, "options": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Choice options (for choice types or scale labels)"}, "required": {"type": "BOOLEAN", "description": "Whether question is required"}}}, "description": "List of questions (optional)"}, "collect_email": {"type": "BOOLEAN", "description": "Collect respondent email (default False)"}}, ["title"]),
+
+    # ── Google Search Console ──
+    ("friday.google_clients", "searchconsole_list_sites", "List sites verified in Google Search Console", None, None),
+    ("friday.google_clients", "searchconsole_query", "Get Search Analytics data (clicks, impressions, CTR, position) for a verified site", {"site_url": {"type": "STRING", "description": "Verified site URL"}, "start_date": {"type": "STRING", "description": "Start date (default 7daysAgo)"}, "end_date": {"type": "STRING", "description": "End date (default today)"}, "dimension": {"type": "STRING", "description": "Dimension: query, page, country, device, date (default query)"}, "row_limit": {"type": "INTEGER", "description": "Max rows (default 10)"}}, ["site_url"]),
+
+    # ── Browser-Use Bridge (AI-native web browsing) ──
+    ("friday.browser_use_bridge", "browser_use_navigate", "Full autonomous browser agent via browser-use. Give a natural language task — the AI handles navigation, clicks, forms, extraction, multi-step planning.", {"task": {"type": "STRING", "description": "Natural language task"}, "max_steps": {"type": "INTEGER", "description": "Max action steps (default 20)"}}, ["task"]),
+    ("friday.browser_use_bridge", "browser_use_extract", "Extract structured information from web pages using browser-use AI agent.", {"task": {"type": "STRING", "description": "Navigation + what to extract"}, "instruction": {"type": "STRING", "description": "Extraction guidance"}}, ["task"]),
+    ("friday.browser_use_bridge", "browser_use_click", "Click an element on the page by CSS selector or visible text.", {"selector": {"type": "STRING", "description": "CSS selector"}, "text": {"type": "STRING", "description": "Visible text to click"}}, None),
+    ("friday.browser_use_bridge", "browser_use_type", "Type text into an input field.", {"selector": {"type": "STRING", "description": "CSS selector"}, "text": {"type": "STRING", "description": "Text to type"}, "clear_first": {"type": "BOOLEAN", "description": "Clear field first (default true)"}}, ["selector", "text"]),
+    ("friday.browser_use_bridge", "browser_use_extract_text", "Extract visible text from the page or element.", {"selector": {"type": "STRING", "description": "CSS selector (default body)"}}, None),
+    ("friday.browser_use_bridge", "browser_use_extract_html", "Extract full HTML of the current page.", None, None),
+    ("friday.browser_use_bridge", "browser_use_extract_links", "Extract all links from the current page.", None, None),
+    ("friday.browser_use_bridge", "browser_use_screenshot", "Take a screenshot of the current page (returns base64 PNG).", {"full_page": {"type": "BOOLEAN", "description": "Full page capture (default false)"}}, None),
+    ("friday.browser_use_bridge", "browser_use_scroll", "Scroll the page up or down.", {"direction": {"type": "STRING", "description": "down or up (default down)"}, "amount": {"type": "INTEGER", "description": "Pixels (default 500)"}}, None),
+    ("friday.browser_use_bridge", "browser_use_evaluate", "Run JavaScript in the page context.", {"script": {"type": "STRING", "description": "JavaScript code"}}, ["script"]),
+    ("friday.browser_use_bridge", "browser_use_get_dom_state", "Get DOM state: URL, title, viewport, link/button/input counts.", None, None),
+    ("friday.browser_use_bridge", "browser_use_get_url", "Get the current page URL.", None, None),
+    ("friday.browser_use_bridge", "browser_use_get_title", "Get the current page title.", None, None),
+    ("friday.browser_use_bridge", "browser_use_list_tabs", "List all open browser tabs.", None, None),
+    ("friday.browser_use_bridge", "browser_use_new_tab", "Open a new tab with optional URL.", {"url": {"type": "STRING", "description": "URL to open (default about:blank)"}}, None),
+    ("friday.browser_use_bridge", "browser_use_close_tab", "Close the current browser tab.", None, None),
+    ("friday.browser_use_bridge", "browser_use_go_back", "Navigate back in browser history.", None, None),
+    ("friday.browser_use_bridge", "browser_use_go_forward", "Navigate forward in browser history.", None, None),
+    ("friday.browser_use_bridge", "browser_use_status", "Show browser-use bridge status.", None, None),
+    ("friday.browser_use_bridge", "browser_use_clear", "Close browser and clear session.", None, None),
+    ("friday.browser_use_bridge", "browser_use_reconnect", "Force-reconnect the browser.", None, None),
+
+    # ── Cookbook (Hardware Scanner + Model Recommendations) ──
+    ("friday.cookbook", "cookbook_scan", "Scan local hardware (GPU, VRAM, RAM) and show system specs.", {"force": {"type": "BOOLEAN", "description": "Re-scan instead of cache"}}, None),
+    ("friday.cookbook", "cookbook_recommend", "Recommend the best local AI models based on detected GPU/VRAM.", None, None),
+    ("friday.cookbook", "cookbook_ollama_check", "Check if Ollama is installed and list local models.", None, None),
+
+    # ── Proactive Copilot (Desktop-aware suggestions) ──
+    ("friday.proactive_copilot", "proactive_suggest", "Get a proactive suggestion based on desktop context (active window, clipboard, files).", {"force": {"type": "BOOLEAN", "description": "Bypass cooldown"}}, None),
+    ("friday.proactive_copilot", "proactive_status", "Show proactive copilot status.", None, None),
+    ("friday.proactive_copilot", "proactive_copilot_enable", "Enable or disable the proactive copilot.", {"enabled": {"type": "BOOLEAN", "description": "True to enable, False to disable"}}, None),
+    ("friday.proactive_copilot", "proactive_context", "Get current desktop context: active window, clipboard, recent files.", None, None),
+
+    # ── Agent Heartbeat Protocol ──
+    ("friday.agent_heartbeat", "agent_heartbeat_status", "Get real-time status of all agents via heartbeat protocol.", None, None),
+    ("friday.agent_heartbeat", "agent_heartbeat_get", "Get heartbeat for a specific agent.", {"agent_id": {"type": "STRING", "description": "Agent ID"}}, ["agent_id"]),
+    ("friday.agent_heartbeat", "agent_heartbeat_add_trigger", "Add cross-agent trigger: when source_role finds keyword, spawn task for target_agent.", {"trigger_id": {"type": "STRING", "description": "Unique trigger ID"}, "source_role": {"type": "STRING", "description": "Source agent role (researcher, coder, security, general)"}, "keyword": {"type": "STRING", "description": "Keyword to match in agent findings"}, "target_agent": {"type": "STRING", "description": "Target agent name"}, "target_task_template": {"type": "STRING", "description": "Task template with {finding} and {source_agent} placeholders"}}, ["trigger_id", "source_role", "keyword", "target_agent", "target_task_template"]),
+    ("friday.agent_heartbeat", "agent_heartbeat_remove_trigger", "Remove a cross-agent trigger.", {"trigger_id": {"type": "STRING", "description": "Trigger ID to remove"}}, ["trigger_id"]),
+    ("friday.agent_heartbeat", "agent_heartbeat_list_triggers", "List all registered cross-agent triggers.", None, None),
+    ("friday.agent_heartbeat", "agent_heartbeat_route_finding", "Manually route a finding from one agent as a task for another.", {"source_agent_id": {"type": "STRING", "description": "Source agent"}, "finding": {"type": "STRING", "description": "The finding"}, "target_agent_id": {"type": "STRING", "description": "Target agent"}, "task_description": {"type": "STRING", "description": "Task for target"}}, ["source_agent_id", "finding", "target_agent_id", "task_description"]),
+    ("friday.agent_heartbeat", "heartbeat_daemon_start", "Start the background heartbeat daemon that tracks all agents.", None, None),
+    ("friday.agent_heartbeat", "heartbeat_daemon_stop", "Stop the background heartbeat daemon.", None, None),
+
+    # ── Paperclip Adapter ──
+    ("friday.paperclip_adapter", "paperclip_adapter_start", "Start FRIDAY as a Paperclip-compatible agent in background thread.", {"agent_id": {"type": "STRING", "description": "Agent ID (default friday-agent)"}, "company": {"type": "STRING", "description": "Company name (default default)"}, "role": {"type": "STRING", "description": "Agent role (default general)"}}, None),
+    ("friday.paperclip_adapter", "paperclip_adapter_stop", "Stop the Paperclip adapter.", None, None),
+    ("friday.paperclip_adapter", "paperclip_adapter_status", "Check if the Paperclip adapter is running.", None, None),
+    ("friday.paperclip_adapter", "paperclip_adapter_register", "Register FRIDAY as a Paperclip agent with capabilities.", {"company": {"type": "STRING", "description": "Company name"}, "role": {"type": "STRING", "description": "Role"}, "display_name": {"type": "STRING", "description": "Display name (default FRIDAY AI)"}}, None),
+    ("friday.paperclip_adapter", "paperclip_adapter_submit_task", "Submit a task directly to the Paperclip adapter.", {"description": {"type": "STRING", "description": "Task description"}, "task_type": {"type": "STRING", "description": "Task type (research, deep_research, code, security, browse, scan, suggest, general)"}}, ["description"]),
 ]
 
 
@@ -293,6 +415,12 @@ def build_new_tools(types_module) -> list:
         declarations.append(
             types_module.FunctionDeclaration(name=func_name, description=desc, parameters=schema)
         )
+    # Merge osint_extra tools (481 functions, dynamically introspected)
+    try:
+        from friday.tools.osint_extra_bridge import build_osint_extra_tools
+        declarations.extend(build_osint_extra_tools(types_module))
+    except Exception:
+        pass
     return declarations
 
 
@@ -301,6 +429,12 @@ def build_new_tool_map() -> dict[str, Any]:
     tool_map = {}
     for module_path, func_name, _, _, _ in TOOL_DESCRIPTORS:
         tool_map[func_name] = _LazyToolFunc(module_path, func_name)
+    # Merge osint_extra tool map
+    try:
+        from friday.tools.osint_extra_bridge import build_osint_extra_tool_map
+        tool_map.update(build_osint_extra_tool_map())
+    except Exception:
+        pass
     return tool_map
 
 

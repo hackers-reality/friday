@@ -80,7 +80,8 @@ class AutonomousPRReviewer(BaseAgent):
         self.logger = logger
         
         # Configure repository path context
-        self.repo_path = os.getenv("FRIDAY_REPO_PATH") or "e:/open-interpreter"
+        from friday.paths import get_project_root
+        self.repo_path = os.getenv("FRIDAY_REPO_PATH") or str(get_project_root())
         if not os.path.exists(self.repo_path):
             self.repo_path = os.getcwd()
             

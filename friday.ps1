@@ -23,7 +23,8 @@ if (-not $venvPython) {
 
 # Install dependencies if requirements.txt exists
 if (Test-Path "requirements.txt") {
-    $depsCheck = & $venvPython -c "import aiohttp, httpx, dnspython, requests" 2>&1
+    # Check critical packages (core + screen + OSINT)
+    $depsCheck = & $venvPython -c "import aiohttp, httpx, dnspython, requests, msgpack, reportlab, docx, chromadb, sherlock, holehe, pywinctl, PIL" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[FRIDAY] Installing dependencies..." -ForegroundColor Yellow
         & $venvPython -m pip install -r requirements.txt --quiet

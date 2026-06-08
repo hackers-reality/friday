@@ -86,9 +86,40 @@ from friday.google_clients import (
     vision_annotate,
     bigquery_query, storage_list, storage_upload,
     firestore_get, firestore_query, firestore_set, firestore_delete,
-    classroom_list_courses, classroom_list_coursework, classroom_list_students,
+
     books_search, books_get_volume,
     youtube_analytics_advanced,
+)
+
+from friday.browser_use_bridge import (
+    browser_use_navigate, browser_use_extract,
+    browser_use_click, browser_use_type,
+    browser_use_extract_text, browser_use_extract_html, browser_use_extract_links,
+    browser_use_screenshot, browser_use_scroll, browser_use_evaluate,
+    browser_use_get_dom_state, browser_use_get_url, browser_use_get_title,
+    browser_use_list_tabs, browser_use_new_tab, browser_use_close_tab,
+    browser_use_go_back, browser_use_go_forward,
+    browser_use_status, browser_use_clear, browser_use_reconnect,
+)
+from friday.cookbook import (
+    cookbook_scan, cookbook_recommend, cookbook_ollama_check,
+)
+from friday.proactive_copilot import (
+    proactive_suggest, proactive_status, proactive_copilot_enable, proactive_context,
+)
+
+from friday.agent_heartbeat import (
+    agent_heartbeat_status, agent_heartbeat_get,
+    agent_heartbeat_add_trigger, agent_heartbeat_remove_trigger,
+    agent_heartbeat_list_triggers, agent_heartbeat_route_finding,
+    heartbeat_daemon_start, heartbeat_daemon_stop,
+    emit_agent_heartbeat, get_all_heartbeats,
+)
+
+from friday.paperclip_adapter import (
+    paperclip_adapter_start, paperclip_adapter_stop,
+    paperclip_adapter_status, paperclip_adapter_register,
+    paperclip_adapter_submit_task,
 )
 
 # ── New subsystem imports (Metasploit, Email Analysis, Agent Terminal, OSINT Extra) ──
@@ -290,7 +321,7 @@ __all__ = _tflat.__all__ + [
     "vision_annotate",
     "bigquery_query", "storage_list", "storage_upload",
     "firestore_get", "firestore_query", "firestore_set", "firestore_delete",
-    "classroom_list_courses", "classroom_list_coursework", "classroom_list_students",
+
     "books_search", "books_get_volume",
     "youtube_analytics_advanced",
     # ── Metasploit ──
@@ -357,4 +388,32 @@ __all__ = _tflat.__all__ + [
     "supabase_query", "qdrant_search", "e2b_execute_code",
     # ── SCM / DevOps Tools (pre-commit / PyDriller / LibCST / pip-audit) ──
     "run_precommit", "analyze_git_repo", "codemod_python", "audit_dependencies",
+
+    # ── Browser-Use Bridge (AI-native web browsing) ──
+    "browser_use_navigate", "browser_use_extract",
+    "browser_use_click", "browser_use_type",
+    "browser_use_extract_text", "browser_use_extract_html", "browser_use_extract_links",
+    "browser_use_screenshot", "browser_use_scroll", "browser_use_evaluate",
+    "browser_use_get_dom_state", "browser_use_get_url", "browser_use_get_title",
+    "browser_use_list_tabs", "browser_use_new_tab", "browser_use_close_tab",
+    "browser_use_go_back", "browser_use_go_forward",
+    "browser_use_status", "browser_use_clear", "browser_use_reconnect",
+
+    # ── Cookbook (Hardware Scanner + Model Recommendations) ──
+    "cookbook_scan", "cookbook_recommend", "cookbook_ollama_check",
+
+    # ── Proactive Copilot (Desktop-aware suggestions) ──
+    "proactive_suggest", "proactive_status", "proactive_copilot_enable", "proactive_context",
+
+    # ── Agent Heartbeat Protocol ──
+    "agent_heartbeat_status", "agent_heartbeat_get",
+    "agent_heartbeat_add_trigger", "agent_heartbeat_remove_trigger",
+    "agent_heartbeat_list_triggers", "agent_heartbeat_route_finding",
+    "heartbeat_daemon_start", "heartbeat_daemon_stop",
+    "emit_agent_heartbeat", "get_all_heartbeats",
+
+    # ── Paperclip Adapter ──
+    "paperclip_adapter_start", "paperclip_adapter_stop",
+    "paperclip_adapter_status", "paperclip_adapter_register",
+    "paperclip_adapter_submit_task",
 ]

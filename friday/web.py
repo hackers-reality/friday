@@ -181,50 +181,127 @@ class WebScraper:
             return self._search_duckduckgo(query)
         elif engine == "bing":
             return self._search_bing(query)
+        elif engine == "google":
+            return self._search_google(query)
         else:
             return {
                 "success": False,
                 "error": f"Unknown engine: {engine}",
             }
-    
-    def _search_duckduckgo(self, query: str) -> Dict[str, Any]:
-        """Search DuckDuckGo."""
+
+    def _search_google(self, query: str) -> Dict[str, Any]:
+        """Search Google via HTML scraping with multiple selector fallbacks."""
         try:
             from bs4 import BeautifulSoup
-            
-            url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
-            result = self.fetch(url)
-            
+
+            url = f"https://www.google.com/search?q={requests.utils.quote(query)}&num=10"
+            result = self.fetch(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+            })
+
             if not result["success"]:
                 return result
-            
+
             soup = BeautifulSoup(result["content"], "html.parser")
             results = []
-            
-            for result_div in soup.select(".result"):
-                title_elem = result_div.select_one(".result__title")
-                link_elem = result_div.select_one(".result__url")
-                snippet_elem = result_div.select_one(".result__snippet")
-                
-                if title_elem:
+
+            # Strategy 1: Modern Google (div.g with h3)
+            for g in soup.select("div.g"):
+                title_el = g.select_one("h3")
+                link_el = g.select_one("a")
+                snippet_el = g.select_one(".VwiC3b") or g.select_one(".st") or g.select_one("[data-sncf]")
+                if title_el and link_el:
+                    href = link_el.get("href", "")
+                    if href.startswith("/url?q="):
+                        href = href.split("?q=")[1].split("&")[0]
                     results.append({
-                        "title": title_elem.get_text(strip=True),
-                        "url": link_elem.get_text(strip=True) if link_elem else "",
-                        "snippet": snippet_elem.get_text(strip=True) if snippet_elem else "",
+                        "title": title_el.get_text(strip=True),
+                        "url": href,
+                        "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
                     })
-            
+
+            # Strategy 2: Alternative selectors if no results
+            if not results:
+                for block in soup.select("[data-hveid]"):
+                    title_el = block.select_one("h3, .DKV0Md, .LC20lb")
+                    link_el = block.select_one("a")
+                    snippet_el = block.select_one(".st, .VwiC3b, .lEBKkf")
+                    if title_el and link_el:
+                        href = link_el.get("href", "")
+                        if href.startswith("/url?q="):
+                            href = href.split("?q=")[1].split("&")[0]
+                        results.append({
+                            "title": title_el.get_text(strip=True),
+                            "url": href,
+                            "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
+                        })
+
             return {
-                "success": True,
+                "success": len(results) > 0,
+                "query": query,
+                "engine": "google",
+                "results": results,
+                "count": len(results),
+            } if results else {
+                "success": False,
+                "query": query,
+                "engine": "google",
+                "error": "No results parsed. Google may have changed their markup.",
+            }
+        except ImportError:
+            return {"success": False, "error": "BeautifulSoup not available."}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _search_duckduckgo(self, query: str) -> Dict[str, Any]:
+        """Search DuckDuckGo using ddgs library."""
+        try:
+            from ddgs import DDGS
+            results = []
+            with DDGS() as ddgs:
+                for r in ddgs.text(query, max_results=10):
+                    results.append({
+                        "title": r.get("title", ""),
+                        "url": r.get("href", ""),
+                        "snippet": r.get("body", ""),
+                    })
+            return {
+                "success": bool(results),
                 "query": query,
                 "engine": "duckduckgo",
                 "results": results,
                 "count": len(results),
             }
         except ImportError:
-            return {
-                "success": False,
-                "error": "BeautifulSoup not available.",
-            }
+            # Fallback to old HTML parsing
+            try:
+                from bs4 import BeautifulSoup
+                url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
+                result = self.fetch(url)
+                if not result["success"]:
+                    return result
+                soup = BeautifulSoup(result["content"], "html.parser")
+                results = []
+                for result_div in soup.select(".result"):
+                    title_elem = result_div.select_one(".result__title")
+                    link_elem = result_div.select_one(".result__url")
+                    snippet_elem = result_div.select_one(".result__snippet")
+                    if title_elem:
+                        results.append({
+                            "title": title_elem.get_text(strip=True),
+                            "url": link_elem.get_text(strip=True) if link_elem else "",
+                            "snippet": snippet_elem.get_text(strip=True) if snippet_elem else "",
+                        })
+                return {
+                    "success": True,
+                    "query": query,
+                    "engine": "duckduckgo",
+                    "results": results,
+                    "count": len(results),
+                }
+            except Exception as e2:
+                return {"success": False, "error": str(e2)}
         except Exception as e:
             return {
                 "success": False,

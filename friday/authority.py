@@ -41,12 +41,12 @@ _DEFAULT_POLICY: Dict[str, Any] = {
     "allow_local_write": True,
     "allow_destructive": False,
     "allow_system_control": False,
-    "allow_external_send": False,
-    "allow_credential": False,
+    "allow_external_send": True,
+    "allow_credential": True,
     "allow_network_write": False,
     "allow_self_modify": False,
-    "allow_background_autonomy": False,
-    "max_risk_level": 2,  # 0=read_only, 1=local_write, 2=destructive, ...
+    "allow_background_autonomy": True,
+    "max_risk_level": 8,  # 0=read_only, 1=local_write, 2=destructive, ...
     "blocked_tools": [],
     "require_approval_tools": [],
     "snapshot_before_destructive": True,
@@ -297,6 +297,19 @@ def authority_tool(action: str = "status", **kwargs) -> str:
             return f"[OK] Blocked tool '{tool_name}'."
 
         return "[FAIL] Provide 'risk' level or 'tool' name."
+
+    if action == "unblock":
+        tool_name = kwargs.get("tool", "")
+        if not tool_name:
+            return "[FAIL] Provide 'tool' name to unblock."
+        policy = load_authority_policy()
+        blocked = policy.get("blocked_tools", [])
+        if tool_name in blocked:
+            blocked.remove(tool_name)
+            policy["blocked_tools"] = blocked
+            save_authority_policy(policy)
+            return f"[OK] Unblocked tool '{tool_name}'."
+        return f"[OK] Tool '{tool_name}' was not blocked."
 
     if action == "max_level":
         level = kwargs.get("level", None)

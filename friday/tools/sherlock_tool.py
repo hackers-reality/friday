@@ -43,14 +43,18 @@ class SherlockResult:
 async def _ensure_sherlock_installed() -> bool:
     """Install sherlock if missing. Returns True if available after attempt."""
     try:
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "sherlock", "--help",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await asyncio.wait_for(proc.wait(), timeout=10)
-        if proc.returncode == 0:
-            return True
+        for mod in ("sherlock", "sherlock_project"):
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable, "-m", mod, "--help",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(proc.wait(), timeout=10)
+                if proc.returncode == 0:
+                    return True
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -96,7 +100,8 @@ async def run_sherlock(
     output_path = tmp / f"{username}.txt"
 
     try:
-        cmd = [sys.executable, "-m", "sherlock", username, "--output", str(output_path), "--timeout", "10"]
+        sherlock_mod = "sherlock_project"  # pip installs as sherlock_project, not sherlock
+        cmd = [sys.executable, "-m", sherlock_mod, username, "--output", str(output_path), "--timeout", "10"]
         if platforms:
             cmd.extend(["--sites", ",".join(platforms)])
         # --unique-output only if sherlock version supports it — skip for compat
