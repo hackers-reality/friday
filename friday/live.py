@@ -488,7 +488,7 @@ Files:
 - generate_file(path, type, description), generate_file_llm(path, prompt)
 
 Docs & Reports:
-- create_pdf(sections, title) — Generate RICH PDF (100+ pages) with 20+ chart types. Sections format: [{"type":"heading|paragraph|chart|table|bullets|numbered|divider|code|image", "chart_type":"bar|hbar|grouped_bar|stacked_bar|line|multi_line|area|pie|donut|scatter|bubble|histogram|box|violin|heatmap|radar|candlestick|kmeans|contour|3d_scatter|3d_surface|3d_bar", "data":[...],"data2":...,"data3":...,"labels":...}]
+- create_pdf(sections, title) — Generate RICH PDF (100+ pages) with 20+ chart types. IMPORTANT: Before calling, first use read_file('friday/skills/pdf/SKILL.md') for the complete usage guide. Sections format: [{"type":"heading|paragraph|chart|table|bullets|numbered|divider|code|image", "chart_type":"bar|hbar|grouped_bar|stacked_bar|line|multi_line|area|pie|donut|scatter|bubble|histogram|box|violin|heatmap|radar|candlestick|kmeans|contour|3d_scatter|3d_surface|3d_bar", "data":[...],"data2":...,"data3":...,"labels":...}]
 - create_docx(content, sections) — Word doc with sections: headings, tables, charts, bullet/numbered lists, code blocks. Same chart types as PDF.
 - create_pptx(title, slides) — PowerPoint with text slides AND chart slides (set type:"chart"). Same chart types.
 - create_excel(data, headers) — Create Excel spreadsheet from 2D data

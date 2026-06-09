@@ -147,6 +147,9 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 | Multi-LLM switching | 📋 Deferred | Incompatible with Live WebSocket — postponed |
 | LangGraph orchestration | 🔧 In Progress | `friday/reasoning.py` — reasoning engine promoted from archive |
 | Research tool | ✅ Working | `friday/research.py` — real-time web research + reports |
+| NVIDIA NIM integration | ✅ Working | Large-context models (128K tokens) via `nim_client.py` + `nim_router.py` — Qwen 3 Coder 480B, Nemotron Omni 30B |
+| Model benchmark (20 models) | ✅ Done | Top: `qwen/qwen3-coder-480b-a35b-instruct` (15.9 tok/s, quality 65.9), `nemotron-3-nano-omni-30b` (640ms TTFT, 14.9 tok/s) |
+| Deep research agent (Veronica) | ✅ Working | `research_agent.py` — browser-based OSINT agent, recursive scraping, PDF reports with 24 chart types |
 | Reasoning engine | ✅ Working | `friday/reasoning.py` — multi-step reasoning |
 | Self-modifying code | 🔧 In Progress | `friday/github.py` — GitHub API-based self-modification |
 | Multi-agent delegation (9 roles) | ✅ Working | Same roster as Jarvis — research, coding, reasoning, etc. |
@@ -339,6 +342,12 @@ E:\F.R.I.D.A.Y\
 │   │
 │   ├── research.py         ← Autonomous web research
 │   │
+│   ├── research_agent.py   ← Veronica — deep research OSINT agent (browser-based, recursive scraping, PDF reports)
+│   │
+│   ├── nim_client.py       ← NVIDIA NIM inference client (supports 128K context, vision models, tool use)
+│   │
+│   ├── nim_router.py       ← NIM model router by task type (research, code_gen, vision, browse, etc.)
+│   │
 │   ├── reasoning.py        ← Multi-step reasoning engine
 │   │
 │   ├── hooks.py            ← Pre/post/error tool hooks (authority enforcement, auto-snapshot, logging, KG, KYU, episodic, skills)
@@ -350,6 +359,16 @@ E:\F.R.I.D.A.Y\
 │   ├── _paths.py           ← Centralized path resolution
 │   │
 │   ├── memory_import.py    ← Full memory pipeline + doctor/review/pin actions
+│   │
+│   ├── skills/             ← Agent skill files (Claude-like pattern)
+│   │   ├── pdf/SKILL.md    ← PDF creation guide for LLM agents
+│   │   ├── svg/SKILL.md    ← SVG/diagram generation guide
+│   │   ├── chart/SKILL.md  ← Chart creation guide
+│   │   ├── docx/SKILL.md   ← Word document creation guide
+│   │   ├── pptx/SKILL.md   ← PowerPoint creation guide
+│   │   ├── code_gen/       ← Code generation patterns
+│   │   ├── osint/          ← OSINT investigation patterns
+│   │   └── ...
 │   │
 │   ├── tool_registry.py    ← Central metadata for 150+ tools
 │   ├── authority.py        ← 9-level risk classification + policy + audit
@@ -442,6 +461,8 @@ friday sidecar status           # Sidecar network status
 | `GROQ_API_KEY` | No | Fast inference |
 | `ANTHROPIC_API_KEY` | No | Claude (coming) |
 | `OPENAI_API_KEY` | No | GPT (coming) |
+| `NVIDIA_NIM_API_KEY` | No | NVIDIA NIM research/browser models (Qwen 3 Coder 480B, Nemotron Omni 30B) |
+| `NVIDIA_VISION_API_KEY` | No | NVIDIA NIM vision models (camera/screen analysis — separate key from research to avoid quota conflicts) |
 
 Create `.env` from `.env.example`:
 
@@ -545,6 +566,9 @@ Friday responds to natural language. No rigid syntax required.
 | `friday/knowledge_graph.py` | Auto-extracts entities + relationships after every tool call |
 | `friday/multi_agent.py` | 9-role multi-agent delegation system |
 | `friday/research.py` | Autonomous web research + report generation |
+| `friday/research_agent.py` | Veronica — deep research OSINT agent with recursive scraping, LLM-driven search decisions, PDF reports (24 chart types, 100+ pages) |
+| `friday/nim_client.py` | NVIDIA NIM inference client — chat, vision, structured output, 128K context |
+| `friday/nim_router.py` | NIM model router — resolves best model by task type, configurable via config.yaml |
 | `friday/reasoning.py` | Multi-step reasoning engine |
 | `friday/hooks.py` | Pre/post/error tool hooks (authority enforcement, auto-snapshot, KG, logging, KYU, episodic, skills) |
 | `friday/notify.py` | Desktop toast notifications (PowerShell + plyer) |
@@ -661,6 +685,12 @@ Friday responds to natural language. No rigid syntax required.
 - [x] Sidecar network — UDP multicast discovery, HMAC-JWT token auth, no-expiry tokens
 - [x] Installable sidecar package — `pip install .` → `friday-sidecar` CLI for remote devices
 - [x] CV context wired into `situational_awareness()` — LLM sees camera without user knowing
+- [x] NIM model benchmark (20 models) — qwen3-coder-480b #1, nemotron-omni-30b #2
+- [x] NIM key separation — research (NVIDIA_NIM_API_KEY) vs vision (NVIDIA_VISION_API_KEY)
+- [x] Deep research agent (Veronica) — browser-based OSINT with recursive scraping, PDF report generation
+- [x] Skill-based tool descriptions — Claude-like pattern: tools reference skills/pdf/SKILL.md
+- [x] Veronica report fix — 3-tier fallback (LLM synthesis → markdown parsing → structured sections), no more raw data dumps
+- [x] Camera auto-switching — FRIDAY can switch/list/cycle cameras via cv_tool
 - [ ] Native Windows app (PyQt6 or Tauri)
 - [ ] Settings panel with key vault
 - [ ] Plugin system
@@ -712,6 +742,9 @@ git push origin feature/your-feature-name
 | CV engine MobileNet-SSD model download on first use | First-run delay | ~7MB download, cached after that |
 | Sidecar UDP discovery limited to LAN | By design | Use `--server URL` flag for WAN connections |
 | JWT tokens stored in plaintext on disk | Known | Encrypted storage planned for v2.1 |
+| NVIDIA NIM intermittent HTTP 500 errors | Mitigated | Old key had ~30% error rate; key separated into research vs vision, new key resolves most issues |
+| Deep research PDF report synthesis | Fixed | LLM was generating 1000+ JSON sections with 128K max_tokens → truncated output → raw data dump. Fixed: reduced to 80+ sections, 32K max_tokens, 3-tier fallback with LLM re-synthesis |
+| `deepseek-ai/deepseek-v4-flash` times out | Known | Unreliable on NIM; replaced with `qwen/qwen3-coder-480b-a35b-instruct` as primary |
 
 ---
 

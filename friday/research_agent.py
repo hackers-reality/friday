@@ -218,7 +218,7 @@ class VeronicaAgent(BaseAgent):
                 f"- **Pages/sources scraped**: {len(all_data.get('pages', []))}\n"
                 f"- **Links collected**: {len(all_data.get('links', []))}\n"
                 f"- **Report sections**: {report_result.get('sections', 'N/A')}\n"
-                f"- **NIM model**: qwen/qwen3.5-397b-a17b\n"
+                f"- **NIM model**: {report_result.get('model', 'unknown')}\n"
                 f"- **Total Duration**: {dur / 1000:.0f}s ({dur / 60000:.1f} min)\n"
                 f"### Timing Breakdown\n{timing_lines}\n"
             )
@@ -247,7 +247,7 @@ class VeronicaAgent(BaseAgent):
     # ─── LLM Query Generation ────────────────────────────────────
 
     async def _generate_queries(self, topic: str) -> list[str]:
-        model = resolve_model("research") or self.nim_model or "qwen/qwen3.5-397b-a17b"
+        model = resolve_model("research") or self.nim_model or "qwen/qwen3-coder-480b-a35b-instruct"
         prompt = (
             "You are Veronica, FRIDAY's research strategist.\n"
             f"Generate 3-4 highly targeted search queries to thoroughly research: '{topic}'.\n"
@@ -282,7 +282,7 @@ class VeronicaAgent(BaseAgent):
         - What should the next search queries be?
         - Should we stop (comprehensive enough)?
         """
-        model = resolve_model("research") or self.nim_model or "qwen/qwen3.5-397b-a17b"
+        model = resolve_model("research") or self.nim_model or "qwen/qwen3-coder-480b-a35b-instruct"
 
         pages_summary = []
         for p in batch_data.get("pages", [])[:10]:
@@ -592,7 +592,7 @@ class VeronicaAgent(BaseAgent):
         """Use LLM to choose which links to drill into for deeper content."""
         if not urls:
             return []
-        model = resolve_model("research") or self.nim_model or "qwen/qwen3.5-397b-a17b"
+        model = resolve_model("research") or self.nim_model or "qwen/qwen3-coder-480b-a35b-instruct"
         url_list = "\n".join(f"{i + 1}. {u}" for i, u in enumerate(urls))
         prompt = (
             f"Current page context: '{context[:80]}'\n"
@@ -712,7 +712,7 @@ class VeronicaAgent(BaseAgent):
     async def _filter_relevant(self, urls: list[str], query: str) -> list[str]:
         if len(urls) <= 10:
             return urls
-        model = resolve_model("research") or self.nim_model or "qwen/qwen3.5-397b-a17b"
+        model = resolve_model("research") or self.nim_model or "qwen/qwen3-coder-480b-a35b-instruct"
         url_list = "\n".join(f"{i + 1}. {u}" for i, u in enumerate(urls))
         prompt = (
             f"Select the {min(len(urls), 50)} URLs most relevant to: '{query}'.\n"
@@ -790,107 +790,56 @@ class VeronicaAgent(BaseAgent):
     # ─── PDF Report Generation via LLM ───────────────────────────
 
     async def _generate_report(self, topic: str, raw_md: str, skill_contents: dict, output_path: str) -> dict:
-        model = resolve_model("research") or self.nim_model or "qwen/qwen3.5-397b-a17b"
-        raw_preview = raw_md[:150000]
+        model = resolve_model("research") or self.nim_model or "qwen/qwen3-coder-480b-a35b-instruct"
+        raw_preview = raw_md[:80000]
         pdf_skill = skill_contents.get("pdf", "")[:4000]
         svg_skill = skill_contents.get("svg", "")[:4000]
         chart_skill = skill_contents.get("chart", "")[:4000]
 
         prompt = (
             "You are Veronica, FRIDAY's research report architect. You write exhaustive textbook-quality research reports.\n\n"
-            f"Generate a create_pdf() sections JSON array for a definitive, exhaustive research report on: '{topic}'.\n"
-            "The report MUST be at least 100 pages when rendered — write like a university-level textbook, "
-            "a comprehensive research paper, or an official government/publication manual. "
-            "Every topic, subtopic, concept, formula, derivation, example, and data point from the raw research "
-            "MUST be covered in extreme detail with multiple paragraphs, examples, tables, charts, and formulas.\n\n"
-            "Return a JSON array in this EXACT flat format:\n"
+            f"Generate a create_pdf() sections JSON array for a comprehensive research report on: '{topic}'.\n"
+            "The report should be thorough — cover every subtopic with detailed paragraphs, tables, "
+            "charts, and structured data from the raw research.\n\n"
+            "Return a JSON array in this EXACT flat format — no markdown fences, no explanations, no wrapper:\n"
             '[\n'
             '  {"type": "heading", "text": "Section Title", "level": 1},\n'
-            '  {"type": "paragraph", "text": "Very detailed body text here. Write MULTIPLE paragraphs for each concept. '
-            'Explain every formula, derivation, and principle step-by-step. This should read like the best textbook '
-            'chapter you have ever read — thorough, precise, and complete."},\n'
-            '  {"type": "table", "headers": ["Col1","Col2"], "rows": [["a","b"]], "caption": "Descriptive caption"},\n'
-            '  {"type": "chart", "chart_type": "timeline", "data": [2023,2024,2025], '
-            '"labels": ["Event A","Event B","Event C"], "data2":["desc1","desc2","desc3"], '
-            '"title": "Timeline", "xlabel": "Year"},\n'
+            '  {"type": "paragraph", "text": "Detailed body text here."},\n'
+            '  {"type": "table", "headers": ["Col1","Col2"], "rows": [["a","b"]], "caption": "Caption"},\n'
             '  {"type": "chart", "chart_type": "bar", "data": [10,20,30], '
             '"labels": ["X","Y","Z"], "title": "Chart", "xlabel": "x", "ylabel": "y"},\n'
-            '  {"type": "chart", "chart_type": "multi_line", "data": [[1,2,3],[4,5,6]], '
-            '"labels": ["A","B","C"], "series": ["Series1","Series2"], '
-            '"title": "Multi-line", "xlabel": "x", "ylabel": "y"},\n'
             '  {"type": "bullets", "items": ["Key point 1", "Key point 2"]},\n'
             '  {"type": "numbered", "items": ["Step 1", "Step 2"]},\n'
             '  {"type": "divider"},\n'
-            '  {"type": "image", "path": "formula.png"},\n'
             '  {"type": "code", "text": "code here"}\n'
             ']\n\n'
-            "Do NOT use ProseMirror format. Do NOT use 'doc' or 'content' wrappers. "
-            "Each item must have 'type' at the top level.\n\n"
-            "REQUIRED ELEMENT TYPES (use ALL of these extensively):\n"
-            "- heading (levels 1-3) — create a deep hierarchy of sections and subsections\n"
-            "- paragraph — write MULTIPLE paragraphs per topic. Each concept needs its own detailed explanation. "
-            "Include derivations, step-by-step walkthroughs, examples, real-world applications, historical context.\n"
-            "- table — use for EVERY set of structured/comparative data: formulas, constants, properties, comparisons\n"
-            "- chart with chart_type 'timeline' — for EVERY chronological sequence, historical development, syllabus timeline, etc.\n"
-            "- chart with other types (bar, line, pie, hbar, scatter, area, multi_line) — use for numerical data, "
-            "statistics, performance comparisons, distributions\n"
-            "- bullets and numbered lists — use extensively for key points, steps, properties\n"
-            "- divider — between every major section\n"
-            "- image — for EVERY mathematical formula (render with matplotlib mathtext first). Include all key formulas.\n"
-            "- image — for SVGs/diagrams (generate SVG, convert to PNG, embed). Create diagrams for concepts, "
-            "flowcharts for processes, schematics for systems.\n"
-            "- code blocks — where relevant (calculations, algorithms)\n\n"
+            "Use ALL element types: heading(1-3), paragraph, table, chart(bar,line,pie,timeline), bullets, numbered, divider, code.\n"
+            "Write at least 80 sections. Cover every topic from the raw research with detailed paragraphs.\n"
+            "Include a References section at the end with all source URLs.\n\n"
             f"RAW RESEARCH DATA:\n{raw_preview}\n\n"
             f"PDF SKILL GUIDE:\n{pdf_skill}\n\n"
             f"SVG SKILL GUIDE:\n{svg_skill}\n\n"
             f"CHART SKILL GUIDE:\n{chart_skill}\n\n"
-            "REPORT STRUCTURE (EXPAND EVERY SECTION INTO MULTIPLE SUBSECTIONS):\n"
-            "1. Title Page with author, date, abstract\n"
-            "2. Table of Contents (as bullets)\n"
-            "3. Executive Summary — comprehensive overview covering all key findings\n"
-            "4. Methodology — detailed research methodology, tools used, sources\n"
-            "5. Fundamental Concepts — explain ALL foundational topics in extreme detail with formulas, derivations, diagrams\n"
-            "6. Detailed Topic-wise Analysis — for EACH subtopic from the raw data:\n"
-            "   a. Introduction and importance\n"
-            "   b. Core concepts and definitions\n"
-            "   c. Mathematical formulation (formulas as images)\n"
-            "   d. Step-by-step derivations\n"
-            "   e. Key properties and theorems\n"
-            "   f. Solved examples (multiple, with detailed solutions)\n"
-            "   g. Common mistakes and misconceptions\n"
-            "   h. Real-world applications\n"
-            "   i. Practice problems with solutions\n"
-            "7. Comparative Analysis — tables comparing different approaches, formulas, methods\n"
-            "8. Visualizations — timeline charts for historical development, bar/line charts for data comparisons\n"
-            "9. Advanced Topics — deeper dives, extensions, advanced problem-solving techniques\n"
-            "10. Comprehensive Problem Bank — organized by topic, difficulty level, with full solutions\n"
-            "11. Important Formulas Summary — a quick-reference table of ALL formulas\n"
-            "12. Study Strategy & Tips — how to approach the topic effectively\n"
-            "13. Recommended Resources — table: Resource, Type, URL, Description\n"
-            "14. References — EXHAUSTIVE table: Source, URL. Include EVERY source URL from the raw data.\n"
-            "15. Appendix — additional data, long tables, extended derivations\n\n"
+            "REPORT STRUCTURE:\n"
+            "1. Executive Summary\n"
+            "2. Methodology\n"
+            "3-13. Detailed topic analysis (one section per subtopic from the raw data)\n"
+            "14. Comparative Analysis (tables)\n"
+            "15. Visualizations (charts)\n"
+            "16. References (ALL source URLs)\n\n"
             "RULES:\n"
-            "- Return ONLY valid JSON array. No markdown fences, no explanations, no wrapper text.\n"
-            "- Each element is a dict with 'type' and required fields. ALL text fields must be fully written out "
-            "(no placeholders, no '...' ellipsis, no 'etc.').\n"
-            "- Use ALL data from the raw research. Every scraped page, every PDF extract, every link must contribute content.\n"
-            "- This is for JEE Physics — write at the level of HC Verma, Irodov, University Physics. "
-            "Be mathematically rigorous. Include every formula, every derivation, every special case.\n"
-            "- Make it ENORMOUS — 1000+ sections minimum. Write as many paragraphs as needed to fully explain everything. "
-            "A single paragraph should never be shorter than 4-5 sentences. Most should be 8-15 sentences.\n"
-            "- Include ALL source URLs in the References table — every single link collected during research.\n"
-            "- For timeline charts: use actual years/dates from the research as data[], event names as labels[], "
-            "short descriptions as data2[]. Create timelines for historical development, syllabus evolution, etc.\n"
-            "- Use chart variety: timeline, bar, line, pie, hbar, scatter, area, multi_line — pick the best type for each dataset.\n"
-            "- Every mathematical formula MUST be an image element (rendered via matplotlib mathtext). "
-            "Put ALL important formulas in the Important Formulas Summary table.\n"
-            "- Write in formal, academic English. No casual language. This is a publication-quality research document."
+            "- Return ONLY valid JSON array. No markdown fences, no wrapper text.\n"
+            "- Each element is a dict with 'type' and required fields.\n"
+            "- Write at least 80 sections. Be thorough but concise in each paragraph (3-6 sentences).\n"
+            "- Every source URL from the raw data must appear in the References section table.\n"
+            "- Use tables and charts wherever structured data exists in the research.\n"
+            "- Write in formal, professional English."
         )
 
         try:
             resp = await self._client.chat(
                 model=model, messages=[{"role": "user", "content": prompt}],
-                max_tokens=128000, temperature=0.4,
+                max_tokens=32000, temperature=0.3,
             )
             sections_raw = resp.content.strip()
             if sections_raw.startswith("```"):
@@ -907,18 +856,52 @@ class VeronicaAgent(BaseAgent):
             pdf_result = await create_pdf(
                 sections=sections, title=f"Research Report: {topic}", output_path=output_path,
             )
+            pdf_result["model"] = model
             return pdf_result
 
         except (json.JSONDecodeError, Exception) as e:
             logger.warning("LLM report failed (%s), building fallback report", e)
-            sections = [
-                {"type": "heading", "text": f"Research Report: {topic}", "level": 1},
-                {"type": "paragraph", "text": f"Auto-generated by Veronica on {datetime.datetime.now().isoformat()}"},
-                {"type": "divider"},
-                {"type": "heading", "text": "Raw Collected Data", "level": 2},
-                {"type": "paragraph", "text": raw_md[:100000]},
-            ]
+            try:
+                fallback_resp = await self._client.chat(
+                    model=model,
+                    messages=[{
+                        "role": "user",
+                        "content": (
+                            "Write a structured report outline and key findings as a JSON array for create_pdf(). "
+                            f"Topic: {topic}\n\n"
+                            f"Raw data:\n{raw_md[:60000]}\n\n"
+                            "Return JSON array with heading(1-3), paragraph, table, bullets, divider elements. "
+                            "At least 30 sections covering the main topics. No markdown fences, just raw JSON."
+                        )
+                    }],
+                    max_tokens=16000, temperature=0.3,
+                )
+                raw = fallback_resp.content.strip()
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                sections = json.loads(raw)
+                if not isinstance(sections, list):
+                    raise ValueError("not a list")
+            except Exception:
+                lines = raw_md[:80000].split("\n")
+                sections = [
+                    {"type": "heading", "text": f"Research Report: {topic}", "level": 1},
+                    {"type": "paragraph", "text": f"Auto-generated by Veronica on {datetime.datetime.now().isoformat()}"},
+                    {"type": "divider"},
+                ]
+                chunk = []
+                for line in lines:
+                    if line.startswith("#") and chunk:
+                        sections.append({"type": "paragraph", "text": "\n".join(chunk).strip()})
+                        chunk = []
+                        sections.append({"type": "heading", "text": line.lstrip("#").strip(), "level": min(line.count("#"), 3)})
+                    elif line.strip():
+                        chunk.append(line)
+                if chunk:
+                    sections.append({"type": "paragraph", "text": "\n".join(chunk).strip()})
             from friday.tools.doc_tools import create_pdf
-            return await create_pdf(
+            result = await create_pdf(
                 sections=sections, title=f"Research Report: {topic}", output_path=output_path,
             )
+            result["model"] = model
+            return result

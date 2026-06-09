@@ -636,6 +636,7 @@ async def create_pdf(
 ) -> dict[str, Any]:
     """
     Generate a rich PDF with headings, paragraphs, tables, charts, and lists.
+    IMPORTANT: First read friday/skills/pdf/SKILL.md for the usage guide and patterns.
 
     Each section dict supports:
       {"type": "heading", "text": "...", "level": 1|2|3}
