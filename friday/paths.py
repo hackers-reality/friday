@@ -78,7 +78,8 @@ def get_skills_path() -> Path:
 
 def get_knowledge_dir() -> Path:
     """Return the knowledge store directory."""
-    return get_friday_dir() / "friday_memory" / "knowledge"
+    from friday._paths import FRIDAY_MEMORY
+    return Path(FRIDAY_MEMORY) / "knowledge"
 
 
 def get_sidecar_dir() -> Path:

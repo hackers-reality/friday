@@ -131,7 +131,7 @@ async def github_user_info(username: str, timeout: int = 30) -> GithubResult:
         from github import Github
 
         token = _get_token()
-        g = Github(token) if token else Github()
+        g = Github(token, retry=1) if token else Github(retry=1)
 
         user = await asyncio.get_event_loop().run_in_executor(
             None, lambda: g.get_user(username)
@@ -215,7 +215,7 @@ async def github_search_users(
         from github import Github
 
         token = _get_token()
-        g = Github(token) if token else Github()
+        g = Github(token, retry=1) if token else Github(retry=1)
         users = await asyncio.get_event_loop().run_in_executor(
             None, lambda: list(g.search_users(query)[:limit])
         )
@@ -274,7 +274,7 @@ async def github_search_repos(
     try:
         from github import Github
 
-        g = Github(_get_token())
+        g = Github(_get_token(), retry=1) if _get_token() else Github(retry=1)
         repos = await asyncio.get_event_loop().run_in_executor(
             None, lambda: list(g.search_repositories(query)[:limit])
         )
@@ -335,7 +335,7 @@ async def github_commit_emails(
     try:
         from github import Github
 
-        g = Github(_get_token())
+        g = Github(_get_token(), retry=1) if _get_token() else Github(retry=1)
         repo = await asyncio.get_event_loop().run_in_executor(
             None, lambda: g.get_repo(repo_full_name)
         )
@@ -397,7 +397,7 @@ async def github_org_repos(
     try:
         from github import Github
 
-        g = Github(_get_token())
+        g = Github(_get_token(), retry=1) if _get_token() else Github(retry=1)
         org = await asyncio.get_event_loop().run_in_executor(
             None, lambda: g.get_organization(org_name)
         )

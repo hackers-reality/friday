@@ -7,6 +7,21 @@ OSINT Extra) are re-exported here for consistency.
 """
 
 import sys as _sys
+
+# ── DNS resolver patch (Windows WMI workaround) ──
+# dnspython's win32util.py fails on machines missing WMI classes.
+# We monkey-patch Resolver so it skips WMI auto-config and uses
+# public DNS by default. Each tool that creates Resolver() gets this.
+import dns.resolver as _dns_resolver
+_orig_resolver = _dns_resolver.Resolver
+class _PatchedResolver(_orig_resolver):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("configure", False)
+        super().__init__(*args, **kwargs)
+        if not self.nameservers:
+            self.nameservers = ["8.8.8.8", "1.1.1.1", "8.8.4.4"]
+_dns_resolver.Resolver = _PatchedResolver
+
 import friday.tools_flat as _tflat
 
 # Re-export ALL public names from tools_flat
@@ -55,7 +70,7 @@ from friday.tools.nlp_tools import (
 )
 from friday.tools.security_tools import (
     generate_fernet_key, encrypt_text, decrypt_text, hash_text,
-    bcrypt_hash, bcrypt_verify, jwt_encode, jwt_decode,
+    bcrypt_hash, bcrypt_verify, jwt_encode, jwt_decode, generate_rsa_keypair,
     generate_totp_secret, verify_totp,
 )
 from friday.tools.memory_tools import (
@@ -100,6 +115,39 @@ from friday.browser_use_bridge import (
     browser_use_list_tabs, browser_use_new_tab, browser_use_close_tab,
     browser_use_go_back, browser_use_go_forward,
     browser_use_status, browser_use_clear, browser_use_reconnect,
+)
+from friday.desktop_use_bridge import (
+    desktop_use_status, desktop_list_windows, desktop_get_active_window,
+    desktop_focus_window, desktop_launch_app, desktop_click,
+    desktop_type_text, desktop_extract_text, desktop_screenshot,
+    desktop_scroll, desktop_press_key, desktop_get_element_tree,
+)
+from friday.voice_use_bridge import (
+    voice_use_status, voice_list_devices, voice_record,
+    voice_transcribe, voice_record_and_transcribe, voice_speak,
+    voice_play, voice_detect_wake_word, voice_analyze,
+)
+from friday.agent_use_bridge import (
+    agent_use_status, agent_use_list_agents, agent_use_spawn,
+    agent_use_delegate, agent_use_workflow, agent_use_kill,
+    agent_use_heartbeats,
+)
+from friday.security_use_bridge import (
+    security_use_status,
+    wifi_list_profiles, wifi_show_password, wifi_scan, wifi_connection_status,
+    network_connections, arp_table, traceroute,
+    dns_lookup, dns_reverse_lookup, dns_mx_lookup, dns_enumeration,
+    port_scan, ping_host, ssl_certificate_check,
+    shodan_search, shodan_host, shodan_search_count, shodan_ports,
+    whois_lookup, geoip_lookup, hibp_breach_check,
+)
+from friday.memory_use_bridge import (
+    memory_use_status,
+    chroma_create_collection, chroma_add, chroma_query, chroma_list_collections,
+    redis_set, redis_get, redis_delete, redis_list_keys,
+    neo4j_run_query, neo4j_create_entity, neo4j_find_entities,
+    vm_add, vm_search, vm_stats, vm_delete, vm_clear,
+    kyu_status, kyu_interview, kyu_learn, kyu_profile,
 )
 from friday.cookbook import (
     cookbook_scan, cookbook_recommend, cookbook_ollama_check,
@@ -187,7 +235,7 @@ from friday.tools_osint_extra import (
 # ── Browser Automation (browser-use) ──
 from friday.tools.browser_tool import (
     BrowserActionResult, run_browser_task,
-    browser_navigate, browser_extract_content, browser_search,
+    browser_navigate, browser_extract_content, browser_search, close_browser,
 )
 
 # ── Maigret OSINT Username Search ──
@@ -398,6 +446,39 @@ __all__ = _tflat.__all__ + [
     "browser_use_list_tabs", "browser_use_new_tab", "browser_use_close_tab",
     "browser_use_go_back", "browser_use_go_forward",
     "browser_use_status", "browser_use_clear", "browser_use_reconnect",
+
+    # ── Desktop-Use Bridge (native Windows app control) ──
+    "desktop_use_status", "desktop_list_windows", "desktop_get_active_window",
+    "desktop_focus_window", "desktop_launch_app", "desktop_click",
+    "desktop_type_text", "desktop_extract_text", "desktop_screenshot",
+    "desktop_scroll", "desktop_press_key", "desktop_get_element_tree",
+
+    # ── Voice-Use Bridge (voice I/O: record, transcribe, TTS, play) ──
+    "voice_use_status", "voice_list_devices", "voice_record",
+    "voice_transcribe", "voice_record_and_transcribe", "voice_speak",
+    "voice_play", "voice_detect_wake_word", "voice_analyze",
+
+    # ── Agent-Use Bridge (multi-agent orchestration) ──
+    "agent_use_status", "agent_use_list_agents", "agent_use_spawn",
+    "agent_use_delegate", "agent_use_workflow", "agent_use_kill",
+    "agent_use_heartbeats",
+
+    # ── Security-Use Bridge (unified security & pen-testing toolkit) ──
+    "security_use_status",
+    "wifi_list_profiles", "wifi_show_password", "wifi_scan", "wifi_connection_status",
+    "network_connections", "arp_table", "traceroute",
+    "dns_lookup", "dns_reverse_lookup", "dns_mx_lookup", "dns_enumeration",
+    "port_scan", "ping_host", "ssl_certificate_check",
+    "shodan_search", "shodan_host", "shodan_search_count", "shodan_ports",
+    "whois_lookup", "geoip_lookup",     "hibp_breach_check",
+
+    # ── Memory-Use Bridge (memory, learning & knowledge graph toolkit) ──
+    "memory_use_status",
+    "chroma_create_collection", "chroma_add", "chroma_query", "chroma_list_collections",
+    "redis_set", "redis_get", "redis_delete", "redis_list_keys",
+    "neo4j_run_query", "neo4j_create_entity", "neo4j_find_entities",
+    "vm_add", "vm_search", "vm_stats", "vm_delete", "vm_clear",
+    "kyu_status", "kyu_interview", "kyu_learn", "kyu_profile",
 
     # ── Cookbook (Hardware Scanner + Model Recommendations) ──
     "cookbook_scan", "cookbook_recommend", "cookbook_ollama_check",

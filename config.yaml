@@ -1,33 +1,35 @@
-model: gemini-3.1-flash-live-preview
+model: opencode/big-pickle
 nim:
-  api_base: https://integrate.api.nvidia.com/v1
-  rate_limit_rpm: 40
+  api_base: https://api.opencode.ai/v1
+  rate_limit_rpm: 1000
   model_map:
     browse:
+      - opencode/big-pickle
       - qwen/qwen3-coder-480b-a35b-instruct
-      - nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
     code_gen:
+      - opencode/big-pickle
       - qwen/qwen3-coder-480b-a35b-instruct
-      - nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
     general:
+      - opencode/big-pickle
       - qwen/qwen3-coder-480b-a35b-instruct
-      - meta/llama-3.3-70b-instruct
     image_analysis:
+      - opencode/big-pickle
       - meta/llama-3.2-11b-vision-instruct
     osint:
+      - opencode/big-pickle
       - qwen/qwen3-coder-480b-a35b-instruct
-      - nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
     reasoning:
+      - opencode/big-pickle
       - qwen/qwen3-coder-480b-a35b-instruct
-      - meta/llama-3.3-70b-instruct
     research:
+      - opencode/big-pickle
       - qwen/qwen3-coder-480b-a35b-instruct
-      - qwen/qwen3.5-397b-a17b
-      - nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
     summarization:
-      - big-pickle
+      - opencode/big-pickle
       - qwen/qwen3-coder-480b-a35b-instruct
-      - meta/llama-3.3-70b-instruct
+    planning:
+      - opencode/big-pickle
+      - qwen/qwen3-coder-480b-a35b-instruct
 agents:
 - id: research_agent
   name: Veronica
@@ -35,7 +37,7 @@ agents:
   - research
   - summarization
   - osint
-  nim_model: qwen/qwen3-coder-480b-a35b-instruct
+  nim_model: opencode/big-pickle
   tools:
   - browser_use_navigate
   - browser_use_click
@@ -106,7 +108,7 @@ agents:
   task_types:
   - code_gen
   - reasoning
-  nim_model: qwen/qwen3-coder-480b-a35b-instruct
+  nim_model: opencode/big-pickle
   tools:
   - read_file
   - write_file
@@ -153,7 +155,7 @@ agents:
   task_types:
   - reasoning
   - research
-  nim_model: qwen/qwen3-coder-480b-a35b-instruct
+  nim_model: opencode/big-pickle
   tools:
   - deep_research
   - web_search
@@ -174,7 +176,7 @@ agents:
   - ip_scan
   - domain_scan
   - graph_query
-  nim_model: qwen/qwen3-coder-480b-a35b-instruct
+  nim_model: opencode/big-pickle
   tools:
   - sherlock
   - exiftool

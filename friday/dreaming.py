@@ -139,6 +139,7 @@ class DreamEngine:
         self._background_tasks: List[asyncio.Task] = []
         self._dream_loop_task: Optional[asyncio.Task] = None
         self._lock = threading.RLock()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._load_state()
         # Always reset dream/silent flags on boot — never carry over across restarts
         self.is_dreaming = False
@@ -795,6 +796,7 @@ def dream_tool(action: str = "status") -> str:
       activities   — list current background activities
     """
     engine = get_engine()
+    loop = getattr(engine, '_loop', None)
     try:
         if action == "status":
             state = engine._state.value if engine._state else "inactive"
@@ -811,8 +813,10 @@ def dream_tool(action: str = "status") -> str:
         elif action == "enter":
             if engine.is_dreaming:
                 return "[DREAM] Already dreaming."
+            if loop is None:
+                return "[DREAM] Dream loop not started. Call start_dreaming_if_idle() first."
             fut = asyncio.run_coroutine_threadsafe(
-                engine.enter_dream_mode(), engine._loop
+                engine.enter_dream_mode(), loop
             )
             fut.result(timeout=10)
             return "[DREAM] Entered dream mode."
@@ -820,15 +824,22 @@ def dream_tool(action: str = "status") -> str:
         elif action == "exit":
             if not engine.is_dreaming:
                 return "[DREAM] Not dreaming."
+            if loop is None:
+                engine.is_dreaming = False
+                engine.is_silent = False
+                engine._state = DreamingState.inactive
+                return "[DREAM] Force exited dream mode (no event loop)."
             fut = asyncio.run_coroutine_threadsafe(
-                engine.exit_dream_mode(), engine._loop
+                engine.exit_dream_mode(), loop
             )
             fut.result(timeout=10)
             return "[DREAM] Exited dream mode."
 
         elif action == "cycle":
+            if loop is None:
+                return "[DREAM] Dream loop not started."
             fut = asyncio.run_coroutine_threadsafe(
-                engine._run_dream_cycle(), engine._loop
+                engine._run_dream_cycle(), loop
             )
             result = fut.result(timeout=30)
             return f"[DREAM] Cycle complete: {result or 'done'}"

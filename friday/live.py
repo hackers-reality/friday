@@ -134,6 +134,39 @@ from friday.browser_use_bridge import (
     browser_use_go_back, browser_use_go_forward,
     browser_use_status, browser_use_clear, browser_use_reconnect,
 )
+from friday.desktop_use_bridge import (
+    desktop_use_status, desktop_list_windows, desktop_get_active_window,
+    desktop_focus_window, desktop_launch_app, desktop_click,
+    desktop_type_text, desktop_extract_text, desktop_screenshot,
+    desktop_scroll, desktop_press_key, desktop_get_element_tree,
+)
+from friday.voice_use_bridge import (
+    voice_use_status, voice_list_devices, voice_record,
+    voice_transcribe, voice_record_and_transcribe, voice_speak,
+    voice_play, voice_detect_wake_word, voice_analyze,
+)
+from friday.agent_use_bridge import (
+    agent_use_status, agent_use_list_agents, agent_use_spawn,
+    agent_use_delegate, agent_use_workflow, agent_use_kill,
+    agent_use_heartbeats,
+)
+from friday.security_use_bridge import (
+    security_use_status,
+    wifi_list_profiles, wifi_show_password, wifi_scan, wifi_connection_status,
+    network_connections, arp_table, traceroute,
+    dns_lookup, dns_reverse_lookup, dns_mx_lookup, dns_enumeration,
+    port_scan, ping_host, ssl_certificate_check,
+    shodan_search, shodan_host, shodan_search_count, shodan_ports,
+    whois_lookup, geoip_lookup, hibp_breach_check,
+)
+from friday.memory_use_bridge import (
+    memory_use_status,
+    chroma_create_collection, chroma_add, chroma_query, chroma_list_collections,
+    redis_set, redis_get, redis_delete, redis_list_keys,
+    neo4j_run_query, neo4j_create_entity, neo4j_find_entities,
+    vm_add, vm_search, vm_stats, vm_delete, vm_clear,
+    kyu_status, kyu_interview, kyu_learn, kyu_profile,
+)
 from friday.cookbook import (
     cookbook_scan, cookbook_recommend, cookbook_ollama_check,
 )
@@ -3312,6 +3345,31 @@ TOOL_MAP = {
     "browser_use_clear": browser_use_clear,
     "browser_use_reconnect": browser_use_reconnect,
 
+    # ─── Desktop-Use Bridge (native Windows app control) ───
+    "desktop_use_status": desktop_use_status,
+    "desktop_list_windows": desktop_list_windows,
+    "desktop_get_active_window": desktop_get_active_window,
+    "desktop_focus_window": desktop_focus_window,
+    "desktop_launch_app": desktop_launch_app,
+    "desktop_click": desktop_click,
+    "desktop_type_text": desktop_type_text,
+    "desktop_extract_text": desktop_extract_text,
+    "desktop_screenshot": desktop_screenshot,
+    "desktop_scroll": desktop_scroll,
+    "desktop_press_key": desktop_press_key,
+    "desktop_get_element_tree": desktop_get_element_tree,
+
+    # ─── Voice-Use Bridge (voice I/O: record, transcribe, TTS, play) ───
+    "voice_use_status": voice_use_status,
+    "voice_list_devices": voice_list_devices,
+    "voice_record": voice_record,
+    "voice_transcribe": voice_transcribe,
+    "voice_record_and_transcribe": voice_record_and_transcribe,
+    "voice_speak": voice_speak,
+    "voice_play": voice_play,
+    "voice_detect_wake_word": voice_detect_wake_word,
+    "voice_analyze": voice_analyze,
+
     # ─── Cookbook (Hardware Scanner + Model Recommendations) ───
     "cookbook_scan": cookbook_scan,
     "cookbook_recommend": cookbook_recommend,
@@ -3339,6 +3397,53 @@ TOOL_MAP = {
     "paperclip_adapter_status": paperclip_adapter_status,
     "paperclip_adapter_register": paperclip_adapter_register,
     "paperclip_adapter_submit_task": paperclip_adapter_submit_task,
+
+    # ─── Security-Use Bridge (security & pen-testing toolkit) ───
+    "security_use_status": security_use_status,
+    "wifi_list_profiles": wifi_list_profiles,
+    "wifi_show_password": wifi_show_password,
+    "wifi_scan": wifi_scan,
+    "wifi_connection_status": wifi_connection_status,
+    "network_connections": network_connections,
+    "arp_table": arp_table,
+    "traceroute": traceroute,
+    "dns_lookup": dns_lookup,
+    "dns_reverse_lookup": dns_reverse_lookup,
+    "dns_mx_lookup": dns_mx_lookup,
+    "dns_enumeration": dns_enumeration,
+    "port_scan": port_scan,
+    "ping_host": ping_host,
+    "ssl_certificate_check": ssl_certificate_check,
+    "shodan_search": shodan_search,
+    "shodan_host": shodan_host,
+    "shodan_search_count": shodan_search_count,
+    "shodan_ports": shodan_ports,
+    "whois_lookup": whois_lookup,
+    "geoip_lookup": geoip_lookup,
+    "hibp_breach_check": hibp_breach_check,
+
+    # ─── Memory-Use Bridge (memory, learning & knowledge graph toolkit) ───
+    "memory_use_status": memory_use_status,
+    "chroma_create_collection": chroma_create_collection,
+    "chroma_add": chroma_add,
+    "chroma_query": chroma_query,
+    "chroma_list_collections": chroma_list_collections,
+    "redis_set": redis_set,
+    "redis_get": redis_get,
+    "redis_delete": redis_delete,
+    "redis_list_keys": redis_list_keys,
+    "neo4j_run_query": neo4j_run_query,
+    "neo4j_create_entity": neo4j_create_entity,
+    "neo4j_find_entities": neo4j_find_entities,
+    "vm_add": vm_add,
+    "vm_search": vm_search,
+    "vm_stats": vm_stats,
+    "vm_delete": vm_delete,
+    "vm_clear": vm_clear,
+    "kyu_status": kyu_status,
+    "kyu_interview": kyu_interview,
+    "kyu_learn": kyu_learn,
+    "kyu_profile": kyu_profile,
 
     # ─── Visual Overlay (Clicky-style pointers, hints, annotations) ───
     "show_pointer": show_pointer,

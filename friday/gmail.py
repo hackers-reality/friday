@@ -313,7 +313,8 @@ def exchange_oauth_code(redirect_url: str) -> str:
         except Exception:
             pass
 
-        old_cal_token = os.path.join(os.path.dirname(_ROOT), "friday_memory", "calendar_token.json")
+        from friday._paths import FRIDAY_MEMORY
+        old_cal_token = os.path.join(FRIDAY_MEMORY, "calendar_token.json")
         if os.path.exists(old_cal_token):
             os.remove(old_cal_token)
 

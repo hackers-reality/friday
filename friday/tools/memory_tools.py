@@ -196,9 +196,8 @@ except ImportError:
 async def sqlmodel_query(table: str, condition: str | None = None) -> dict[str, Any]:
     if not HAS_SQLMODEL:
         return {"error": "sqlmodel not installed"}
-    # SQLModel requires model classes; this wraps raw SQL as fallback
-    import sqlite3
-    db_path = os.environ.get("SQLMODEL_DB", "friday_memory/friday.db")
+    from friday._paths import FRIDAY_MEMORY
+    db_path = os.environ.get("SQLMODEL_DB", os.path.join(FRIDAY_MEMORY, "friday.db"))
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()

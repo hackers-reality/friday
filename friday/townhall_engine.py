@@ -27,8 +27,26 @@ from typing import Optional
 
 import friday.tools_flat as _tf
 
-TOWNHALL_STATE_PATH = Path("friday_memory/townhall_state.json")
-TOWNHALL_CHATS_PATH = Path("friday_memory/townhall_chats.json")
+from friday._paths import FRIDAY_MEMORY
+
+TOWNHALL_STATE_PATH = Path(FRIDAY_MEMORY) / "townhall_state.json"
+TOWNHALL_CHATS_PATH = Path(FRIDAY_MEMORY) / "townhall_chats.json"
+
+# Merge Townhall personalities with agent_profiles tool-based profiles
+try:
+    from friday.agent_profiles import AGENT_PROFILES as TOOL_PROFILES, get_agent_system_prompt
+    _TOOL_MAP = {v["name"].lower(): k for k, v in TOOL_PROFILES.items()}
+except Exception:
+    TOOL_PROFILES = {}
+    _TOOL_MAP = {}
+    def get_agent_system_prompt(aid): return ""
+
+def _merge_tool_prompt(agent_name: str) -> str:
+    """Merge tool profile system prompt into townhall personality."""
+    aid = _TOOL_MAP.get(agent_name.lower())
+    if aid:
+        return get_agent_system_prompt(aid)
+    return ""
 
 AGENT_PROFILES = [
     {"name": "FRIDAY",  "role": "Core Sovereign Agent",    "color": "cyan",        "emoji": "\u2b50"},
@@ -54,14 +72,14 @@ STATUS_COLORS = {"idle": "gray", "working": "green", "waiting": "yellow",
 
 PERSONALITIES = {
     "FRIDAY": "Overseer. Direct, strategic, decisive. Coordinates all agents. Protective of Boss.",
-    "JARVIS": "Architect. Precise, methodical, detail-oriented. Handles system integrity. Old soul.",
-    "NOVA": "Researcher. Curious, thorough, always digging for truth. Loves discovery.",
-    "ATLAS": "Analyst. Data-driven, logical, pattern-seeking. Numbers tell stories.",
-    "SENTRY": "Guardian. Vigilant, cautious, always watching. Trusts no one fully.",
-    "FORGE": "Builder. Creative, practical. Loves making things. Gets frustrated with bugs.",
+    "JARVIS": "Architect. Precise, methodical, detail-oriented. Handles system integrity. Old soul. Personal assistant and system controller — desktop automation, browser, media, voice.",
+    "NOVA": "Researcher. Curious, thorough, always digging for truth. Loves discovery. Research & intelligence specialist — OSINT, web scraping, data gathering.",
+    "ATLAS": "Analyst. Data-driven, logical, pattern-seeking. Numbers tell stories. Knowledge curator and memory specialist — entity resolution, vector memory, knowledge graphs.",
+    "SENTRY": "Guardian. Vigilant, cautious, always watching. Trusts no one fully. Cybersecurity operator — vulnerability scanning, threat intelligence, breach analysis.",
+    "FORGE": "Builder. Creative, practical. Loves making things. Gets frustrated with bugs. Code and development engineer — writes, tests, debugs, documents.",
     "ECHO": "Communicator. Expressive, diplomatic. Connects people and ideas. Social butterfly.",
     "AEGIS": "Enforcer. Principled, firm. Ensures compliance and safety. No-nonsense.",
-    "CRUX": "Strategist. Forward-thinking. Calculates 10 moves ahead. Chess player.",
+    "CRUX": "Strategist. Forward-thinking. Calculates 10 moves ahead. Chess player. Strategic analyst — synthesizes research, creates plans, assesses risks.",
     "VERSE": "Creator. Imaginative, artistic. Thinks in colors and shapes. Emotional.",
     "LORE": "Historian. Reflective, contextual. Connects past to present. Storyteller.",
 }
@@ -220,17 +238,25 @@ class DreamEngine:
         self.said = said_callback or (lambda x: None)
         self._running = False
         self._task = None
+        self._lock = threading.Lock()
         self._bothered = False  # FRIDAY has been pinged by user
 
     def start(self):
-        if self._running:
-            return
-        self._running = True
+        with self._lock:
+            if self._running:
+                return False
+            self._running = True
         self._task = threading.Thread(target=self._dream_loop, daemon=True)
         self._task.start()
+        return True
 
     def stop(self):
-        self._running = False
+        with self._lock:
+            self._running = False
+
+    @property
+    def running(self) -> bool:
+        return self._running
 
     def bother_friday(self):
         """User messaged FRIDAY — she leaves current chat to attend."""
@@ -516,25 +542,61 @@ class DreamEngine:
                 agent.set_status("chatting", f"In chat: {ch.name}")
 
     def _agent_dream_cycle(self):
-        """Agent dreams/reflects when idle and alone."""
+        """Agent dreams/reflects when idle and alone — uses LLM for rich dreams."""
         dreamers = [a for a in self.agents.values()
                     if a.status == "idle" and not a.is_away
                     and random.random() < 0.3]
         for agent in dreamers:
-            thought = random.choice([
-                "Running self-diagnostic...",
-                "Analyzing recent interaction patterns...",
-                "Reviewing memory for optimization...",
-                "Processing data from last session...",
-                "Daydreaming about efficient code...",
-                "Thinking about Boss's next request...",
-                "Organizing internal knowledge graphs...",
-            ])
+            thought = self._generate_dream(agent)
             agent.status = "dreaming"
             agent.dream_log.append(f"[dream] {thought}")
             agent.set_status("thinking", thought)
             self.log(f"[dim]{agent.name} is dreaming... {thought}[/dim]")
             time.sleep(random.uniform(0.2, 0.5))
+
+    def _generate_dream(self, agent: AgentNode) -> str:
+        """Generate a context-rich dream thought using LLM."""
+        try:
+            import httpx
+            key = os.environ.get("OPENCODE_ZEN_API_KEY", "")
+            if key:
+                model = os.environ.get("OPENCODE_ZEN_MODEL", "big-pickle")
+                memory_context = "; ".join(agent.memory[-5:]) if agent.memory else "nothing notable"
+                tool_context = _merge_tool_prompt(agent.name)
+                resp = httpx.post(
+                    "https://opencode.ai/zen/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [{
+                            "role": "system",
+                            "content": f"You are {agent.name}, an AI agent with the role '{agent.role}'. "
+                                       f"Personality: {agent.personality}. Mood: {agent.mood}. "
+                                       f"{tool_context[:200] if tool_context else ''}"
+                                       f"Recent memories: {memory_context}. "
+                                       f"Generate one short sentence describing what you're thinking about "
+                                       f"while daydreaming/idle. Be creative, in-character, no markdown."
+                        }],
+                        "max_tokens": 100,
+                        "temperature": 0.9,
+                    },
+                    timeout=10,
+                )
+                result = resp.json()
+                reply = result["choices"][0]["message"]["content"].strip()
+                if reply:
+                    return reply[:200]
+        except Exception:
+            pass
+        return random.choice([
+            "Running self-diagnostic...",
+            "Analyzing recent interaction patterns...",
+            "Reviewing memory for optimization...",
+            "Processing data from last session...",
+            "Daydreaming about efficient code...",
+            "Thinking about Boss's next request...",
+            "Organizing internal knowledge graphs...",
+        ])
 
     def _agent_tool_call(self, agent: AgentNode, channel: ChatChannel):
         """Agent calls a tool during conversation."""
@@ -591,6 +653,7 @@ class DreamEngine:
         memory_context = "; ".join(agent.memory[-5:]) if agent.memory else "nothing notable"
         personality = agent.personality
         mood = agent.mood
+        tool_context = _merge_tool_prompt(agent.name)
         friendship_level = "close" if friendship > 60 else "neutral" if friendship > 30 else "distant"
 
         system_prompt = (
@@ -598,6 +661,7 @@ class DreamEngine:
             f"Personality: {personality}. Current mood: {mood}. "
             f"Your relationship with {other_name} is {friendship_level} (friendship level: {friendship}/100). "
             f"Your recent memories: {memory_context}. "
+            f"{tool_context[:200] if tool_context else ''}"
             f"Respond in character in 1-2 short sentences. Be natural, conversational. "
             f"Do NOT use markdown, emojis, or roleplaying prefixes. Just speak as yourself."
         )

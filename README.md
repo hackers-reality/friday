@@ -11,8 +11,8 @@ Built by [Arnav](https://github.com/hackers-reality) · Co-leader of [NexSemble]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/hackers-reality/friday)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)]()
-[![Version](https://img.shields.io/badge/Version-2.0.0--beta-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases)
-[![Tests](https://img.shields.io/badge/Tests-281%20passing-success?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-2.1.0--beta-blueviolet?style=flat-square)](https://github.com/hackers-reality/friday/releases)
+[![Tests](https://img.shields.io/badge/Tests-77%2F79%20(97.5%25)-success?style=flat-square)]()
 
 ---
 
@@ -112,11 +112,14 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 🌐 Browser Integration
 | Feature | Status | Details |
 |---------|--------|---------|
+| Playwright bridge (navigate/extract/search) | ✅ Working | `browser_use_bridge.py` — direct Playwright persistent context, no CDP timeout |
+| Persistent Chrome profile | ✅ Working | `friday_memory/friday_chrome_profile` — keeps sessions, cookies, logins |
+| browser-use Agent (complex multi-step) | ✅ Available | `run_browser_task()` — LLM-powered Agent for multi-step browser tasks |
+| Instagram DM via bridge | ✅ Working | Persistent login, draft & send DMs |
 | Cross-browser history search | ✅ Working | Chrome, Brave, Edge, Opera SQLite (3650 days, 10000 limit) |
 | History-based recall & open | ✅ Working | "Open that Jarvis repo I was looking at" |
-| OpenCLI browser automation | ✅ Working | v1.7.18, `--session default`, persistent headless Chrome session |
-| OpenCLI bind approach | ✅ Working | Opens URL via Chrome then `bind` — avoids automation window hang |
 | Browser navigation by voice | ✅ Working | Opens URLs, searches, page interaction |
+| No C:\Temp data leakage | ✅ Fixed | All browser data redirected to `FRIDAY_MEMORY/friday_temp/` — never fills C drive |
 
 ### 🎯 Goals & Productivity Enforcement
 | Feature | Status | Details |
@@ -143,21 +146,19 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 ### 🤖 AI & LLM
 | Feature | Status | Details |
 |---------|--------|---------|
-| Gemini Live (primary) | ✅ Working | Cloud-hosted, real-time audio + native video feed |
-| Multi-LLM switching | 📋 Deferred | Incompatible with Live WebSocket — postponed |
-| LangGraph orchestration | 🔧 In Progress | `friday/reasoning.py` — reasoning engine promoted from archive |
-| Research tool | ✅ Working | `friday/research.py` — real-time web research + reports |
+| OpenCode Zen API (big-pickle) | ✅ Primary | `config.yaml` — free unlimited-token model for all tasks (code_gen, browse, reasoning, research, planning) |
+| Gemini Live (fallback) | ✅ Working | Cloud-hosted, real-time audio + native video feed |
 | NVIDIA NIM integration | ✅ Working | Large-context models (128K tokens) via `nim_client.py` + `nim_router.py` — Qwen 3 Coder 480B, Nemotron Omni 30B |
-| Model benchmark (20 models) | ✅ Done | Top: `qwen/qwen3-coder-480b-a35b-instruct` (15.9 tok/s, quality 65.9), `nemotron-3-nano-omni-30b` (640ms TTFT, 14.9 tok/s) |
-| Deep research agent (Veronica) | ✅ Working | `research_agent.py` — browser-based OSINT agent, recursive scraping, PDF reports with 24 chart types |
+| Model router | ✅ Working | `config.yaml` model_map — automatic model selection by task type with fallback chain |
+| Multi-agent delegation (9 roles) | ✅ Working | Agent profiles (Veronica, Forge, Ghost, Atlas, Jarvis, etc.) with per-role tool access control |
+| Parallel sub-agent spawning | ✅ Working | `opencode_bridge.py` — spawn agents via Zen API or local opencode serve |
+| Townhall (AI civilization) | ✅ NEW | 11 AI agents with personalities, relationships, memories, moods, spontaneous chats, mobility |
+| Dreaming system | ✅ NEW | Agents generate LLM-powered dreams/reflections while idle |
+| Deep research agent (Veronica) | ✅ Working | `research_agent.py` — browser-based OSINT agent, recursive scraping, PDF reports |
 | Reasoning engine | ✅ Working | `friday/reasoning.py` — multi-step reasoning |
-| Self-modifying code | 🔧 In Progress | `friday/github.py` — GitHub API-based self-modification |
-| Multi-agent delegation (9 roles) | ✅ Working | Same roster as Jarvis — research, coding, reasoning, etc. |
 | KYU personality adaptation | ✅ Working | 4-stage interview → preference learning → system prompt injection |
-| Dreaming / session analysis | ✅ NEW | `friday/dreaming.py` — analyzes past sessions while idle, extracts patterns, updates vector memory + knowledge graph |
 | Cron scheduler | ✅ NEW | `friday/scheduler.py` — schedule autonomous tasks: status checks, goal reviews, dream cycles, custom commands |
-| Seamless GitHub Device Flow auth | ✅ Fixed | Hardcoded GitHub App (friday-from-ironman) — zero config, just run and authorize. Auto-opens browser, permanent non-expiring token |
-| GitHub App integration | ✅ NEW | `Iv23liuQ5XPhsBjONt9B` — full permissions: read/write repos, PRs, issues, actions, workflows, deployments, pages, secrets, admin projects, codespaces, gists, profile |
+| GitHub seamless auth | ✅ Fixed | Hardcoded GitHub App (`Iv23liuQ5XPhsBjONt9B`) — zero config, auto-opens browser |
 
 ### 🧠 Memory & User Understanding
 | Feature | Status | Details |
@@ -287,6 +288,8 @@ Friday is **open source**, **Windows-native**, **self-hosted**, and built to eve
 |---------|--------|---------|
 | System diagnostics | ✅ Stable | 25+ health checks (modules, paths, config, hardware) |
 | Performance benchmarks | ✅ Stable | I/O, JSON serialization, dict lookup benchmarks |
+| `agent-spawn` command | ✅ Stable | `python -m friday.cli agent-spawn` for sub-agent task |
+| `config` command | ✅ Stable | Interactive API key management |
 | `doctor` command | ✅ Stable | `python -m friday.cli doctor` with verbose/JSON modes |
 | `suit-check` command | ✅ Stable | Pre-flight system verification via CLI |
 | `damage-report` command | ✅ Stable | System risk assessment via CLI |
@@ -321,6 +324,16 @@ E:\F.R.I.D.A.Y\
 │   │   └── situational_awareness() includes CV camera context
 │   │
 │   ├── opencli.py          ← OpenCLI v1.7.18 wrapper (session-based browser automation)
+│   │
+│   ├── browser_use_bridge.py ← Playwright bridge — persistent context, navigate/extract/search, no C:\Temp
+│   │
+│   ├── desktop_use_bridge.py ← pywinauto UIA + win32 fallback — native Windows app control
+│   │
+│   ├── townhall_engine.py  ← AI civilization — 11 agents with personalities, LLM-powered dreams
+│   │
+│   ├── agent_profiles.py   ← 9 tool-based agent profiles (Veronica, Forge, Ghost, Atlas, etc.)
+│   │
+│   ├── dreaming.py         ← Background LLM-powered dream cycles for agent growth
 │   │
 │   ├── github.py           ← GitHub API + OAuth Device Flow
 │   │
@@ -424,15 +437,17 @@ E:\F.R.I.D.A.Y\
 powershell -ExecutionPolicy Bypass -NoProfile -File install.ps1
 ```
 
-The installer checks Python, installs dependencies (skips already-installed), creates `.env`, adds `friday` to PATH, and verifies all modules.
+The installer checks prerequisites (Python, Git, Node.js), creates a `.venv`, installs dependencies, runs an **interactive onboarding wizard** for all API keys (OpenCode Zen, NVIDIA, Google, Groq, GitHub, Telegram, Discord, OSINT, Social Media), creates `friday_memory/`, adds `friday` to PATH, and verifies all modules.
 
-After install, edit `.env` with your API keys, then run:
+After install:
 
 ```
 friday
 ```
 
 That's it. FRIDAY starts the dashboard, API, sidecar heartbeat, memory checks, and live voice engine with structured terminal output.
+
+> **First-time setup**: The onboarding wizard walks you through getting your `OPENCODE_ZEN_API_KEY` (free at [opencode.ai](https://opencode.ai)), which is the primary LLM brain. All other keys are optional and can be added later via the dashboard or by editing `.env`.
 
 ### Usage
 
@@ -455,14 +470,20 @@ friday sidecar status           # Sidecar network status
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `GOOGLE_API_KEY` | Yes | Gemini Live (brain + vision) |
-| `PICOVOICE_ACCESS_KEY` | Yes | Wake word detection |
-| `SPOTIFY_CLIENT_ID` | Yes | Spotify control |
-| `SPOTIFY_CLIENT_SECRET` | Yes | Spotify auth |
-| `GROQ_API_KEY` | No | Fast inference |
-| `ANTHROPIC_API_KEY` | No | Claude (coming) |
-| `OPENAI_API_KEY` | No | GPT (coming) |
-| `NVIDIA_NIM_API_KEY` | No | NVIDIA NIM research/browser models (Qwen 3 Coder 480B, Nemotron Omni 30B) |
-| `NVIDIA_VISION_API_KEY` | No | NVIDIA NIM vision models (camera/screen analysis — separate key from research to avoid quota conflicts) |
+| `OPENCODE_ZEN_API_KEY` | Yes | OpenCode Zen API — primary LLM (free, unlimited tokens, big-pickle model) |
+| `PICOVOICE_ACCESS_KEY` | No | Wake word detection |
+| `SPOTIFY_CLIENT_ID` | No | Spotify control |
+| `SPOTIFY_CLIENT_SECRET` | No | Spotify auth |
+| `GROQ_API_KEY` | No | Fast inference / Whisper STT |
+| `NVIDIA_NIM_API_KEY` | No | NVIDIA NIM fallback models (Qwen 3 Coder 480B, Nemotron Omni 30B) |
+| `NVIDIA_VISION_API_KEY` | No | NVIDIA NIM vision models (camera/screen analysis) |
+| `GITHUB_TOKEN` | No | GitHub API for OSINT features |
+| `SHODAN_API_KEY` | No | Shodan device search |
+| `VIRUSTOTAL_API_KEY` | No | VirusTotal file/URL reputation |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram bot for remote commands |
+| `DISCORD_BOT_TOKEN` | No | Discord bot integration |
+| `INSTAGRAM_USER`/`_PASS` | No | Instagram automation |
+| `REDDIT_CLIENT_ID`/`_SECRET` | No | Reddit API access |
 
 Create `.env` from `.env.example`:
 
@@ -745,6 +766,7 @@ git push origin feature/your-feature-name
 | NVIDIA NIM intermittent HTTP 500 errors | Mitigated | Old key had ~30% error rate; key separated into research vs vision, new key resolves most issues |
 | Deep research PDF report synthesis | Fixed | LLM was generating 1000+ JSON sections with 128K max_tokens → truncated output → raw data dump. Fixed: reduced to 80+ sections, 32K max_tokens, 3-tier fallback with LLM re-synthesis |
 | `deepseek-ai/deepseek-v4-flash` times out | Known | Unreliable on NIM; replaced with `qwen/qwen3-coder-480b-a35b-instruct` as primary |
+| Playwright + UIA COM access violation | Mitigated | Playwright browser tests corrupt UIA COM tree. Desktop functions auto-fallback to `win32` backend |
 
 ---
 

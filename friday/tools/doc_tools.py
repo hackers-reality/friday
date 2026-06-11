@@ -718,8 +718,8 @@ async def create_pdf(
                 hs = style_map.get(level, s_h2)
                 story.append(Paragraph(sec["text"], hs))
 
-            elif sec_type == "paragraph":
-                _add_paragraph(sec["text"], s_normal)
+            elif sec_type in ("paragraph", "text"):
+                _add_paragraph(sec.get("content") or sec.get("text", ""), s_normal)
 
             elif sec_type == "bullets":
                 items = sec.get("items", [])
@@ -859,12 +859,12 @@ async def create_pptx(title: str, slides: list[dict[str, Any]], output_path: str
         prs = Presentation()
         prs.slide_width = Inches(13.333)
         prs.slide_height = Inches(7.5)
-        title_slide = prs.slides.add_slide(prs.slide_layouts[6])
+        title_slide = prs.slides.add_slide(prs.slide_layouts[0])
         title_slide.shapes.title.text = title
         for s in slides:
             slide_type = s.get("type", "content")
             if slide_type == "chart":
-                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                slide = prs.slides.add_slide(prs.slide_layouts[5])
                 slide.shapes.title.text = s.get("title", "")
                 chart_path = _make_chart(
                     s.get("chart_type", "bar"), s.get("data", []),

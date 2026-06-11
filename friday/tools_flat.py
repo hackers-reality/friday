@@ -115,6 +115,11 @@ def delete_file(path: str) -> str:
 def clipboard_get() -> str:
     """Get clipboard."""
     try:
+        import pyperclip
+        return pyperclip.paste()
+    except ImportError:
+        pass
+    try:
         import tkinter as tk
         root = tk.Tk()
         root.withdraw()
@@ -124,6 +129,12 @@ def clipboard_get() -> str:
 
 def clipboard_set(text: str) -> str:
     """Set clipboard."""
+    try:
+        import pyperclip
+        pyperclip.copy(text)
+        return "Clipboard set"
+    except ImportError:
+        pass
     try:
         import tkinter as tk
         root = tk.Tk()
