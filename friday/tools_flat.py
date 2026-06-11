@@ -788,8 +788,22 @@ def spotify_current() -> str:
     except Exception as e:
         return f"[FAIL] Spotify current error: {e}"
 
+def _bridge_fetch_text(url: str) -> str | None:
+    """Use Playwright bridge to render a URL and extract clean text."""
+    try:
+        from friday.browser_use_bridge import _run_async, _direct_action
+        _run_async(_direct_action("navigate", url=url))
+        text_data = _run_async(_direct_action("extract_text"))
+        body = text_data.get("text", "")
+        if len(body) > 200:
+            return body[:2000]
+    except Exception:
+        pass
+    return None
+
+
 def web_search(query: str, max_results: int = 5) -> str:
-    """Search ALL engines with fallback + fetch top page content."""
+    """Search web via classic scraper with Playwright bridge for JS-heavy page content."""
     try:
         from friday.web import WebScraper
         from bs4 import BeautifulSoup
@@ -812,7 +826,6 @@ def web_search(query: str, max_results: int = 5) -> str:
         if not items:
             return f"[FAIL] No search results for '{query}' from any engine."
 
-        # Fetch actual content from top results
         lines = [f"Search results for '{query}':"]
         for i, item in enumerate(items[:max_results], 1):
             title = item.get("title", "?")
@@ -824,23 +837,27 @@ def web_search(query: str, max_results: int = 5) -> str:
             if snippet:
                 lines.append(f"   {snippet[:300]}")
 
-        # Fetch full content from #1 result
         top_url = items[0].get("url", "")
         if top_url:
-            try:
-                page = scraper.fetch(top_url, timeout=15)
-                if page.get("success"):
-                    p_soup = BeautifulSoup(page["content"], "html.parser")
-                    for tag in p_soup(["script", "style", "nav", "footer", "header", "aside"]):
-                        tag.decompose()
-                    body = p_soup.find("body") or p_soup
-                    text = body.get_text(separator="\n", strip=True)
-                    text = re.sub(r'\n{3,}', '\n\n', text)
-                    if len(text) > 200:
-                        lines.append(f"\n--- Top Result Content ({items[0].get('title','')}) ---")
-                        lines.append(text[:2000])
-            except Exception:
-                pass
+            bridge_text = _bridge_fetch_text(top_url)
+            if bridge_text:
+                lines.append(f"\n--- Top Result Content ({items[0].get('title','')}) ---")
+                lines.append(bridge_text)
+            else:
+                try:
+                    page = scraper.fetch(top_url, timeout=15)
+                    if page.get("success"):
+                        p_soup = BeautifulSoup(page["content"], "html.parser")
+                        for tag in p_soup(["script", "style", "nav", "footer", "header", "aside"]):
+                            tag.decompose()
+                        body = p_soup.find("body") or p_soup
+                        text = body.get_text(separator="\n", strip=True)
+                        text = re.sub(r'\n{3,}', '\n\n', text)
+                        if len(text) > 200:
+                            lines.append(f"\n--- Top Result Content ({items[0].get('title','')}) ---")
+                            lines.append(text[:2000])
+                except Exception:
+                    pass
 
         return "\n".join(lines)
     except ImportError:
@@ -4273,6 +4290,18 @@ def self_improve_tool(action: str = "status", **kwargs) -> str:
         return "[FAIL] self_improve.py not available."
     except Exception as e:
         return f"[FAIL] Self-improve error: {e}"
+
+
+#  Auto-Update Tool #
+def auto_update_tool(action: str = "status", branch: str = "main", steps: int = 1) -> str:
+    """Self-update: pull latest from GitHub, check for updates, or rollback. Actions: status, check, apply, rollback."""
+    try:
+        from friday.auto_update import auto_update_tool as _aut
+        return _aut(action=action, branch=branch, steps=steps)
+    except ImportError:
+        return "[FAIL] auto_update.py not available."
+    except Exception as e:
+        return f"[FAIL] Auto-update error: {e}"
 
 
 #  Episodic Archive Tool #

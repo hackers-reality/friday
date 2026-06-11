@@ -117,6 +117,7 @@ from friday.tools import (
     mcp_tool,
     episodic_tool,
     self_improve_tool,
+    auto_update_tool,
     crash_tool,
     pr_manager_tool,
     protector_tool,
@@ -470,6 +471,7 @@ Goals & Memory:
 - context_tool(action, name, content) — manage project context files (AGENTS.md, CLAUDE.md, FRIDAY.md). Actions: list, show, add, delete, reload
 - episodic_tool(action, query) — episodic memory with FTS5: full-text search all past sessions, tool calls, and interactions. Actions: search (query past), recent (last N), session (full session by id), stats. Auto-records all tool calls.
 - self_improve_tool(action, file_path, content) — self-improvement pipeline: propose changes to my own code, show diffs, apply or reject with your approval. Actions: propose, list, diff, apply, reject, status.
+- auto_update_tool(action, branch, steps) — self-update system: pull latest code from GitHub. Actions: status (current version/branch/commit), check (check for updates), apply (pull + apply), rollback (steps=N, rollback N commits).
 - crash_tool(action) — crash watcher: monitors Windows Event Log for app crashes in real-time, captures fault details. Actions: status, recent, analyze (deep dive), watch (start), stop.
 - pr_manager_tool(action) — proactive PR manager: polls GitHub repos for open PRs, auto-reviews new ones. Actions: status, list_repos, add_repo (repo=name), remove_repo (repo=name), scan_now (auto_review=true), reviews, watch, stop.
 - protector_tool(action) — system protector: prevent unauthorized shutdown/lid-close, manage Windows startup registration. Actions: status, watch (start background monitor), stop, allow (permit shutdown), startup (startup_action=install/remove/status), test_voice (test TTS).
@@ -2493,6 +2495,16 @@ def _build_tools():
                     "commit": {"type": "BOOLEAN", "description": "Whether to git commit after apply (default true, for action=apply)."},
                 }, required=["action"]),
             ),
+            # ======== AUTO-UPDATE (git pull) ========
+            types.FunctionDeclaration(
+                name="auto_update_tool",
+                description="Self-update system: pull latest code from GitHub, check for updates, or rollback. Actions: status (show version/branch/commit), check (check for updates without pulling), apply (git pull + apply latest), rollback (steps=N, rollback N commits).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "action": {"type": "STRING", "description": "Action: status, check, apply, rollback."},
+                    "branch": {"type": "STRING", "description": "Branch to check/update from (default: main)."},
+                    "steps": {"type": "INTEGER", "description": "Number of commits to rollback (default: 1, for action=rollback)."},
+                }, required=["action"]),
+            ),
             # ======== CRASH WATCHER ========
             types.FunctionDeclaration(
                 name="crash_tool",
@@ -3180,6 +3192,7 @@ TOOL_MAP = {
     "mcp_tool": mcp_tool,
     "episodic_tool": episodic_tool,
     "self_improve_tool": self_improve_tool,
+    "auto_update_tool": auto_update_tool,
     "crash_tool": crash_tool,
     "pr_manager_tool": pr_manager_tool,
     "protector_tool": protector_tool,
