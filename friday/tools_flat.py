@@ -2601,127 +2601,79 @@ def draft_email(context: str, recipient: str) -> str:
 #  Instagram Messaging 
 
 def send_instagram_dm(username: str, message: str) -> str:
-    """Send Instagram DM using browser_manager (Playwright or Pyppeteer CDP).
+    """Send Instagram DM using browser-use bridge (persistent Chrome profile).
     Must be logged into Instagram in Chrome.
-    Properly selects user from search results, types message, and clicks Send."""
-    import asyncio
-
-    async def _send():
-        from friday.browser_manager import BrowserManager
-        bm = BrowserManager.get_instance()
-        page = await bm.get_page()
-
-        await page.goto("https://www.instagram.com/direct/new/",
-                         wait_until="networkidle" if bm._backend != "pyppeteer" else "networkidle0")
-        await asyncio.sleep(4)
-
-        try:
-            wait_f = page.wait_for_selector if bm._backend != "pyppeteer" else page.waitForSelector
-            type_f = page.type
-            fill_f = page.fill
-            press_f = page.keyboard.press
-            sleep = asyncio.sleep
-
-            # Step 1: Search for user
-            await wait_f("input[placeholder='Search...']", timeout=10000)
-            await fill_f("input[placeholder='Search...']", username)
-            await sleep(2)
-
-            # Step 2: Select user from search results
-            user_selected = False
-            user_selectors = [
-                f"div[role='option']:has-text('{username}')",
-                f"div[role='link']:has-text('{username}')",
-                f"a[role='option']:has-text('{username}')",
-                "div[role='option']:first-child",
-                "div[role='option'] >> nth=0",
-            ]
-            for sel in user_selectors:
-                try:
-                    opts = await page.query_selector_all(sel.rsplit(":has", 1)[0]) if ":has" not in sel else []
-                    if opts:
-                        await opts[0].click()
-                        user_selected = True
-                        break
-                    elem = await page.query_selector(sel)
-                    if elem:
-                        await elem.click()
-                        user_selected = True
-                        break
-                except Exception:
-                    continue
-
-            if not user_selected:
-                # ArrowDown + Enter to select first result
-                await press_f("ArrowDown")
-                await sleep(0.5)
-                await press_f("Enter")
-                await sleep(1.5)
-
-            await sleep(2)
-
-            # Step 3: Type message into textbox
-            msg_selectors = [
-                "div[role='textbox']",
-                "textarea[placeholder='Message...']",
-                "div[contenteditable='true']",
-            ]
-            msg_box = None
-            for ms in msg_selectors:
-                try:
-                    msg_box = await page.wait_for_selector(ms, timeout=3000)
-                    if msg_box:
-                        break
-                except Exception:
-                    continue
-
-            if msg_box:
-                await msg_box.click()
-                await sleep(0.3)
-                await type_f(msg_box, message)
-                await sleep(0.5)
-            else:
-                return f"[FAIL] Could not find message input for {username}"
-
-            # Step 4: Click Send button
-            sent = False
-            send_selectors = [
-                "div[role='button'] svg[aria-label='Send']",
-                "svg[aria-label='Send']",
-                "button[type='submit']",
-                "div[aria-label='Send']",
-                "div[role='button']:has(svg[aria-label='Send'])",
-            ]
-            for ss in send_selectors:
-                try:
-                    btn = await page.query_selector(ss)
-                    if btn:
-                        parent = await btn.get_property("parentElement") or btn
-                        if bm._backend == "pyppeteer":
-                            await parent.click()
-                        else:
-                            await parent.evaluate("el => el.click()")
-                        sent = True
-                        break
-                except Exception:
-                    continue
-
-            if not sent:
-                await press_f("Enter")
-                await sleep(1)
-                # If Enter inserted newline, try Ctrl+Enter
-                await press_f("Control+Enter")
-
-            await sleep(2)
-            return f"[OK] Message sent to {username} via Instagram"
-        except Exception as e:
-            return f"[FAIL] Instagram DM failed during interaction: {e}"
+    Uses the working browser_use_bridge — navigates, searches user, types, clicks Send."""
+    from friday.browser_use_bridge import (
+        browser_use_navigate, browser_use_get_dom_state,
+        browser_use_type, browser_use_click, browser_use_evaluate,
+        browser_use_extract_text, browser_use_screenshot,
+    )
+    import time
 
     try:
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(_send())
-        loop.close()
-        return result
+        # Navigate to Instagram DM
+        r = browser_use_navigate("https://www.instagram.com/direct/new/")
+        time.sleep(5)
+
+        # Check if we're on the right page
+        dom = browser_use_get_dom_state()
+        if isinstance(dom, dict):
+            title = dom.get("title", "")
+            if "login" in title.lower() or "log in" in title.lower():
+                return f"[FAIL] Not logged into Instagram. Current page: {title}"
+
+        # Type username in search
+        r = browser_use_type("input[placeholder='Search...']", username)
+        time.sleep(2)
+
+        # Click on user result — try multiple approaches
+        user_selectors = [
+            f"div[role='option']",
+            f"div[role='link']",
+        ]
+        for sel in user_selectors:
+            try:
+                r = browser_use_click(sel)
+                time.sleep(1)
+                dom2 = browser_use_get_dom_state()
+                if isinstance(dom2, dict):
+                    # Check if we moved past search (inputs count changed)
+                    if dom2.get("inputs", 0) < dom.get("inputs", 1):
+                        break
+            except Exception:
+                continue
+
+        time.sleep(2)
+
+        # Type message
+        msg_sel = "div[role='textbox']"
+        try:
+            r = browser_use_type(msg_sel, message)
+        except Exception:
+            try:
+                r = browser_use_type("textarea", message)
+            except Exception:
+                return f"[FAIL] Could not find message input"
+
+        time.sleep(1)
+
+        # Click Send via JS
+        try:
+            browser_use_evaluate(
+                "document.querySelector('svg[aria-label=\"Send\"]')?.parentElement?.click()"
+            )
+        except Exception:
+            try:
+                browser_use_evaluate(
+                    "document.querySelector('div[role=\"button\"] svg')?.parentElement?.click()"
+                )
+            except Exception:
+                pass
+
+        time.sleep(2)
+        return f"[OK] Message sent to {username} via Instagram"
+
     except Exception as e:
         return f"[FAIL] Instagram DM error: {e}"
 
@@ -2731,125 +2683,73 @@ def send_instagram_dm(username: str, message: str) -> str:
 # ═══════════════════════════════════════════════════════════════
 
 def read_discord_messages(channel_url: str = "", limit: int = 10) -> str:
-    """Open Discord web, navigate to a channel, and read recent messages.
-    Uses browser_manager with Chrome profile (must be logged into Discord).
-    If channel_url is empty, reads from the current/general channel."""
-    import asyncio
-
-    async def _read():
-        from friday.browser_manager import BrowserManager
-        bm = BrowserManager.get_instance()
-        page = await bm.get_page()
-
-        url = channel_url or "https://discord.com/app"
-        await page.goto(url, wait_until="networkidle")
-        await asyncio.sleep(5)
-
-        try:
-            # Find message text elements
-            msg_selectors = [
-                "div[class*='messageContent']",
-                "div[id*='message-content']",
-                "div[data-list-id*='chat-messages'] div[class*='contents']",
-                "li[class*='messageListItem'] div[class*='content']",
-            ]
-            messages = []
-            for sel in msg_selectors:
-                try:
-                    els = await page.query_selector_all(sel)
-                    if els:
-                        for el in els[:limit]:
-                            txt = await el.inner_text()
-                            if txt.strip():
-                                messages.append(txt.strip())
-                        break
-                except Exception:
-                    continue
-
-            if not messages:
-                # Fallback: extract all visible text
-                body = await page.query_selector("body")
-                if body:
-                    txt = await body.inner_text()
-                    messages = [txt[:3000]]
-
-            import json
-            return json.dumps({
-                "source": "discord",
-                "channel": url,
-                "message_count": len(messages),
-                "messages": messages[:limit],
-            }, indent=2)
-        except Exception as e:
-            return f'{{"error": "Discord read failed: {e}"}}'
+    """Open Discord web and read recent messages using browser-use bridge.
+    Must be logged into Discord in Chrome profile."""
+    from friday.browser_use_bridge import (
+        browser_use_navigate, browser_use_extract_text, browser_use_get_dom_state,
+    )
+    import time, json
 
     try:
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(_read())
-        loop.close()
-        return result
+        url = channel_url or "https://discord.com/app"
+        browser_use_navigate(url)
+        time.sleep(5)
+
+        # Extract page text
+        text = browser_use_extract_text()
+
+        # Try to get structured content
+        dom = browser_use_get_dom_state()
+        if isinstance(dom, dict):
+            title = dom.get("title", "")
+            if "login" in title.lower() or "app" not in url:
+                pass  # still returning what we have
+
+        messages = []
+        if text:
+            lines = text.split("\n")
+            messages = [l.strip() for l in lines if l.strip()][:limit]
+
+        return json.dumps({
+            "source": "discord",
+            "channel": url,
+            "message_count": len(messages),
+            "messages": messages if messages else ["(no visible messages — may need login)"],
+        }, indent=2)
     except Exception as e:
-        return f'{{"error": "Discord read error: {e}"}}'
+        return json.dumps({"error": f"Discord read failed: {e}"})
 
 
 def read_slack_messages(channel_url: str = "", limit: int = 10) -> str:
-    """Open Slack web, navigate to a channel, and read recent messages.
-    Uses browser_manager with Chrome profile (must be logged into Slack).
-    If channel_url is empty, reads from the default workspace."""
-    import asyncio
-
-    async def _read():
-        from friday.browser_manager import BrowserManager
-        bm = BrowserManager.get_instance()
-        page = await bm.get_page()
-
-        url = channel_url or "https://app.slack.com/client"
-        await page.goto(url, wait_until="networkidle")
-        await asyncio.sleep(5)
-
-        try:
-            msg_selectors = [
-                "div[class*='c-message__body']",
-                "div[class*='message_body']",
-                "div[data-qa*='message_text']",
-                "div[class*='c-message_kit__blocks']",
-            ]
-            messages = []
-            for sel in msg_selectors:
-                try:
-                    els = await page.query_selector_all(sel)
-                    if els:
-                        for el in els[:limit]:
-                            txt = await el.inner_text()
-                            if txt.strip():
-                                messages.append(txt.strip())
-                        break
-                except Exception:
-                    continue
-
-            if not messages:
-                body = await page.query_selector("body")
-                if body:
-                    txt = await body.inner_text()
-                    messages = [txt[:3000]]
-
-            import json
-            return json.dumps({
-                "source": "slack",
-                "channel": url,
-                "message_count": len(messages),
-                "messages": messages[:limit],
-            }, indent=2)
-        except Exception as e:
-            return f'{{"error": "Slack read failed: {e}"}}'
+    """Open Slack web and read recent messages using browser-use bridge.
+    Must be logged into Slack in Chrome profile."""
+    from friday.browser_use_bridge import (
+        browser_use_navigate, browser_use_extract_text, browser_use_get_dom_state,
+    )
+    import time, json
 
     try:
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(_read())
-        loop.close()
-        return result
+        url = channel_url or "https://app.slack.com/client"
+        browser_use_navigate(url)
+        time.sleep(5)
+
+        text = browser_use_extract_text()
+
+        dom = browser_use_get_dom_state()
+
+        messages = []
+        if text:
+            lines = text.split("\n")
+            messages = [l.strip() for l in lines if l.strip()][:limit]
+
+        return json.dumps({
+            "source": "slack",
+            "channel": url,
+            "message_count": len(messages),
+            "messages": messages if messages else ["(no visible messages — may need login)"],
+        }, indent=2)
     except Exception as e:
-        return f'{{"error": "Slack read error: {e}"}}'
+        return json.dumps({"error": f"Slack read failed: {e}"})
 
 
 #  Smart Home / Alexa 

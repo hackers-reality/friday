@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "friday"
+version = "1.0.0"
+description = "FRIDAY — Fully Reactive AI Desktop Assistant"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+keywords = ["ai", "assistant", "desktop-automation", "osint", "voice"]
+
+authors = [
+    {name = "Arnav Phulari"},
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "pyperclip>=1.8",
+]
+
+[project.optional-dependencies]
+desktop = ["pywinauto>=7.0"]
+voice = ["sounddevice>=0.4", "gtts>=2.3", "edge-tts>=6.0", "faster-whisper>=1.0"]
+security = ["shodan>=1.28", "python-whois>=0.8", "dnspython>=2.3"]
+memory = ["chromadb>=0.4", "redis>=4.5"]
+all = [
+    "pywinauto>=7.0",
+    "sounddevice>=0.4",
+    "gtts>=2.3",
+    "edge-tts>=6.0",
+    "faster-whisper>=1.0",
+    "shodan>=1.28",
+    "python-whois>=0.8",
+    "dnspython>=2.3",
+    "chromadb>=0.4",
+    "redis>=4.5",
+]
+
+[project.scripts]
+friday = "friday.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["friday*"]
+
+[tool.setuptools.package-data]
+friday = ["config.yaml"]

@@ -19,7 +19,7 @@ import concurrent.futures
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from friday._paths import FRIDAY_MEMORY
 from friday.logging_utils import configure_logging
@@ -139,6 +139,36 @@ def wifi_connection_status() -> str:
         from friday.tools.wifi_tools import wifi_connection_status as _impl
         r = _impl()
         _record_action("wifi", "connection_status")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def wifi_interface_status(interface: str = "Wi-Fi") -> str:
+    try:
+        from friday.tools.wifi_tools import wifi_interface_status as _impl
+        r = _impl(interface)
+        _record_action("wifi", "interface_status")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def wifi_all_interfaces_status() -> str:
+    try:
+        from friday.tools.wifi_tools import wifi_all_interfaces_status as _impl
+        r = _impl()
+        _record_action("wifi", "all_interfaces")
+        return json.dumps({"interfaces": r, "count": len(r)}, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def wifi_crack(ssid: str, wordlist: Optional[list[str]] = None, timeout_per_attempt: int = 8) -> str:
+    try:
+        from friday.tools.wifi_tools import wifi_crack as _impl
+        r = _impl(ssid, wordlist, timeout_per_attempt)
+        _record_action("wifi", "crack")
         return json.dumps(r, indent=2)
     except Exception as e:
         return json.dumps({"error": str(e)})

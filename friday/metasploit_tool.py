@@ -11,6 +11,7 @@ import asyncio
 import ipaddress
 import os
 import re
+import shutil
 import socket
 import tempfile
 import time
@@ -62,6 +63,11 @@ def _ensure_httpx():
             "httpx library is required for Metasploit RPC. "
             "Install it with: pip install httpx"
         )
+
+
+def msf_is_installed() -> bool:
+    """Check if Metasploit (msfconsole / msfrpcd) is installed on this system."""
+    return shutil.which("msfconsole") is not None or shutil.which("msfrpcd") is not None
 
 
 def _epoch_ms() -> int:
@@ -1129,6 +1135,11 @@ async def get_client(
     username: Optional[str] = None,
     force_new: bool = False,
 ) -> MsfrpcClient:
+    if not msf_is_installed():
+        raise MsfrpcConnectionError(
+            "Metasploit is not installed on this system. "
+            "Install it from https://www.metasploit.com/"
+        )
     global _CLIENT
     if force_new or _CLIENT is None:
         async with _CLIENT_LOCK:
@@ -1184,6 +1195,14 @@ async def msf_connect(
     Returns:
         Dict with success, token, host, port, and server version.
     """
+    if not msf_is_installed():
+        return {
+            "success": False,
+            "error": "Metasploit is not installed on this system. Install it from https://www.metasploit.com/",
+            "tool": "msf_connect",
+            "host": host or MSF_HOST,
+            "port": port or MSF_PORT,
+        }
     try:
         _ensure_httpx()
         _ensure_msgpack()
@@ -1302,6 +1321,8 @@ async def msf_search(query: str) -> dict[str, Any]:
     Returns:
         Dict with count of matches, results list, and query metadata.
     """
+    if not msf_is_installed():
+        return {"error": "Metasploit is not installed on this system. Install from https://www.metasploit.com/", "tool": "msf_search"}
     if not query or not query.strip():
         return {"error": "No search query provided", "tool": "msf_search"}
     try:
@@ -2197,6 +2218,8 @@ async def metasploit_connect() -> dict[str, Any]:
     Returns:
         Dict with connection status and server version.
     """
+    if not msf_is_installed():
+        return {"success": False, "error": "Metasploit is not installed on this system. Install from https://www.metasploit.com/", "tool": "metasploit_connect"}
     try:
         return await msf_connect(
             host=MSF_HOST,
@@ -2221,6 +2244,8 @@ async def metasploit_status() -> dict[str, Any]:
     Returns:
         Dict with alive status and latency.
     """
+    if not msf_is_installed():
+        return {"alive": False, "error": "Metasploit is not installed on this system. Install from https://www.metasploit.com/", "tool": "metasploit_status"}
     try:
         return await msf_status()
     except Exception as e:

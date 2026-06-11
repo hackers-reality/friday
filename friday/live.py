@@ -153,7 +153,8 @@ from friday.agent_use_bridge import (
 )
 from friday.security_use_bridge import (
     security_use_status,
-    wifi_list_profiles, wifi_show_password, wifi_scan, wifi_connection_status,
+    wifi_list_profiles, wifi_show_password, wifi_scan, wifi_connection_status, wifi_crack,
+    wifi_interface_status, wifi_all_interfaces_status,
     network_connections, arp_table, traceroute,
     dns_lookup, dns_reverse_lookup, dns_mx_lookup, dns_enumeration,
     port_scan, ping_host, ssl_certificate_check,
@@ -3419,6 +3420,9 @@ TOOL_MAP = {
     "wifi_show_password": wifi_show_password,
     "wifi_scan": wifi_scan,
     "wifi_connection_status": wifi_connection_status,
+    "wifi_crack": wifi_crack,
+    "wifi_interface_status": wifi_interface_status,
+    "wifi_all_interfaces_status": wifi_all_interfaces_status,
     "network_connections": network_connections,
     "arp_table": arp_table,
     "traceroute": traceroute,

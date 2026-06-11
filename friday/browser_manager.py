@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from friday.anti_detection import apply_stealth, random_viewport
+from friday._paths import FRIDAY_MEMORY
 from friday.logging_utils import configure_logging
 from friday.orchestration_config import ensure_config
 
@@ -194,14 +195,15 @@ class BrowserManager:
         """Launch Chrome as child process with CDP, connect via pyppeteer."""
         import pyppeteer
 
-        headless = cfg.get("headless", True)
+        headless = cfg.get("headless", False)
         chrome_path = cfg.get("chrome_executable") or _chrome_executable()
         if not chrome_path:
             raise RuntimeError("Chrome executable not found. Install Chrome or set chrome_executable in config.")
 
         profile_path = cfg.get("chrome_profile", "auto")
         if not profile_path or profile_path.lower() == "auto":
-            profile_path = _detect_chrome_profile()
+            profile_path = os.path.join(FRIDAY_MEMORY, "friday_chrome_profile")
+            os.makedirs(profile_path, exist_ok=True)
 
         if not profile_path:
             logger.warning("No Chrome profile found — using temporary context (no cookies)")
@@ -265,12 +267,13 @@ class BrowserManager:
 
         profile_path = cfg.get("chrome_profile", "auto")
         if not profile_path or profile_path.lower() == "auto":
-            profile_path = _detect_chrome_profile()
+            profile_path = os.path.join(FRIDAY_MEMORY, "friday_chrome_profile")
+            os.makedirs(profile_path, exist_ok=True)
 
         if not profile_path:
             logger.warning("No Chrome profile found — using temporary context (no cookies)")
 
-        headless_default = cfg.get("headless", True)
+        headless_default = cfg.get("headless", False)
         anti_detection = cfg.get("anti_detection", True)
         chrome_path = cfg.get("chrome_executable") or _chrome_executable()
 

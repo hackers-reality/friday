@@ -267,7 +267,7 @@ zen:
   model: opencode/big-pickle
 browser:
   enabled: true
-  headless: true
+  headless: false
   chrome_profile: auto
   anti_detection: true
   action_delay_min: 0.3
@@ -275,9 +275,9 @@ browser:
   screenshot_on_action: false
   sessions:
     personal:
-      profile_dir: ''
-      headless: true
-      description: Main Chrome profile — inherits all cookies and sessions
+      profile_dir: friday_chrome_profile
+      headless: false
+      description: FRIDAY persistent Chrome profile — inherits all cookies and sessions
 osint:
   enabled: true
   spiderfoot_dir: C:/tools/spiderfoot
