@@ -7,6 +7,7 @@ from __future__ import annotations
 import itertools
 import os
 import re
+import shutil
 import subprocess
 import time as _time
 from datetime import datetime
@@ -252,6 +253,20 @@ def _sorted_truncate(s: set[str], limit: int) -> list[str]:
 # ─── Handshake Capture ──────────────────────────────────────────────────────
 
 
+def _program_files_dirs() -> list[str]:
+    """Get Program Files directories dynamically (platform-aware)."""
+    dirs = []
+    pf = os.environ.get("ProgramFiles")
+    if pf:
+        dirs.append(pf)
+    pf86 = os.environ.get("ProgramFiles(x86)")
+    if pf86 and pf86 != pf:
+        dirs.append(pf86)
+    if not dirs:
+        dirs = ["C:\\Program Files", "C:\\Program Files (x86)"]
+    return dirs
+
+
 def _check_aircrack() -> Optional[str]:
     """Return path to aircrack-ng or None if not found."""
     for cmd in ("aircrack-ng", "aircrack-ng.exe"):
@@ -261,17 +276,15 @@ def _check_aircrack() -> Optional[str]:
                 capture_output=True, text=True, timeout=5,
             )
             if r.returncode == 0 or "aircrack-ng" in (r.stdout + r.stderr).lower():
-                return cmd
+                return shutil.which(cmd) or cmd
         except FileNotFoundError:
             continue
         except Exception:
             continue
 
-    # Check common install locations
-    for candidate in (
-        "C:\\Program Files\\aircrack-ng\\bin\\aircrack-ng.exe",
-        "C:\\Program Files (x86)\\aircrack-ng\\bin\\aircrack-ng.exe",
-    ):
+    # Check common install locations dynamically
+    for pf in _program_files_dirs():
+        candidate = os.path.join(pf, "aircrack-ng", "bin", "aircrack-ng.exe")
         if os.path.isfile(candidate):
             return candidate
     return None
@@ -286,15 +299,13 @@ def _check_airodump() -> Optional[str]:
                 capture_output=True, text=True, timeout=5,
             )
             if r.returncode == 0 or "airodump-ng" in (r.stdout + r.stderr).lower():
-                return cmd
+                return shutil.which(cmd) or cmd
         except FileNotFoundError:
             continue
         except Exception:
             continue
-    for candidate in (
-        "C:\\Program Files\\aircrack-ng\\bin\\airodump-ng.exe",
-        "C:\\Program Files (x86)\\aircrack-ng\\bin\\airodump-ng.exe",
-    ):
+    for pf in _program_files_dirs():
+        candidate = os.path.join(pf, "aircrack-ng", "bin", "airodump-ng.exe")
         if os.path.isfile(candidate):
             return candidate
     return None
@@ -309,15 +320,13 @@ def _check_aireplay() -> Optional[str]:
                 capture_output=True, text=True, timeout=5,
             )
             if r.returncode == 0 or "aireplay-ng" in (r.stdout + r.stderr).lower():
-                return cmd
+                return shutil.which(cmd) or cmd
         except FileNotFoundError:
             continue
         except Exception:
             continue
-    for candidate in (
-        "C:\\Program Files\\aircrack-ng\\bin\\aireplay-ng.exe",
-        "C:\\Program Files (x86)\\aircrack-ng\\bin\\aireplay-ng.exe",
-    ):
+    for pf in _program_files_dirs():
+        candidate = os.path.join(pf, "aircrack-ng", "bin", "aireplay-ng.exe")
         if os.path.isfile(candidate):
             return candidate
     return None

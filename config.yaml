@@ -280,7 +280,7 @@ browser:
       description: FRIDAY persistent Chrome profile — inherits all cookies and sessions
 osint:
   enabled: true
-  spiderfoot_dir: C:/tools/spiderfoot
+  spiderfoot_dir: tools/spiderfoot  # relative to project root; use absolute path if installed elsewhere
   spiderfoot_api: http://127.0.0.1:5002
   sherlock_timeout: 120
   auto_strip_exif: false

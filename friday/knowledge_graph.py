@@ -10,6 +10,8 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 
+from friday._paths import FRIDAY_MEMORY
+
 
 # ─── Knowledge Graph Node ────────────────────────────#
 
@@ -63,8 +65,8 @@ class KGEdge:
 class KnowledgeGraph:
     """Main knowledge graph implementation."""
     
-    def __init__(self, storage_path: str = "friday_memory/knowledge_graph.json"):
-        self.storage_path = Path(storage_path)
+    def __init__(self, storage_path: str = ""):
+        self.storage_path = Path(storage_path) if storage_path else Path(os.path.join(FRIDAY_MEMORY, "knowledge_graph.json"))
         self.nodes: Dict[str, KGNode] = {}
         self.edges: List[KGEdge] = []
         self._load()

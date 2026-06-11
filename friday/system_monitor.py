@@ -40,9 +40,11 @@ def get_memory_usage() -> Dict[str, Any]:
         return {"error": str(e)}
 
 
-def get_disk_usage(path: str = "C:\\") -> Dict[str, Any]:
-    """Get disk usage for a path."""
+def get_disk_usage(path: str = "") -> Dict[str, Any]:
+    """Get disk usage for a path. Defaults to system drive."""
     try:
+        if not path:
+            path = os.path.splitdrive(os.getcwd())[0] + "\\"
         import psutil
         disk = psutil.disk_usage(path)
         return {
@@ -132,12 +134,19 @@ def get_uptime() -> str:
 
 # ─── System Optimization ────────────────────────────────────#
 
+def _get_system_temp() -> str:
+    """Get system temp dir dynamically."""
+    return os.environ.get("TEMP") or os.environ.get("TMP") or os.path.join(
+        os.environ.get("SystemRoot", os.path.splitdrive(os.getcwd())[0] + "\\Windows"), "Temp"
+    )
+
+
 def clean_temp_files() -> str:
     """Clean temporary files."""
     cleaned = 0
+    system_temp = _get_system_temp()
     temp_dirs = [
-        os.environ.get("TEMP", "C:\\Windows\\Temp"),
-        "C:\\Windows\\Temp",
+        system_temp,
         os.path.join(os.environ.get("USERPROFILE", ""), "AppData\\Local\\Temp"),
     ]
     

@@ -298,7 +298,7 @@ def open_app(name: str) -> str:
 
     # Strategy 0: URI scheme (contains : like ms-clock:, mailto:, roblox://)
     # Use Start-Process which handles URI schemes correctly
-    if ":" in name and not name.startswith(("C:\\", "D:\\", os.path.expanduser("~"))):
+    if ":" in name and not (os.path.splitdrive(name)[0] and name.startswith("\\")) and not name.startswith(os.path.expanduser("~")):
         try:
             subprocess.run(["powershell", "-NoProfile", "Start-Process", name], timeout=10)
             return f"[OK] Opening URI: {name}"
@@ -4223,8 +4223,8 @@ def system_memory() -> str:
     except Exception as e:
         return f"[FAIL] Memory error: {e}"
 
-def system_disk(path: str = "C:\\") -> str:
-    """Get disk usage for a drive path."""
+def system_disk(path: str = "") -> str:
+    """Get disk usage for a drive path. Defaults to system drive."""
     try:
         from friday.system_monitor import get_disk_usage
         disk = get_disk_usage(path)
