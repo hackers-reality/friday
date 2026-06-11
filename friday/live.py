@@ -160,6 +160,16 @@ from friday.security_use_bridge import (
     port_scan, ping_host, ssl_certificate_check,
     shodan_search, shodan_host, shodan_search_count, shodan_ports,
     whois_lookup, geoip_lookup, hibp_breach_check,
+    # Advanced WiFi & Metasploit & Pentesting
+    generate_smart_wordlist, wifi_smart_crack,
+    wifi_capture_handshake, wifi_crack_handshake,
+    download_wordlist, wordlist_stats, wifi_detect_deauth,
+    msf_auto_install, msf_ensure_rpc,
+    msf_quick_scan, msf_find_exploits, msf_auto_exploit, msf_auto_pwn,
+    msf_exploit_eternalblue,
+    pentest_scan_target, pentest_enumerate, pentest_exploit,
+    pentest_full_chain, pentest_generate_report,
+    pentest_tools_check, pentest_wifi_assessment, pentest_plan,
 )
 from friday.memory_use_bridge import (
     memory_use_status,
@@ -3276,6 +3286,34 @@ TOOL_MAP = {
     "friday_multi_agent_task": friday_multi_agent_task,
     "friday_quick_delegate": friday_quick_delegate,
     "close_all_agent_resources": close_all_agent_resources,
+
+    # ─── Advanced WiFi Tools ───
+    "generate_smart_wordlist": generate_smart_wordlist,
+    "wifi_smart_crack": wifi_smart_crack,
+    "wifi_capture_handshake": wifi_capture_handshake,
+    "wifi_crack_handshake": wifi_crack_handshake,
+    "download_wordlist": download_wordlist,
+    "wordlist_stats": wordlist_stats,
+    "wifi_detect_deauth": wifi_detect_deauth,
+
+    # ─── Metasploit Auto Tools ───
+    "msf_auto_install": msf_auto_install,
+    "msf_ensure_rpc": msf_ensure_rpc,
+    "msf_quick_scan": msf_quick_scan,
+    "msf_find_exploits": msf_find_exploits,
+    "msf_auto_exploit": msf_auto_exploit,
+    "msf_auto_pwn": msf_auto_pwn,
+    "msf_exploit_eternalblue": msf_exploit_eternalblue,
+
+    # ─── Pentesting Agent Tools ───
+    "pentest_scan_target": pentest_scan_target,
+    "pentest_enumerate": pentest_enumerate,
+    "pentest_exploit": pentest_exploit,
+    "pentest_full_chain": pentest_full_chain,
+    "pentest_generate_report": pentest_generate_report,
+    "pentest_tools_check": pentest_tools_check,
+    "pentest_wifi_assessment": pentest_wifi_assessment,
+    "pentest_plan": pentest_plan,
 
     # ─── OSINT Extra Tools ───
     "social_analyzer": social_analyzer,

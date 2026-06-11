@@ -412,3 +412,235 @@ def hibp_breach_check(email: str) -> str:
         return json.dumps(r, indent=2)
     except Exception as e:
         return json.dumps({"error": str(e), "email": email})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 7. ADVANCED WIFI TOOLS (smart wordlist, handshake, deauth)
+# ═══════════════════════════════════════════════════════════════════
+
+def generate_smart_wordlist(ssid: str, hints: Optional[list[str]] = None, max_words: int = 10000) -> str:
+    try:
+        from friday.tools.wifi_advanced_tools import generate_smart_wordlist as _impl
+        r = _impl(ssid, hints, max_words)
+        _record_action("wifi", "smart_wordlist")
+        return json.dumps({"ssid": ssid, "wordlist": r, "count": len(r)}, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def wifi_smart_crack(ssid: str, wordlist: Optional[list[str]] = None, max_passwords: int = 100000) -> str:
+    try:
+        from friday.tools.wifi_advanced_tools import wifi_smart_crack as _impl
+        r = _impl(ssid, wordlist, max_passwords)
+        _record_action("wifi", "smart_crack")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def wifi_capture_handshake(ssid: str, interface: str = "Wi-Fi", timeout: int = 60) -> str:
+    try:
+        from friday.tools.wifi_advanced_tools import wifi_capture_handshake as _impl
+        r = _impl(ssid, interface, timeout)
+        _record_action("wifi", "capture_handshake")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def wifi_crack_handshake(cap_file: str, wordlist_file: str = "rockyou.txt") -> str:
+    try:
+        from friday.tools.wifi_advanced_tools import wifi_crack_handshake as _impl
+        r = _impl(cap_file, wordlist_file)
+        _record_action("wifi", "crack_handshake")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def download_wordlist(url: Optional[str] = None) -> str:
+    try:
+        from friday.tools.wifi_advanced_tools import download_wordlist as _impl
+        r = _impl(url)
+        _record_action("wifi", "download_wordlist")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def wordlist_stats(wordlist_path: str = "rockyou.txt") -> str:
+    try:
+        from friday.tools.wifi_advanced_tools import wordlist_stats as _impl
+        r = _impl(wordlist_path)
+        _record_action("wifi", "wordlist_stats")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def wifi_detect_deauth(interface: str = "Wi-Fi", timeout: int = 30) -> str:
+    try:
+        from friday.tools.wifi_advanced_tools import wifi_detect_deauth as _impl
+        r = _impl(interface, timeout)
+        _record_action("wifi", "detect_deauth")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 8. MSF AUTO TOOLS (metasploit auto-install, auto-pwn, etc.)
+# ═══════════════════════════════════════════════════════════════════
+
+def msf_auto_install() -> str:
+    try:
+        from friday.tools.msf_auto_tools import msf_auto_install as _impl
+        r = _impl()
+        _record_action("metasploit", "auto_install")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def msf_ensure_rpc(host: str = "127.0.0.1", port: int = 55553, password: str = "msf") -> str:
+    try:
+        from friday.tools.msf_auto_tools import msf_ensure_rpc as _impl
+        r = _impl(host, port, password)
+        _record_action("metasploit", "ensure_rpc")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def msf_quick_scan(target: str, ports: str = "1-1000") -> str:
+    try:
+        from friday.tools.msf_auto_tools import msf_quick_scan as _impl
+        r = _run_async(_impl(target, ports))
+        _record_action("metasploit", "quick_scan")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def msf_find_exploits(target: str, port: int, service: str = "") -> str:
+    try:
+        from friday.tools.msf_auto_tools import msf_find_exploits as _impl
+        r = _run_async(_impl(target, port, service))
+        _record_action("metasploit", "find_exploits")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def msf_auto_exploit(target: str, module_path: str, options: dict = None, payload: Optional[str] = None) -> str:
+    try:
+        from friday.tools.msf_auto_tools import msf_auto_exploit as _impl
+        r = _run_async(_impl(target, module_path, options or {}, payload))
+        _record_action("metasploit", "auto_exploit")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def msf_auto_pwn(target_ip: str, target_port: Optional[int] = None) -> str:
+    try:
+        from friday.tools.msf_auto_tools import msf_auto_pwn as _impl
+        r = _run_async(_impl(target_ip, target_port))
+        _record_action("metasploit", "auto_pwn")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def msf_exploit_eternalblue(target: str, lhost: str = "127.0.0.1", lport: int = 4444) -> str:
+    try:
+        from friday.tools.msf_auto_tools import msf_exploit_eternalblue as _impl
+        r = _run_async(_impl(target, lhost, lport))
+        _record_action("metasploit", "exploit_eternalblue")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 9. PENTESTING AGENT TOOLS
+# ═══════════════════════════════════════════════════════════════════
+
+def pentest_scan_target(target: str, ports: Optional[list[int]] = None) -> str:
+    try:
+        from friday.pentesting_agent import pentest_scan_target as _impl
+        r = _impl(target, ports)
+        _record_action("pentest", "scan_target")
+        return json.dumps(r, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def pentest_enumerate(target: str, service: str, port: int) -> str:
+    try:
+        from friday.pentesting_agent import pentest_enumerate as _impl
+        r = _impl(target, service, port)
+        _record_action("pentest", "enumerate")
+        return json.dumps(r, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def pentest_exploit(target: str, service: str, port: int) -> str:
+    try:
+        from friday.pentesting_agent import pentest_exploit as _impl
+        r = _impl(target, service, port)
+        _record_action("pentest", "exploit")
+        return json.dumps(r, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def pentest_full_chain(target: str) -> str:
+    try:
+        from friday.pentesting_agent import pentest_full_chain as _impl
+        r = _impl(target)
+        _record_action("pentest", "full_chain")
+        return json.dumps(r, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def pentest_generate_report(target: str) -> str:
+    try:
+        from friday.pentesting_agent import pentest_generate_report as _impl
+        r = _impl(target)
+        _record_action("pentest", "generate_report")
+        return r
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def pentest_tools_check() -> str:
+    try:
+        from friday.pentesting_agent import pentest_tools_check as _impl
+        r = _impl()
+        _record_action("pentest", "tools_check")
+        return json.dumps(r, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def pentest_wifi_assessment(ssid: str) -> str:
+    try:
+        from friday.pentesting_agent import pentest_wifi_assessment as _impl
+        r = _impl(ssid)
+        _record_action("pentest", "wifi_assessment")
+        return json.dumps(r, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def pentest_plan(target: str, assessment_type: str = "full") -> str:
+    try:
+        from friday.pentesting_agent import pentest_plan as _impl
+        r = _impl(target, assessment_type)
+        _record_action("pentest", "plan")
+        return r
+    except Exception as e:
+        return json.dumps({"error": str(e)})
