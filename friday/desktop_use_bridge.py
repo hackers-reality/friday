@@ -53,6 +53,15 @@ def _log_history(entry: dict) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
+def _ensure_com():
+    """Initialize COM on this thread for UI Automation."""
+    try:
+        import comtypes
+        comtypes.CoInitialize()
+    except Exception:
+        pass
+
+
 def _get_windows():
     """Return list of all desktop windows, retrying with win32 backend if UIA crashes."""
     from pywinauto import Desktop
@@ -61,6 +70,8 @@ def _get_windows():
         for attempt in range(2):
             try:
                 import gc; gc.collect()
+                if backend == "uia":
+                    _ensure_com()
                 d = Desktop(backend=backend)
                 return d.windows()
             except Exception as e:
@@ -76,6 +87,8 @@ def _get_desktop():
     for backend in ("uia", "win32"):
         for attempt in range(2):
             try:
+                if backend == "uia":
+                    _ensure_com()
                 return Desktop(backend=backend)
             except Exception as e:
                 last_err = e
@@ -353,6 +366,8 @@ def desktop_get_element_tree(window_title: str = "") -> str:
                 import sys
                 from pywinauto import Desktop
 
+                if backend == "uia":
+                    _ensure_com()
                 d = Desktop(backend=backend)
                 if window_title:
                     found = _find_window(window_title)

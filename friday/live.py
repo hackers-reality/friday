@@ -3012,6 +3012,8 @@ TOOL_MAP = {
     "spotify_prev": spotify_prev,
     "spotify_volume": spotify_volume,
     "send_instagram_dm": send_instagram_dm,
+    "read_discord_messages": read_discord_messages,
+    "read_slack_messages": read_slack_messages,
     "netflix_play": netflix_play,
     "google_authorize": google_authorize,
     "gmail_authorize": gmail_authorize,

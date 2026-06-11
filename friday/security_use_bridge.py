@@ -66,14 +66,14 @@ def _record_action(category: str, action: str, status: str = "ok") -> None:
 
 
 def _run_async(coro) -> Any:
-    """Run a coroutine synchronously from a sync context (safe from within an async context too)."""
+    """Run a coroutine synchronously. Works in both sync and async contexts."""
     try:
         loop = asyncio.get_running_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
             future = pool.submit(asyncio.run, coro)
             return future.result(timeout=120)
     except RuntimeError:
-        return _run_async(coro)
+        return asyncio.run(coro)
 
 
 # ═══════════════════════════════════════════════════════════════════
