@@ -302,6 +302,30 @@ from friday.tools.scm_tools import (
     run_precommit, analyze_git_repo, codemod_python, audit_dependencies,
 )
 
+# ── NVIDIA NIM Tools (free AI models via NVIDIA API) ──
+from friday.tools.nvidia_tools import (
+    nvidia_list_models, nvidia_image_gen, nvidia_chat, nvidia_status,
+)
+
+# ── Artifact Tools (interactive HTML content — websites, games, SVGs, animations, documents) ──
+from friday.tools.artifact_tools import (
+    artifact_create_website, artifact_create_game, artifact_create_svg,
+    artifact_create_animation, artifact_create_document,
+    artifact_list, artifact_open, artifact_delete,
+)
+
+# ── Presentation Tools (PowerPoint PPTX + HTML slide decks) ──
+from friday.tools.presentation_tools import (
+    presentation_create, presentation_create_from_markdown,
+    presentation_create_demo, presentation_list, presentation_open,
+)
+
+# ── Higgsfield AI Video Generation Tools ──
+from friday.tools.higgsfield_tools import (
+    higgsfield_generate_video, higgsfield_generate_from_image,
+    higgsfield_list_motions, higgsfield_check_mcp, higgsfield_status,
+)
+
 from friday.kimi_webbridge_tool import (
     webbridge_connect, webbridge_disconnect, webbridge_doctor,
     webbridge_navigate, webbridge_click, webbridge_fill,
@@ -462,6 +486,22 @@ __all__ = _tflat.__all__ + [
     "agent_use_status", "agent_use_list_agents", "agent_use_spawn",
     "agent_use_delegate", "agent_use_workflow", "agent_use_kill",
     "agent_use_heartbeats",
+
+    # ── NVIDIA NIM Tools (free AI models) ──
+    "nvidia_list_models", "nvidia_image_gen", "nvidia_chat", "nvidia_status",
+
+    # ── Artifact Tools (interactive HTML content) ──
+    "artifact_create_website", "artifact_create_game", "artifact_create_svg",
+    "artifact_create_animation", "artifact_create_document",
+    "artifact_list", "artifact_open", "artifact_delete",
+
+    # ── Presentation Tools ──
+    "presentation_create", "presentation_create_from_markdown",
+    "presentation_create_demo", "presentation_list", "presentation_open",
+
+    # ── Higgsfield Video Generation ──
+    "higgsfield_generate_video", "higgsfield_generate_from_image",
+    "higgsfield_list_motions", "higgsfield_check_mcp", "higgsfield_status",
 
     # ── Security-Use Bridge (unified security & pen-testing toolkit) ──
     "security_use_status",
