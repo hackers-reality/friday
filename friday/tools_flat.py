@@ -788,22 +788,8 @@ def spotify_current() -> str:
     except Exception as e:
         return f"[FAIL] Spotify current error: {e}"
 
-def _bridge_fetch_text(url: str) -> str | None:
-    """Use Playwright bridge to render a URL and extract clean text."""
-    try:
-        from friday.browser_use_bridge import _run_async, _direct_action
-        _run_async(_direct_action("navigate", url=url))
-        text_data = _run_async(_direct_action("extract_text"))
-        body = text_data.get("text", "")
-        if len(body) > 200:
-            return body[:2000]
-    except Exception:
-        pass
-    return None
-
-
 def web_search(query: str, max_results: int = 5) -> str:
-    """Search web via classic scraper with Playwright bridge for JS-heavy page content."""
+    """Fast web search via classic scraper (no Playwright — too slow). Use browser_use_navigate for JS-heavy pages."""
     try:
         from friday.web import WebScraper
         from bs4 import BeautifulSoup
@@ -839,25 +825,20 @@ def web_search(query: str, max_results: int = 5) -> str:
 
         top_url = items[0].get("url", "")
         if top_url:
-            bridge_text = _bridge_fetch_text(top_url)
-            if bridge_text:
-                lines.append(f"\n--- Top Result Content ({items[0].get('title','')}) ---")
-                lines.append(bridge_text)
-            else:
-                try:
-                    page = scraper.fetch(top_url, timeout=15)
-                    if page.get("success"):
-                        p_soup = BeautifulSoup(page["content"], "html.parser")
-                        for tag in p_soup(["script", "style", "nav", "footer", "header", "aside"]):
-                            tag.decompose()
-                        body = p_soup.find("body") or p_soup
-                        text = body.get_text(separator="\n", strip=True)
-                        text = re.sub(r'\n{3,}', '\n\n', text)
-                        if len(text) > 200:
-                            lines.append(f"\n--- Top Result Content ({items[0].get('title','')}) ---")
-                            lines.append(text[:2000])
-                except Exception:
-                    pass
+            try:
+                page = scraper.fetch(top_url, timeout=15)
+                if page.get("success"):
+                    p_soup = BeautifulSoup(page["content"], "html.parser")
+                    for tag in p_soup(["script", "style", "nav", "footer", "header", "aside"]):
+                        tag.decompose()
+                    body = p_soup.find("body") or p_soup
+                    text = body.get_text(separator="\n", strip=True)
+                    text = re.sub(r'\n{3,}', '\n\n', text)
+                    if len(text) > 200:
+                        lines.append(f"\n--- Top Result Content ({items[0].get('title','')}) ---")
+                        lines.append(text[:2000])
+            except Exception:
+                pass
 
         return "\n".join(lines)
     except ImportError:

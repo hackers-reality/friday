@@ -115,7 +115,16 @@ friday_memory/
 fix_*.py
 check_syntax.py
 test_feature*.py
+_test_*
+test_friday_features.py
+test_report_generation.py
+test_models*.py
 scratch/
+Veronica_Quantum_Report.txt
+pasted.txt
+err*.txt
+out*.txt
+error.txt
 .spotify_cache
 
 .gmail_token.json
