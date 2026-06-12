@@ -71,6 +71,9 @@ from friday.tools.desktop_vision_agent import (
 from friday.tools.coding_auto_fix import (
     coding_auto_fix_tool,
 )
+from friday.tools.viral_pipeline import (
+    viral_pipeline_tool,
+)
 from friday.tools.nlp_tools import (
     sentiment_analysis, extract_entities, summarize_text, classify_text, compute_embeddings,
 )

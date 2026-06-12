@@ -313,6 +313,148 @@ class YouTubeClient:
                 return row
         return None
 
+    def upload_video(self, file_path: str, title: str, description: str = "",
+                     tags: Optional[list[str]] = None, category_id: str = "22",
+                     privacy_status: str = "public", publish_at: str = "") -> dict:
+        """Upload a video to YouTube using resumable media upload.
+        
+        Args:
+            file_path: Path to the video file (MP4, MOV, etc.)
+            title: Video title (max 100 chars)
+            description: Video description
+            tags: List of tags
+            category_id: YouTube category ID (default 22 = People & Blogs)
+            privacy_status: 'public', 'unlisted', or 'private'
+            publish_at: ISO datetime string for scheduled publishing (requires privacy_status='private')
+        
+        Returns:
+            dict with video_id, status, or error
+        """
+        if requests is None:
+            return {"error": "requests library unavailable"}
+
+        token = _get_oauth_token()
+        if not token:
+            return {"error": "OAuth2 token required for upload. Run OAuth2 flow first."}
+
+        if not os.path.exists(file_path):
+            return {"error": f"File not found: {file_path}"}
+
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            return {"error": "File is empty"}
+
+        body = {
+            "snippet": {
+                "title": str(title)[:100],
+                "description": str(description)[:5000],
+                "tags": tags or [],
+                "categoryId": str(category_id),
+            },
+            "status": {
+                "privacyStatus": privacy_status,
+                "selfDeclaredMadeForKids": False,
+            },
+        }
+        if publish_at and privacy_status == "private":
+            body["status"]["publishAt"] = publish_at
+
+        # Step 1: Initiate resumable upload
+        upload_url = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Length": str(file_size),
+            "X-Upload-Content-Type": "video/*",
+        }
+
+        try:
+            r = requests.post(upload_url, headers=headers, json=body, timeout=30)
+            if r.status_code != 200:
+                return {"error": f"Upload initiation failed: {r.status_code} {r.text[:500]}"}
+
+            session_uri = r.headers.get("Location", "")
+            if not session_uri:
+                return {"error": "No upload session URI returned"}
+
+            # Step 2: Upload video bytes
+            with open(file_path, "rb") as f:
+                video_data = f.read()
+
+            upload_headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "video/*",
+                "Content-Length": str(file_size),
+            }
+
+            r = requests.put(session_uri, headers=upload_headers, data=video_data, timeout=600)
+            _add_quota(1600)
+
+            if r.status_code in (200, 201):
+                result = r.json()
+                video_id = result.get("id", "")
+                _log_history({
+                    "event": "upload",
+                    "video_id": video_id,
+                    "title": title[:100],
+                    "file": os.path.basename(file_path),
+                    "privacy": privacy_status,
+                    "timestamp": datetime.utcnow().isoformat(),
+                })
+                return {
+                    "success": True,
+                    "video_id": video_id,
+                    "title": title[:100],
+                    "url": f"https://youtu.be/{video_id}",
+                    "privacy": privacy_status,
+                }
+
+            return {"error": f"Upload failed: HTTP {r.status_code} - {r.text[:500]}"}
+
+        except requests.exceptions.Timeout:
+            return {"error": "Upload timed out (large file?)"}
+        except Exception as e:
+            return {"error": f"Upload error: {e}"}
+
+    def set_thumbnail(self, video_id: str, image_path: str) -> dict:
+        """Set a custom thumbnail for a video.
+        
+        Args:
+            video_id: YouTube video ID
+            image_path: Path to thumbnail image (JPEG/PNG, max 2MB)
+        
+        Returns:
+            dict with success or error
+        """
+        if requests is None:
+            return {"error": "requests library unavailable"}
+
+        token = _get_oauth_token()
+        if not token:
+            return {"error": "OAuth2 token required"}
+
+        if not os.path.exists(image_path):
+            return {"error": f"Thumbnail file not found: {image_path}"}
+
+        try:
+            url = f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={video_id}"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "image/*",
+            }
+            with open(image_path, "rb") as f:
+                img_data = f.read()
+
+            r = requests.post(url, headers=headers, data=img_data, timeout=30)
+            _add_quota(50)
+
+            if r.status_code in (200, 201):
+                return {"success": True, "video_id": video_id, "thumbnail": "custom"}
+            return {"error": f"Thumbnail upload failed: HTTP {r.status_code}"}
+
+        except Exception as e:
+            return {"error": f"Thumbnail error: {e}"}
+
     # ── OAuth2 flow (delegates to unified google_oauth module) ──
 
     def get_auth_url(self) -> dict:
