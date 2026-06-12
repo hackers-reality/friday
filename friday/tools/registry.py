@@ -513,6 +513,31 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
     ("friday.tools.higgsfield_tools", "higgsfield_list_motions", "List available motion presets for image-to-video.", None, None),
     ("friday.tools.higgsfield_tools", "higgsfield_check_mcp", "Check if Higgsfield MCP server is available.", None, None),
     ("friday.tools.higgsfield_tools", "higgsfield_status", "Check Higgsfield integration status (API key, MCP, recent files).", None, None),
+
+    # ── Verification & Self-Reflection Tools (F5-style validation loop) ──
+    ("friday.tools.verification_tools", "verify_code", "Validate code syntax for Python, JavaScript, HTML, or CSS.", {"code": {"type": "STRING", "description": "Code content to verify"}, "language": {"type": "STRING", "description": "Language: python, javascript, html, css (default python)"}}, ["code"]),
+    ("friday.tools.verification_tools", "verify_artifact", "Validate a created artifact for correctness.", {"artifact_id": {"type": "STRING", "description": "Artifact ID to verify"}}, ["artifact_id"]),
+    ("friday.tools.verification_tools", "verify_html", "Validate HTML content for structure and security issues.", {"html_content": {"type": "STRING", "description": "HTML content to validate"}}, ["html_content"]),
+    ("friday.tools.verification_tools", "verify_presentation", "Validate a presentation file for structure.", {"presentation_id": {"type": "STRING", "description": "Presentation filename to verify"}}, ["presentation_id"]),
+    ("friday.tools.verification_tools", "reflection_analyze", "Analyze tool call results and recommend fixes (F5-style reflection loop).", {"task_description": {"type": "STRING", "description": "What was attempted"}, "tool_results": {"type": "STRING", "description": "JSON string of tool output/results"}}, ["task_description", "tool_results"]),
+    ("friday.tools.verification_tools", "verify_image", "Validate an image file for format and integrity.", {"image_path": {"type": "STRING", "description": "Path to image file"}}, ["image_path"]),
+    ("friday.tools.verification_tools", "self_review_tool_output", "Review a tool's output for correctness and completeness.", {"tool_name": {"type": "STRING", "description": "Name of the tool"}, "input_params": {"type": "STRING", "description": "JSON string of input parameters"}, "output": {"type": "STRING", "description": "JSON string of tool output"}}, ["tool_name", "input_params", "output"]),
+
+    # ── MCP Server Creation Tools (dynamic MCP server hosting) ──
+    ("friday.tools.mcp_tools", "mcp_create_rest_api_server", "Create an MCP server that wraps a REST API from endpoint definitions.", {"name": {"type": "STRING", "description": "Server name"}, "base_url": {"type": "STRING", "description": "Base URL of the REST API"}, "endpoints_json": {"type": "STRING", "description": "JSON array of endpoint definitions"}, "port": {"type": "INTEGER", "description": "Port number (default 8765)"}}, ["name", "base_url", "endpoints_json"]),
+    ("friday.tools.mcp_tools", "mcp_list_servers", "List all MCP servers.", None, None),
+    ("friday.tools.mcp_tools", "mcp_start_server", "Start a created MCP server in background.", {"name": {"type": "STRING", "description": "Server name to start"}}, ["name"]),
+    ("friday.tools.mcp_tools", "mcp_stop_server", "Stop a running MCP server.", {"name": {"type": "STRING", "description": "Server name to stop"}}, ["name"]),
+    ("friday.tools.mcp_tools", "mcp_server_status", "Check if an MCP server is running.", {"name": {"type": "STRING", "description": "Server name"}}, ["name"]),
+    ("friday.tools.mcp_tools", "mcp_create_from_openapi_spec", "Create an MCP server from an OpenAPI/Swagger spec (URL or JSON).", {"spec_url_or_json": {"type": "STRING", "description": "OpenAPI JSON URL or inline JSON string"}, "name": {"type": "STRING", "description": "Optional server name (auto-generated from spec if empty)"}}, ["spec_url_or_json"]),
+    ("friday.tools.mcp_tools", "mcp_create_tool_server", "Create an MCP server with custom Python tools/functions.", {"name": {"type": "STRING", "description": "Server name"}, "tools_json": {"type": "STRING", "description": "JSON array of tool definitions with code"}, "port": {"type": "INTEGER", "description": "Port number (default 8766)"}}, ["name", "tools_json"]),
+    ("friday.tools.mcp_tools", "mcp_test_endpoint", "Test a tool on a running MCP server.", {"name": {"type": "STRING", "description": "Server name"}, "tool_name": {"type": "STRING", "description": "Tool name to test"}, "params_json": {"type": "STRING", "description": "JSON params string (default {})"}}, ["name", "tool_name"]),
+
+    # ── Artifact System Upgrades (spec-based generation) ──
+    ("friday.tools.artifact_tools", "artifact_create_website_from_spec", "Build a complete website from a JSON specification (sections, theme, layout).", {"spec_json": {"type": "STRING", "description": "JSON specification string with sections, theme, layout"}}, ["spec_json"]),
+    ("friday.tools.artifact_tools", "artifact_create_game_from_spec", "Generate a complete game from a JSON specification (genre, mechanics, theme).", {"spec_json": {"type": "STRING", "description": "JSON specification string for the game"}}, ["spec_json"]),
+    ("friday.tools.artifact_tools", "artifact_create_svg_from_desc", "Generate SVG from a natural language description and style.", {"description": {"type": "STRING", "description": "Natural language description of the SVG"}, "style": {"type": "STRING", "description": "Style: modern, flat, minimal, detailed, isometric (default modern)"}}, ["description"]),
+    ("friday.tools.artifact_tools", "artifact_create_dashboard", "Create a full HTML dashboard with metric/chart/table/text widgets.", {"title": {"type": "STRING", "description": "Dashboard title"}, "widgets_json": {"type": "STRING", "description": "JSON array of widget definitions"}}, ["title", "widgets_json"]),
 ]
 
 

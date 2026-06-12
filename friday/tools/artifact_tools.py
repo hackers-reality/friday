@@ -1417,3 +1417,909 @@ def _render_markdown(text: str) -> str:
         html_parts.append(f"<pre><code>{'\n'.join(code_buf)}</code></pre>")
 
     return "\n".join(html_parts)
+
+
+# ---------------------------------------------------------------------------
+# Spec-based website generation
+# ---------------------------------------------------------------------------
+
+def _gen_section_hero(s: dict) -> tuple[str, str]:
+    t = s.get("title", "")
+    st = s.get("subtitle", "")
+    cta = s.get("cta", "")
+    html = f"""<section class="hero">
+  <div class="hero-content">
+    <h1>{t}</h1>
+    <p class="subtitle">{st}</p>
+    <a class="btn-primary" href="#">{cta}</a>
+  </div>
+</section>"""
+    css = """.hero{min-height:80vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:40px 20px;background:linear-gradient(135deg,var(--primary),var(--primary-dark))}.hero-content{max-width:700px}.hero h1{font-size:clamp(2rem,5vw,3.5rem);margin-bottom:16px;color:#fff}.hero .subtitle{font-size:clamp(1rem,2vw,1.25rem);color:rgba(255,255,255,0.85);margin-bottom:32px}.btn-primary{display:inline-block;padding:14px 36px;background:#fff;color:var(--primary);border-radius:50px;font-weight:600;font-size:1.1rem;text-decoration:none;transition:transform .2s,box-shadow .2s;box-shadow:0 4px 15px rgba(0,0,0,0.2)}.btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.3)}"""
+    return html, css
+
+
+def _gen_section_features(s: dict) -> tuple[str, str]:
+    items = s.get("items", [])
+    cards = "".join(
+        f"""<div class="feat-card"><div class="feat-icon">{i.get("icon","★")}</div><h3>{i.get("title","")}</h3><p>{i.get("desc","")}</p></div>"""
+        for i in items
+    )
+    html = f"""<section class="features"><div class="container"><h2 class="section-title">{s.get("title","Features")}</h2><div class="feat-grid">{cards}</div></div></section>"""
+    css = """.features{padding:80px 20px;background:var(--bg)}.container{max-width:1100px;margin:0 auto}.section-title{text-align:center;font-size:2rem;margin-bottom:48px;color:var(--text)}.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:30px}.feat-card{background:var(--card-bg);padding:32px 24px;border-radius:12px;text-align:center;transition:transform .2s,box-shadow .2s;border:1px solid var(--border)}.feat-card:hover{transform:translateY(-4px);box-shadow:0 8px 25px rgba(0,0,0,0.1)}.feat-icon{font-size:2.5rem;margin-bottom:16px}.feat-card h3{margin-bottom:12px;color:var(--text)}.feat-card p{color:var(--text-muted);line-height:1.6;font-size:0.95rem}"""
+    return html, css
+
+
+def _gen_section_pricing(s: dict) -> tuple[str, str]:
+    plans = s.get("plans", [])
+    cards = "".join(
+        f"""<div class="plan-card"><h3>{p.get("name","")}</h3><div class="price">{p.get("price","$0")}<span>/mo</span></div><ul class="plan-features">{"".join(f"<li>{f}</li>" for f in p.get("features",[]))}</ul><a class="btn-outline" href="#">Choose</a></div>"""
+        for p in plans
+    )
+    html = f"""<section class="pricing"><div class="container"><h2 class="section-title">{s.get("title","Pricing")}</h2><div class="pricing-grid">{cards}</div></div></section>"""
+    css = """.pricing{padding:80px 20px;background:var(--bg-alt)}.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:30px;max-width:900px;margin:0 auto}.plan-card{background:var(--card-bg);padding:36px 24px;border-radius:12px;text-align:center;border:1px solid var(--border);transition:transform .2s}.plan-card:hover{transform:translateY(-4px)}.plan-card h3{font-size:1.25rem;margin-bottom:16px;color:var(--text)}.price{font-size:2.5rem;font-weight:700;color:var(--primary);margin-bottom:8px}.price span{font-size:1rem;color:var(--text-muted);font-weight:400}.plan-features{list-style:none;padding:0;margin:24px 0}.plan-features li{padding:8px 0;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.95rem}.plan-features li:last-child{border-bottom:none}.btn-outline{display:inline-block;padding:12px 32px;border:2px solid var(--primary);color:var(--primary);border-radius:50px;font-weight:600;text-decoration:none;transition:all .2s}.btn-outline:hover{background:var(--primary);color:#fff}"""
+    return html, css
+
+
+def _gen_section_contact(s: dict) -> tuple[str, str]:
+    email = s.get("email", "")
+    html = f"""<section class="contact"><div class="container"><h2 class="section-title">{s.get("title","Contact")}</h2><div class="contact-content"><p>Get in touch</p><a class="contact-email" href="mailto:{email}">{email}</a></div></div></section>"""
+    css = """.contact{padding:80px 20px;background:var(--bg)}.contact-content{text-align:center;max-width:500px;margin:0 auto}.contact-content p{margin-bottom:16px;color:var(--text-muted);font-size:1.1rem}.contact-email{font-size:1.5rem;color:var(--primary);text-decoration:none;font-weight:600;transition:opacity .2s}.contact-email:hover{opacity:0.8}"""
+    return html, css
+
+
+def _gen_section_header(s: dict) -> tuple[str, str]:
+    title = s.get("title", "Site")
+    links = "".join(f"<a href='#'>{l}</a>" for l in s.get("links", ["Home", "About", "Contact"]))
+    html = f"""<header class="site-header"><div class="header-inner"><div class="logo">{title}</div><nav class="nav">{links}</nav></div></header>"""
+    css = """.site-header{position:sticky;top:0;z-index:100;background:var(--header-bg);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}.header-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;padding:16px 20px}.logo{font-size:1.3rem;font-weight:700;color:var(--text)}.nav{display:flex;gap:24px}.nav a{text-decoration:none;color:var(--text-muted);font-weight:500;transition:color .2s}.nav a:hover{color:var(--primary)}"""
+    return html, css
+
+
+def _gen_section_footer(s: dict) -> tuple[str, str]:
+    html = """<footer class="site-footer"><div class="footer-inner"><p>&copy; 2025 All rights reserved.</p></div></footer>"""
+    css = """.site-footer{background:var(--bg-alt);border-top:1px solid var(--border);padding:24px 20px;text-align:center}.footer-inner{max-width:1100px;margin:0 auto}.footer-inner p{color:var(--text-muted);font-size:0.9rem}"""
+    return html, css
+
+
+def _gen_section_hero_image(s: dict) -> tuple[str, str]:
+    t = s.get("title", "")
+    st = s.get("subtitle", "")
+    img = s.get("image", "")
+    cta = s.get("cta", "Learn More")
+    html = f"""<section class="hero-image"><div class="hero-image-content"><h1>{t}</h1><p>{st}</p><a class="btn-primary" href="#">{cta}</a></div><div class="hero-image-visual">{f'<img src="{img}" alt="">' if img else '<div class="placeholder-img"></div>'}</div></section>"""
+    css = """.hero-image{display:grid;grid-template-columns:1fr 1fr;align-items:center;min-height:70vh;padding:60px 40px;gap:40px;background:var(--bg)}.hero-image-content h1{font-size:clamp(2rem,4vw,3rem);margin-bottom:16px;color:var(--text)}.hero-image-content p{font-size:1.1rem;color:var(--text-muted);margin-bottom:32px}.hero-image-visual{display:flex;justify-content:center}.placeholder-img{width:100%;max-width:450px;aspect-ratio:4/3;background:linear-gradient(135deg,var(--primary),var(--primary-dark));border-radius:16px;opacity:0.6}.hero-image-visual img{max-width:100%;border-radius:16px}@media(max-width:768px){.hero-image{grid-template-columns:1fr}}"""
+    return html, css
+
+
+def _gen_section_gallery(s: dict) -> tuple[str, str]:
+    images = s.get("images", [f"https://picsum.photos/seed/{i}/400/300" for i in range(6)])
+    items = "".join(f'<div class="gallery-item"><img src="{img}" alt="Gallery"></div>' for img in images[:12])
+    html = f"""<section class="gallery"><div class="container"><h2 class="section-title">{s.get("title","Gallery")}</h2><div class="gallery-grid">{items}</div></div></section>"""
+    css = """.gallery{padding:80px 20px;background:var(--bg-alt)}.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}.gallery-item{overflow:hidden;border-radius:8px;transition:transform .3s}.gallery-item:hover{transform:scale(1.03)}.gallery-item img{width:100%;height:200px;object-fit:cover;display:block;border-radius:8px}"""
+    return html, css
+
+
+def _gen_section_testimonials(s: dict) -> tuple[str, str]:
+    items = s.get("items", [{"quote": "Great product!", "author": "User", "role": "Customer"}])
+    cards = "".join(
+        f"""<div class="testimonial-card"><div class="quote">&#10077;{i.get("quote","")}&#10078;</div><div class="author-name">{i.get("author","")}</div><div class="author-role">{i.get("role","")}</div></div>"""
+        for i in items
+    )
+    html = f"""<section class="testimonials"><div class="container"><h2 class="section-title">{s.get("title","Testimonials")}</h2><div class="testimonial-grid">{cards}</div></div></section>"""
+    css = """.testimonials{padding:80px 20px;background:var(--bg)}.testimonial-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:30px;max-width:900px;margin:0 auto}.testimonial-card{background:var(--card-bg);padding:32px 24px;border-radius:12px;border:1px solid var(--border);text-align:center}.quote{font-size:1.15rem;line-height:1.6;color:var(--text);margin-bottom:20px;font-style:italic}.author-name{font-weight:600;color:var(--text)}.author-role{font-size:0.85rem;color:var(--text-muted);margin-top:4px}"""
+    return html, css
+
+
+def _gen_section_stats(s: dict) -> tuple[str, str]:
+    items = s.get("items", [{"num": "99%", "label": "Uptime"}, {"num": "10K+", "label": "Users"}])
+    cards = "".join(f'<div class="stat-card"><div class="stat-num">{i.get("num","0")}</div><div class="stat-label">{i.get("label","")}</div></div>' for i in items)
+    html = f"""<section class="stats"><div class="container"><div class="stats-grid">{cards}</div></div></section>"""
+    css = """.stats{padding:60px 20px;background:linear-gradient(135deg,var(--primary),var(--primary-dark))}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:30px;text-align:center}.stat-num{font-size:2.5rem;font-weight:700;color:#fff}.stat-label{font-size:1rem;color:rgba(255,255,255,0.8);margin-top:4px}"""
+    return html, css
+
+
+def _gen_section_cta(s: dict) -> tuple[str, str]:
+    t = s.get("title", "Ready to Start?")
+    btn = s.get("button", "Get Started")
+    html = f"""<section class="cta-section"><div class="container"><h2>{t}</h2><a class="btn-primary" href="#">{btn}</a></div></section>"""
+    css = """.cta-section{padding:80px 20px;background:var(--bg-alt);text-align:center}.cta-section h2{font-size:2rem;margin-bottom:32px;color:var(--text)}"""
+    return html, css
+
+
+_SECTION_GENERATORS = {
+    "hero": _gen_section_hero,
+    "features": _gen_section_features,
+    "pricing": _gen_section_pricing,
+    "contact": _gen_section_contact,
+    "header": _gen_section_header,
+    "footer": _gen_section_footer,
+    "hero_image": _gen_section_hero_image,
+    "gallery": _gen_section_gallery,
+    "testimonials": _gen_section_testimonials,
+    "stats": _gen_section_stats,
+    "cta": _gen_section_cta,
+}
+
+
+def _build_website(spec: dict) -> str:
+    title = spec.get("title", "Website")
+    theme = spec.get("theme", {})
+    primary = theme.get("primary", "#3498db")
+    secondary = theme.get("secondary", "#2ecc71")
+    is_dark = theme.get("dark", False)
+
+    if is_dark:
+        bg = "#0f0f1a"
+        bg_alt = "#1a1a2e"
+        text = "#e0e0e0"
+        text_muted = "#999"
+        card_bg = "#1e1e32"
+        border = "rgba(255,255,255,0.08)"
+        header_bg = "rgba(15,15,26,0.9)"
+    else:
+        bg = "#ffffff"
+        bg_alt = "#f8f9fa"
+        text = "#1a1a2e"
+        text_muted = "#666"
+        card_bg = "#ffffff"
+        border = "rgba(0,0,0,0.08)"
+        header_bg = "rgba(255,255,255,0.9)"
+
+    css_vars = f""":root{{--primary:{primary};--primary-dark:{primary}dd;--secondary:{secondary};--bg:{bg};--bg-alt:{bg_alt};--text:{text};--text-muted:{text_muted};--card-bg:{card_bg};--border:{border};--header-bg:{header_bg};--radius:8px}}*{{margin:0;padding:0;box-sizing:border-box}}body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}}a{{color:var(--primary);text-decoration:none}}img{{max-width:100%;height:auto}}"""
+
+    sections_html = []
+    sections_css = []
+    for s in spec.get("sections", []):
+        t = s.get("type", "")
+        gen = _SECTION_GENERATORS.get(t)
+        if gen:
+            h, c = gen(s)
+            sections_html.append(h)
+            sections_css.append(c)
+
+    body = "\n".join(sections_html)
+    css = css_vars + "\n" + "\n".join(sections_css)
+    return _wrap_html(title, body, css)
+
+
+async def artifact_create_website_from_spec(spec_json: str) -> dict:
+    """Create a complete website from a JSON specification.
+
+    Parameters
+    ----------
+    spec_json : JSON string describing the website layout and sections
+    """
+    try:
+        spec = json.loads(spec_json)
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"Invalid spec_json: {e}"}
+
+    try:
+        html = _build_website(spec)
+        title = spec.get("title", "Website")
+        return _save_artifact(html, title, "website_spec", {"type": "website_spec"})
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Spec-based game generation
+# ---------------------------------------------------------------------------
+
+def _build_platformer(spec: dict) -> str:
+    colors = spec.get("colors", {})
+    bg = colors.get("bg", "#1a1a2e")
+    pc = colors.get("player", "#e94560")
+    plc = colors.get("platform", "#16213e")
+    cc = colors.get("coin", "#ffd700")
+    title = spec.get("title", "Platformer")
+    theme = spec.get("theme", "dark")
+    grav = "true" if spec.get("mechanics", {}).get("gravity", True) else "false"
+    jump = "true" if spec.get("mechanics", {}).get("jumping", True) else "false"
+    ms = spec.get("mechanics", {})
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{title}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{background:{bg};display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;color:#fff}}
+canvas{{border:2px solid {plc};border-radius:4px;display:block}}
+.game-container{{text-align:center}}
+h1{{color:{pc};margin-bottom:12px}}
+.info{{font-size:16px;margin:8px 0}}
+.info span{{color:{cc};font-weight:bold}}
+.game-over{{color:{pc};font-size:20px;margin-top:8px;display:none}}
+button{{padding:10px 24px;font-size:16px;background:{pc};color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:8px}}
+button:hover{{opacity:0.85}}
+.hint{{color:#888;font-size:13px;margin-top:6px}}
+</style>
+</head>
+<body>
+<div class="game-container">
+<h1>{title}</h1>
+<div class="info">Score: <span id="score">0</span></div>
+<canvas id="game" width="480" height="640"></canvas>
+<div class="game-over" id="over">Game Over! Score: <span id="final"></span></div>
+<button onclick="init()">New Game</button>
+<div class="hint">Arrow keys / WASD to move &middot; Space to jump</div>
+</div>
+<script>
+const C=document.getElementById('game'),X=C.getContext('2d');
+const W=480,H=640,G=0.5,J=-10,PS=24;
+let player,platforms,coins,score,gameOver,keys={{}},loop;
+const COLORS={{bg:'{bg}',player:'{pc}',plat:'{plc}',coin:'{cc}'}};
+function init(){{
+  score=0;gameOver=false;
+  document.getElementById('score').textContent='0';
+  document.getElementById('over').style.display='none';
+  player={{x:W/2-PS/2,y:H-100,w:PS,h:PS,vy:0,onGround:false}};
+  platforms=[];
+  for(let i=0;i<8;i++){{
+    let pw=80+Math.random()*120,px=Math.random()*(W-pw),py=H-60-i*70-Math.random()*20;
+    platforms.push({{x:px,y:py,w:pw,h:14}});
+  }}
+  coins=[];
+  for(let i=0;i<5;i++){{
+    let p=platforms[i];
+    coins.push({{x:p.x+p.w/2-6,y:p.y-20,w:12,h:12,collected:false}});
+  }}
+  if(loop)cancelAnimationFrame(loop);
+  loop=requestAnimationFrame(tick);
+}}
+function tick(){{
+  if(gameOver){{loop=requestAnimationFrame(tick);return;}}
+  update();
+  draw();
+  if(!gameOver)loop=requestAnimationFrame(tick);
+}}
+function update(){{
+  let dx=0;
+  if(keys['ArrowLeft']||keys['KeyA'])dx=-4;
+  if(keys['ArrowRight']||keys['KeyD'])dx=4;
+  if({jump}&&(keys['Space']||keys['ArrowUp']||keys['KeyW'])&&player.onGround){{player.vy=J;player.onGround=false;}}
+  player.vy+=G;
+  player.x+=dx;
+  player.y+=player.vy;
+  if(player.x<0)player.x=0;
+  if(player.x+player.w>W)player.x=W-player.w;
+  player.onGround=false;
+  for(let p of platforms){{
+    if(player.vy>=0&&player.y+player.h>p.y&&player.y+player.h<p.y+p.h+8&&player.x+player.w>p.x+4&&player.x<p.x+p.w-4){{
+      player.y=p.y-player.h;player.vy=0;player.onGround=true;
+    }}
+  }}
+  if(player.y+player.h>H){{endGame();return;}}
+  for(let c of coins){{
+    if(!c.collected&&player.x+player.w>c.x&&player.x<c.x+c.w&&player.y+player.h>c.y&&player.y<c.y+c.h){{
+      c.collected=true;score+=10;document.getElementById('score').textContent=score;
+    }}
+  }}
+}}
+function endGame(){{
+  gameOver=true;
+  document.getElementById('final').textContent=score;
+  document.getElementById('over').style.display='block';
+}}
+function draw(){{
+  X.fillStyle=COLORS.bg;X.fillRect(0,0,W,H);
+  for(let p of platforms){{
+    X.fillStyle=COLORS.plat;X.beginPath();
+    X.roundRect(p.x,p.y,p.w,p.h,4);X.fill();
+  }}
+  for(let c of coins){{
+    if(c.collected)continue;
+    X.fillStyle=COLORS.coin;
+    X.beginPath();X.arc(c.x+c.w/2,c.y+c.h/2,8,0,Math.PI*2);X.fill();
+    X.fillStyle='#fff';X.font='10px Arial';X.textAlign='center';X.fillText('$',c.x+c.w/2,c.y+c.h/2+4);
+  }}
+  X.fillStyle=COLORS.player;X.beginPath();
+  X.roundRect(player.x,player.y,player.w,player.h,4);X.fill();
+  X.fillStyle='rgba(255,255,255,0.3)';
+  X.fillRect(player.x+4,player.y+4,player.w-8,6);
+}}
+document.addEventListener('keydown',e=>{{keys[e.code]=true;if(gameOver&&(e.code==='Enter'||e.code==='Space'))init();}});
+document.addEventListener('keyup',e=>{{keys[e.code]=false;}});
+init();
+</script>
+</body>
+</html>"""
+
+
+def _build_shooter(spec: dict) -> str:
+    colors = spec.get("colors", {})
+    bg = colors.get("bg", "#0a0a1a")
+    pc = colors.get("player", "#00f0f0")
+    ec = colors.get("enemy", "#e94560")
+    bc = colors.get("bullet", "#ffd700")
+    title = spec.get("title", "Space Shooter")
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{title}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{background:{bg};display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;color:#fff}}
+canvas{{border:2px solid {ec}44;border-radius:4px;display:block}}
+.game-container{{text-align:center}}
+h1{{color:{pc};margin-bottom:12px}}
+.info{{font-size:16px;margin:8px 0}} .info span{{color:{bc};font-weight:bold}}
+.lives span{{color:{pc}}}
+.game-over{{color:{ec};font-size:20px;margin-top:8px;display:none}}
+button{{padding:10px 24px;font-size:16px;background:{ec};color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:8px}}
+button:hover{{opacity:0.85}}
+</style>
+</head>
+<body>
+<div class="game-container">
+<h1>{title}</h1>
+<div class="info">Score: <span id="score">0</span> | <span class="lives">Lives: <span id="lives">3</span></span></div>
+<canvas id="game" width="480" height="640"></canvas>
+<div class="game-over" id="over">Game Over! Score: <span id="final"></span></div>
+<button onclick="init()">New Game</button>
+</div>
+<script>
+const C=document.getElementById('game'),X=C.getContext('2d');
+const W=480,H=640;
+let player,bullets,enemies,score,lives,gameOver,keys={{}},frame=0,anim;
+function init(){{
+  player={{x:W/2-20,y:H-60,w:40,h:40}};
+  bullets=[];enemies=[];score=0;lives=3;gameOver=false;frame=0;
+  document.getElementById('score').textContent='0';document.getElementById('lives').textContent='3';
+  document.getElementById('over').style.display='none';
+  if(anim)cancelAnimationFrame(anim);tick();
+}}
+function spawnEnemy(){{
+  let size=20+Math.random()*20;
+  enemies.push({{x:Math.random()*(W-size),y:-size,w:size,h:size,speed:1+Math.random()*2,hp:1}});
+}}
+function tick(){{
+  update();draw();
+  if(!gameOver)anim=requestAnimationFrame(tick);
+}}
+function update(){{
+  frame++;
+  if(frame%30===0)spawnEnemy();
+  let dx=0;
+  if(keys['ArrowLeft']||keys['KeyA'])dx=-5;
+  if(keys['ArrowRight']||keys['KeyD'])dx=5;
+  player.x=Math.max(0,Math.min(W-player.w,player.x+dx));
+  if(keys['Space']&&frame%10===0){{
+    bullets.push({{x:player.x+player.w/2-3,y:player.y-10,w:6,h:16,speed:-8}});
+  }}
+  for(let i=bullets.length-1;i>=0;i--){{
+    let b=bullets[i];b.y+=b.speed;
+    if(b.y+b.h<0){{bullets.splice(i,1);continue;}}
+    let hit=false;
+    for(let j=enemies.length-1;j>=0;j--){{
+      let e=enemies[j];
+      if(b.x<e.x+e.w&&b.x+b.w>e.x&&b.y<e.y+e.h&&b.y+b.h>e.y){{
+        e.hp--;bullets.splice(i,1);hit=true;
+        if(e.hp<=0){{enemies.splice(j,1);score+=10;document.getElementById('score').textContent=score;}}
+        break;
+      }}
+    }}
+    if(hit)continue;
+  }}
+  for(let i=enemies.length-1;i>=0;i--){{
+    let e=enemies[i];e.y+=e.speed;
+    if(e.y>H){{enemies.splice(i,1);continue;}}
+    if(player.x<e.x+e.w&&player.x+player.w>e.x&&player.y<e.y+e.h&&player.y+player.h>e.y){{
+      enemies.splice(i,1);lives--;document.getElementById('lives').textContent=lives;
+      if(lives<=0){{endGame();return;}}
+    }}
+  }}
+}}
+function endGame(){{
+  gameOver=true;
+  document.getElementById('final').textContent=score;
+  document.getElementById('over').style.display='block';
+}}
+function draw(){{
+  X.fillStyle='{bg}';X.fillRect(0,0,W,H);
+  for(let s of [...Array(40).keys()]){{let y=(s*16+frame*2)%(H+32)-16;X.fillStyle='rgba(255,255,255,0.'+(Math.floor(s%5)+1)+')';X.fillRect(s%W*12,y,1.5,1.5);}}
+  for(let b of bullets){{X.fillStyle='{bc}';X.fillRect(b.x,b.y,b.w,b.h);}}
+  for(let e of enemies){{X.fillStyle='{ec}';X.beginPath();let cx=e.x+e.w/2,cy=e.y+e.h/2,r=e.w/2;for(let i=0;i<6;i++){{let a=i*Math.PI/3-Math.PI/2;let rr=i%2===0?r:r*0.6;i===0?X.moveTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr):X.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr);}}X.closePath();X.fill();}}
+  X.fillStyle='{pc}';X.beginPath();
+  X.moveTo(player.x+player.w/2,player.y);X.lineTo(player.x+player.w,player.y+player.h);
+  X.lineTo(player.x+player.w-8,player.y+player.h-8);X.lineTo(player.x+8,player.y+player.h-8);
+  X.lineTo(player.x,player.y+player.h);X.closePath();X.fill();
+  X.fillStyle='rgba(255,255,255,0.2)';X.fillRect(player.x+12,player.y+6,16,4);
+}}
+document.addEventListener('keydown',e=>{{keys[e.code]=true;if(gameOver&&(e.code==='Enter'||e.code==='Space'))init();}});
+document.addEventListener('keyup',e=>{{keys[e.code]=false;}});
+init();
+</script>
+</body>
+</html>"""
+
+
+def _build_racing(spec: dict) -> str:
+    colors = spec.get("colors", {})
+    bg = colors.get("bg", "#1a1a2e")
+    pc = colors.get("player", "#e94560")
+    oc = colors.get("obstacle", "#0f3460")
+    rc = colors.get("road", "#16213e")
+    title = spec.get("title", "Racer")
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{title}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{background:{bg};display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;color:#fff}}
+canvas{{border:2px solid {rc};border-radius:4px;display:block}}
+.game-container{{text-align:center}}
+h1{{color:{pc};margin-bottom:12px}}
+.info{{font-size:16px;margin:8px 0}} .info span{{color:{pc};font-weight:bold}}
+.game-over{{color:{pc};font-size:20px;margin-top:8px;display:none}}
+button{{padding:10px 24px;font-size:16px;background:{pc};color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:8px}}
+button:hover{{opacity:0.85}}
+.hint{{color:#888;font-size:13px;margin-top:6px}}
+</style>
+</head>
+<body>
+<div class="game-container">
+<h1>{title}</h1>
+<div class="info">Score: <span id="score">0</span></div>
+<canvas id="game" width="400" height="600"></canvas>
+<div class="game-over" id="over">Game Over! Score: <span id="final"></span></div>
+<button onclick="init()">New Game</button>
+<div class="hint">&larr;&rarr; or A/D to steer</div>
+</div>
+<script>
+const C=document.getElementById('game'),X=C.getContext('2d');
+const W=400,H=600;
+let player,obstacles,score,speed,gameOver,keys={{}},roadOffset=0,anim;
+function init(){{
+  player={{x:W/2-20,y:H-80,w:40,h:60}};
+  obstacles=[];score=0;speed=5;gameOver=false;roadOffset=0;
+  document.getElementById('score').textContent='0';document.getElementById('over').style.display='none';
+  if(anim)cancelAnimationFrame(anim);tick();
+}}
+function tick(){{
+  update();draw();
+  if(!gameOver)anim=requestAnimationFrame(tick);
+}}
+function update(){{
+  roadOffset=(roadOffset+speed)%80;
+  if(Math.random()<0.02*{1.5}){{
+    let lane=Math.floor(Math.random()*3);
+    obstacles.push({{x:40+lane*110,y:-60,w:60,h:60}});
+  }}
+  let dx=0;
+  if(keys['ArrowLeft']||keys['KeyA'])dx=-5;
+  if(keys['ArrowRight']||keys['KeyD'])dx=5;
+  player.x=Math.max(10,Math.min(W-player.w-10,player.x+dx));
+  for(let i=obstacles.length-1;i>=0;i--){{
+    let o=obstacles[i];o.y+=speed;
+    if(o.y>H){{obstacles.splice(i,1);score+=5;document.getElementById('score').textContent=score;speed=5+Math.floor(score/50);continue;}}
+    if(player.x<o.x+o.w&&player.x+player.w>o.x&&player.y<o.y+o.h&&player.y+player.h>o.y){{endGame();return;}}
+  }}
+}}
+function endGame(){{
+  gameOver=true;
+  document.getElementById('final').textContent=score;
+  document.getElementById('over').style.display='block';
+}}
+function draw(){{
+  X.fillStyle='{rc}';X.fillRect(0,0,W,H);
+  for(let i=0;i<10;i++){{let y=(i*80+roadOffset)%(H+80)-40;X.fillStyle='rgba(255,255,255,0.1)';X.fillRect(30,40+i*80,340,40);X.fillStyle='rgba(255,255,255,0.15)';X.fillRect(30,y,340,40);X.fillStyle='#fff';X.fillRect(195,y+16,10,8);}}
+  for(let o of obstacles){{X.fillStyle='{oc}';X.beginPath();X.roundRect(o.x,o.y,o.w,o.h,8);X.fill();X.fillStyle='rgba(255,255,255,0.2)';X.fillRect(o.x+8,o.y+8,o.w-16,8);}}
+  X.fillStyle='{pc}';X.beginPath();X.roundRect(player.x,player.y,player.w,player.h,8);X.fill();
+  X.fillStyle='rgba(255,255,255,0.3)';X.fillRect(player.x+8,player.y+8,player.w-16,12);
+  X.fillStyle='rgba(255,255,255,0.4)';X.fillRect(player.x+8,player.y+player.h-20,player.w-16,8);
+}}
+document.addEventListener('keydown',e=>{{keys[e.code]=true;if(gameOver&&(e.code==='Enter'||e.code==='Space'))init();}});
+document.addEventListener('keyup',e=>{{keys[e.code]=false;}});
+init();
+</script>
+</body>
+</html>"""
+
+
+def _build_puzzle(spec: dict) -> str:
+    colors = spec.get("colors", {})
+    bg = colors.get("bg", "#1a1a2e")
+    pc = colors.get("primary", "#e94560")
+    sc = colors.get("secondary", "#4ecca3")
+    title = spec.get("title", "Match-3 Puzzle")
+    grid_size = 8
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{title}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{background:{bg};display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;color:#fff}}
+canvas{{border:2px solid {sc};border-radius:4px;display:block}}
+.game-container{{text-align:center}}
+h1{{color:{pc};margin-bottom:12px}}
+.info{{font-size:16px;margin:8px 0}} .info span{{color:{sc};font-weight:bold}}
+.game-over{{color:{pc};font-size:20px;margin-top:8px;display:none}}
+button{{padding:10px 24px;font-size:16px;background:{pc};color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:8px}}
+button:hover{{opacity:0.85}}
+</style>
+</head>
+<body>
+<div class="game-container">
+<h1>{title}</h1>
+<div class="info">Score: <span id="score">0</span> | Moves: <span id="moves">30</span></div>
+<canvas id="game" width="400" height="400"></canvas>
+<div class="game-over" id="over">Game Over! Score: <span id="final"></span></div>
+<button onclick="init()">New Game</button>
+</div>
+<script>
+const C=document.getElementById('game'),X=C.getContext('2d');
+const S=8,T=50,G=2,O=400;
+let grid,score,moves,selected,gameOver,animating=false;
+const GEMS=['{pc}','{sc}','#f5a623','#a000f0','#00f0f0','#f0f000'];
+function init(){{
+  grid=[];score=0;moves=30;selected=null;gameOver=false;
+  for(let r=0;r<S;r++){{grid[r]=[];for(let c=0;c<S;c++)grid[r][c]=Math.floor(Math.random()*GEMS.length);}}
+  while( findMatches().length>0 ) resolveMatches();
+  document.getElementById('score').textContent='0';document.getElementById('moves').textContent='30';
+  document.getElementById('over').style.display='none';
+  draw();
+}}
+function findMatches(){{
+  let matches=[];
+  for(let r=0;r<S;r++)for(let c=0;c<S-2;c++){{let v=grid[r][c];if(v>=0&&v===grid[r][c+1]&&v===grid[r][c+2])matches.push(...[r,c,r,c+1,r,c+2]);}}
+  for(let c=0;c<S;c++)for(let r=0;r<S-2;r++){{let v=grid[r][c];if(v>=0&&v===grid[r+1][c]&&v===grid[r+2][c])matches.push(...[r,c,r+1,c,r+2,c]);}}
+  return [...new Set(matches)];
+}}
+function resolveMatches(){{
+  let m=findMatches();
+  while(m.length>0){{
+    for(let i=0;i<m.length;i+=2)grid[m[i]][m[i+1]]=-1;
+    for(let c=0;c<S;c++){{let col=[];for(let r=S-1;r>=0;r--)if(grid[r][c]>=0)col.push(grid[r][c]);while(col.length<S)col.unshift(Math.floor(Math.random()*GEMS.length));for(let r=0;r<S;r++)grid[r][c]=col[r];}}
+    m=findMatches();
+  }}
+}}
+function swap(r1,c1,r2,c2){{let t=grid[r1][c1];grid[r1][c1]=grid[r2][c2];grid[r2][c2]=t;}}
+function click(px,py){{
+  if(gameOver||animating)return;
+  let c=Math.floor(px/T),r=Math.floor(py/T);
+  if(c<0||c>=S||r<0||r>=S)return;
+  if(selected===null){{selected={{r,c}};draw();return;}}
+  let dr=Math.abs(r-selected.r),dc=Math.abs(c-selected.c);
+  if((dr===1&&dc===0)||(dr===0&&dc===1)){{
+    swap(selected.r,selected.c,r,c);
+    if(findMatches().length>0){{resolveMatches();score+=10;moves--;document.getElementById('score').textContent=score;document.getElementById('moves').textContent=moves;if(moves<=0)gameOver=true;}}
+    else swap(selected.r,selected.c,r,c);
+  }}
+  if(gameOver){{document.getElementById('final').textContent=score;document.getElementById('over').style.display='block';}}
+  selected=null;draw();
+}}
+function draw(){{
+  X.fillStyle='{bg}';X.fillRect(0,0,O,O);
+  for(let r=0;r<S;r++)for(let c=0;c<S;c++){{
+    if(grid[r][c]<0)continue;
+    X.fillStyle=GEMS[grid[r][c]%GEMS.length];
+    X.beginPath();X.roundRect(c*T+2,r*T+2,T-4,T-4,6);X.fill();
+    if(selected&&selected.r===r&&selected.c===c){{X.strokeStyle='#fff';X.lineWidth=3;X.beginPath();X.roundRect(c*T+2,r*T+2,T-4,T-4,6);X.stroke();}}
+  }}
+}}
+C.onclick=e=>{{let r=C.getBoundingClientRect();click(e.clientX-r.left,e.clientY-r.top);}};
+init();
+</script>
+</body>
+</html>"""
+
+
+_GAME_BUILDERS = {
+    "platformer": _build_platformer,
+    "shooter": _build_shooter,
+    "racing": _build_racing,
+    "puzzle": _build_puzzle,
+}
+
+
+async def artifact_create_game_from_spec(spec_json: str) -> dict:
+    """Create a complete HTML5 game from a JSON specification.
+
+    Parameters
+    ----------
+    spec_json : JSON string describing the game genre, colors, mechanics
+    """
+    try:
+        spec = json.loads(spec_json)
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"Invalid spec_json: {e}"}
+
+    genre = spec.get("genre", "platformer").lower()
+    builder = _GAME_BUILDERS.get(genre)
+    if not builder:
+        return {
+            "success": False,
+            "error": f"Unsupported genre: {genre}. Supported: {', '.join(_GAME_BUILDERS)}",
+        }
+
+    try:
+        html = builder(spec)
+        title = spec.get("title", f"{genre.title()} Game")
+        return _save_artifact(html, title, "game_spec", {"genre": genre})
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# SVG generation from description
+# ---------------------------------------------------------------------------
+
+def _parse_svg_desc(desc: str) -> dict:
+    desc_lower = desc.lower()
+    shape = "circle"
+    if any(w in desc_lower for w in ["rectangle", "rect", "square", "box"]):
+        shape = "rect"
+    elif any(w in desc_lower for w in ["ellipse", "oval"]):
+        shape = "ellipse"
+    elif any(w in desc_lower for w in ["line", "path", "curve"]):
+        shape = "path"
+    elif any(w in desc_lower for w in ["triangle", "polygon"]):
+        shape = "polygon"
+    elif any(w in desc_lower for w in ["text", "label", "title", "heading"]):
+        shape = "text"
+    elif any(w in desc_lower for w in ["chart", "bar", "graph", "plot"]):
+        shape = "chart"
+    elif any(w in desc_lower for w in ["logo", "icon", "brand"]):
+        shape = "logo"
+
+    colors = []
+    named_colors = {
+        "red": "#e94560", "blue": "#3498db", "green": "#2ecc71", "yellow": "#ffd700",
+        "orange": "#f39c12", "purple": "#9b59b6", "pink": "#ff6b9d", "black": "#1a1a2e",
+        "white": "#ffffff", "gray": "#888888", "grey": "#888888", "teal": "#1abc9c",
+        "cyan": "#00f0f0", "indigo": "#4b0082", "violet": "#8e44ad", "brown": "#8b4513",
+        "gold": "#ffd700", "silver": "#c0c0c0"
+    }
+    for name, hexv in named_colors.items():
+        if name in desc_lower:
+            colors.append(hexv)
+    if not colors:
+        colors = ["#3498db", "#2ecc71", "#e94560"]
+
+    has_border = any(w in desc_lower for w in ["border", "outline", "stroke", "frame"])
+    has_gradient = any(w in desc_lower for w in ["gradient", "fade", "shiny"])
+    has_shadow = any(w in desc_lower for w in ["shadow", "drop"])
+    has_text = any(w in desc_lower for w in ["text", "label", "word", "name"])
+    has_pattern = any(w in desc_lower for w in ["pattern", "striped", "dotted", "dashed"])
+    is_3d = any(w in desc_lower for w in ["3d", "isometric", "cube", "three-dimensional"])
+
+    return {
+        "shape": shape,
+        "colors": colors,
+        "has_border": has_border,
+        "has_gradient": has_gradient,
+        "has_shadow": has_shadow,
+        "has_text": has_text,
+        "has_pattern": has_pattern,
+        "is_3d": is_3d,
+    }
+
+
+def _gen_svg_shape(parsed: dict, style: str, desc: str) -> str:
+    cols = parsed["colors"]
+    grad_defs = ""
+    defs = ""
+    body = ""
+
+    if parsed["has_gradient"]:
+        grad_defs = f"""<defs>
+<linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" style="stop-color:{cols[0]}"/>
+<stop offset="100%" style="stop-color:{cols[1] if len(cols)>1 else cols[0]}"/>
+</linearGradient>
+</defs>"""
+        fill = "url(#g1)"
+    else:
+        fill = cols[0]
+
+    if parsed["has_shadow"]:
+        defs += f"""<filter id="shadow"><feDropShadow dx="2" dy="4" stdDeviation="4" flood-opacity="0.3"/></filter>"""
+        filt = 'filter="url(#shadow)"'
+    else:
+        filt = ""
+
+    border = f'stroke="{cols[1] if len(cols)>1 else "#333"}" stroke-width="3"' if parsed["has_border"] else ""
+
+    if parsed["shape"] == "rect":
+        body = f'<rect x="100" y="100" width="250" height="180" rx="12" fill="{fill}" {border} {filt}/>'
+    elif parsed["shape"] == "ellipse":
+        body = f'<ellipse cx="250" cy="200" rx="180" ry="120" fill="{fill}" {border} {filt}/>'
+    elif parsed["shape"] == "polygon":
+        body = f'<polygon points="250,60 400,340 100,340" fill="{fill}" {border} {filt}/>'
+    elif parsed["shape"] == "path":
+        body = f'<path d="M100,300 Q200,100 300,200 T500,150" fill="none" stroke="{cols[0]}" stroke-width="4" {filt}/>'
+        if parsed["has_gradient"]:
+            body = f'<path d="M100,300 Q200,100 300,200 T500,150" fill="none" stroke="url(#g1)" stroke-width="4" {filt}/>'
+    elif parsed["shape"] == "chart":
+        bars = ""
+        bar_data = [120, 200, 160, 280, 220, 310, 180]
+        bw = 50
+        gap = 20
+        base = 400
+        for i, v in enumerate(bar_data):
+            x = 60 + i * (bw + gap)
+            h = v
+            c = cols[i % len(cols)]
+            bars += f'<rect x="{x}" y="{base - h}" width="{bw}" height="{h}" rx="4" fill="{c}"/>'
+        body = f"""<text x="250" y="40" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">Chart</text>
+<line x1="40" y1="50" x2="40" y2="420" stroke="#ccc" stroke-width="2"/>
+<line x1="40" y1="420" x2="480" y2="420" stroke="#ccc" stroke-width="2"/>
+{bars}"""
+    elif parsed["shape"] == "logo":
+        body = f"""<circle cx="250" cy="180" r="80" fill="url(#g1)" {filt}/>
+<text x="250" y="380" text-anchor="middle" font-size="36" font-weight="bold" fill="{cols[0]}">BRAND</text>
+<rect x="180" y="340" width="140" height="3" rx="1.5" fill="{cols[1] if len(cols)>1 else cols[0]}"/>"""
+        if not parsed["has_gradient"]:
+            body = body.replace('fill="url(#g1)"', f'fill="{cols[0]}"')
+    elif parsed["shape"] == "text":
+        body = f'<text x="250" y="220" text-anchor="middle" font-size="48" font-weight="bold" fill="{cols[0]}" {filt}>Sample Text</text>'
+    else:
+        body = f'<circle cx="250" cy="200" r="120" fill="{fill}" {border} {filt}/>'
+
+    if parsed["has_pattern"]:
+        defs += """<pattern id="p1" patternUnits="userSpaceOnUse" width="20" height="20">
+<rect width="20" height="20" fill="none"/>
+<line x1="0" y1="0" x2="20" y2="20" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+</pattern>"""
+        body = body.replace(f'fill="{fill}"', f'fill="url(#p1)"')
+
+    if parsed["has_text"] and parsed["shape"] not in ("text", "logo", "chart"):
+        body += f'\n<text x="250" y="440" text-anchor="middle" font-size="20" fill="{cols[0]}">{desc[:40]}</text>'
+
+    svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+{grad_defs}
+{defs}
+{body}
+</svg>"""
+    return svg_content
+
+
+async def artifact_create_svg_from_desc(description: str, style: str = "modern") -> dict:
+    """Create an SVG graphic from a natural language description.
+
+    Parameters
+    ----------
+    description : text description of the desired SVG
+    style : modern, flat, minimal, detailed, isometric
+    """
+    if not description:
+        return {"success": False, "error": "Description cannot be empty"}
+
+    try:
+        parsed = _parse_svg_desc(description)
+        svg_content = _gen_svg_shape(parsed, style, description)
+        title = f"SVG: {description[:40]}"
+        body = f'<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5">{svg_content}</div>'
+        full = _wrap_html(title, body)
+        return _save_artifact(full, title, "svg_desc", {"svg_content": svg_content, "style": style})
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Dashboard generation
+# ---------------------------------------------------------------------------
+
+def _build_dashboard_chart(data: list, chart_type: str, width: int, height: int, colors: list) -> str:
+    max_val = max(data) if data else 1
+    canvas_id = f"chart_{uuid.uuid4().hex[:6]}"
+    js = ""
+    if chart_type == "bar":
+        js = f"""var c=document.getElementById('{canvas_id}'),x=c.getContext('2d'),w={width},h={height};
+c.width=w;c.height=h;
+x.fillStyle='transparent';x.fillRect(0,0,w,h);
+var d={json.dumps(data)},cl={json.dumps(colors)},max={max_val},bw=Math.max(10,(w-40)/d.length-6);
+d.forEach(function(v,i){{var bh=(v/max)*(h-40),clr=cl[i%cl.length];
+x.fillStyle=clr;x.beginPath();x.roundRect(20+i*(bw+8),h-20-bh,bw,bh,[3,3,0,0]);x.fill();
+x.fillStyle='#888';x.font='10px Arial';x.textAlign='center';x.fillText(v,20+i*(bw+8)+bw/2,h-8);}});"""
+    elif chart_type == "line":
+        js = f"""var c=document.getElementById('{canvas_id}'),x=c.getContext('2d'),w={width},h={height};
+c.width=w;c.height=h;
+x.fillStyle='transparent';x.fillRect(0,0,w,h);
+var d={json.dumps(data)},cl={json.dumps(colors)},max={max_val};
+x.strokeStyle=cl[0];x.lineWidth=2.5;x.beginPath();
+d.forEach(function(v,i){{var px=20+i*(w-40)/(d.length-1),py=h-20-(v/max)*(h-40);
+i===0?x.moveTo(px,py):x.lineTo(px,py);}});x.stroke();
+d.forEach(function(v,i){{var px=20+i*(w-40)/(d.length-1),py=h-20-(v/max)*(h-40);
+x.fillStyle=cl[0];x.beginPath();x.arc(px,py,4,0,Math.PI*2);x.fill();
+x.fillStyle='#fff';x.beginPath();x.arc(px,py,2,0,Math.PI*2);x.fill();}});"""
+    elif chart_type == "pie":
+        js = f"""var c=document.getElementById('{canvas_id}'),x=c.getContext('2d'),w={width},h={height};
+c.width=w;c.height=h;
+x.fillStyle='transparent';x.fillRect(0,0,w,h);
+var d={json.dumps(data)},cl={json.dumps(colors)},total=d.reduce(function(a,b){{return a+b;}},0),start=0;
+d.forEach(function(v,i){{var a=(v/total)*Math.PI*2;
+x.fillStyle=cl[i%cl.length];x.beginPath();x.moveTo(w/2,h/2);x.arc(w/2,h/2,Math.min(w,h)/2-20,start,start+a);x.closePath();x.fill();
+var mid=start+a/2;x.fillStyle='#fff';x.font='11px Arial';x.textAlign='center';
+x.fillText(Math.round(v/total*100)+'%',w/2+Math.cos(mid)*Math.min(w,h)/3,h/2+Math.sin(mid)*Math.min(w,h)/3);
+start+=a;}});"""
+    return f"<canvas id='{canvas_id}' style='width:100%;height:{height}px'></canvas><script>{js}</script>"
+
+
+async def artifact_create_dashboard(title: str, widgets_json: str) -> dict:
+    """Create a full HTML dashboard with drag-and-resize widgets.
+
+    Parameters
+    ----------
+    title : dashboard title
+    widgets_json : JSON string describing widgets (metric, chart, table, text)
+    """
+    try:
+        widgets = json.loads(widgets_json)
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"Invalid widgets_json: {e}"}
+
+    if not isinstance(widgets, list):
+        return {"success": False, "error": "widgets_json must be a JSON array"}
+
+    try:
+        chart_colors = ["#3498db", "#e74c3c", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c", "#e67e22", "#34495e"]
+        cards_html = []
+        for i, w in enumerate(widgets):
+            wtype = w.get("type", "text")
+            wtitle = w.get("title", f"Widget {i+1}")
+            wid = f"w_{uuid.uuid4().hex[:6]}"
+
+            if wtype == "metric":
+                value = w.get("value", "—")
+                change = w.get("change", "")
+                change_cls = "up" if change.startswith("+") else "down" if change.startswith("-") else ""
+                cards_html.append(f"""<div class="widget-card metric-card" id="{wid}"><div class="widget-header">{wtitle}</div><div class="metric-value">{value}</div><div class="metric-change {change_cls}">{change}</div></div>""")
+
+            elif wtype == "chart":
+                chart_type = w.get("chart_type", "bar")
+                data = w.get("data", [10, 20, 15, 30, 25])
+                chart_html = _build_dashboard_chart(data, chart_type, 400, 200, chart_colors)
+                cards_html.append(f"""<div class="widget-card chart-card" id="{wid}"><div class="widget-header">{wtitle}</div><div class="widget-content">{chart_html}</div></div>""")
+
+            elif wtype == "table":
+                headers = w.get("headers", ["Col 1", "Col 2"])
+                rows = w.get("rows", [["—", "—"]])
+                thead = "".join(f"<th>{h}</th>" for h in headers)
+                tbody = "".join(f"<tr>{''.join(f'<td>{c}</td>' for c in row)}</tr>" for row in rows)
+                cards_html.append(f"""<div class="widget-card table-card" id="{wid}"><div class="widget-header">{wtitle}</div><div class="widget-content"><table><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table></div></div>""")
+
+            else:
+                content = w.get("content", "")
+                cards_html.append(f"""<div class="widget-card text-card" id="{wid}"><div class="widget-header">{wtitle}</div><div class="widget-content"><p>{content}</p></div></div>""")
+
+        css = f""":root{{--primary:#3498db;--bg:#f0f2f5;--card-bg:#fff;--text:#1a1a2e;--text-muted:#666;--border:rgba(0,0,0,0.08);--radius:10px}}
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);padding:20px}}
+.dashboard-header{{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}}
+.dashboard-header h1{{font-size:1.5rem}}
+.dashboard-header .ts{{color:var(--text-muted);font-size:0.85rem}}
+.widget-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}}
+.widget-card{{background:var(--card-bg);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;transition:box-shadow .2s}}
+.widget-card:hover{{box-shadow:0 4px 12px rgba(0,0,0,0.06)}}
+.widget-header{{padding:14px 16px;font-weight:600;font-size:0.95rem;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.02)}}
+.widget-content{{padding:16px}}
+.metric-card{{text-align:center;padding:24px 16px}}
+.metric-value{{font-size:2.5rem;font-weight:700;margin:8px 0;color:var(--text)}}
+.metric-change{{font-size:1rem;font-weight:500}}
+.metric-change.up{{color:#2ecc71}}
+.metric-change.down{{color:#e74c3c}}
+table{{width:100%;border-collapse:collapse;font-size:0.9rem}}
+th,td{{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}}
+th{{font-weight:600;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.5px}}
+tbody tr:hover{{background:rgba(0,0,0,0.02)}}
+.chart-card canvas{{display:block;margin:0 auto}}
+.text-card p{{line-height:1.6;color:var(--text-muted)}}"""
+
+        body = f"""<div class="dashboard-header"><h1>{title}</h1><span class="ts">{datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}</span></div><div class="widget-grid">{"".join(cards_html)}</div>"""
+        full = _wrap_html(title, body, css)
+        return _save_artifact(full, title, "dashboard", {"type": "dashboard"})
+    except Exception as e:
+        return {"success": False, "error": str(e)}

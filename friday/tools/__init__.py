@@ -320,10 +320,31 @@ from friday.tools.presentation_tools import (
     presentation_create_demo, presentation_list, presentation_open,
 )
 
+# ── MCP Server Tools (dynamic MCP server creation & hosting) ──
+from friday.tools.mcp_tools import (
+    mcp_create_rest_api_server, mcp_list_servers,
+    mcp_start_server, mcp_stop_server, mcp_server_status,
+    mcp_create_from_openapi_spec, mcp_create_tool_server,
+    mcp_test_endpoint,
+)
+
 # ── Higgsfield AI Video Generation Tools ──
 from friday.tools.higgsfield_tools import (
     higgsfield_generate_video, higgsfield_generate_from_image,
     higgsfield_list_motions, higgsfield_check_mcp, higgsfield_status,
+)
+
+# ── Verification & Self-Reflection Tools (F5-style validation) ──
+from friday.tools.verification_tools import (
+    verify_code, verify_artifact, verify_html, verify_presentation,
+    reflection_analyze, verify_image, self_review_tool_output,
+)
+
+# ── MCP Server Creation Tools (dynamic MCP server hosting) ──
+from friday.tools.mcp_tools import (
+    mcp_create_rest_api_server, mcp_list_servers,
+    mcp_start_server, mcp_stop_server, mcp_server_status,
+    mcp_create_from_openapi_spec, mcp_create_tool_server, mcp_test_endpoint,
 )
 
 from friday.kimi_webbridge_tool import (
@@ -499,9 +520,28 @@ __all__ = _tflat.__all__ + [
     "presentation_create", "presentation_create_from_markdown",
     "presentation_create_demo", "presentation_list", "presentation_open",
 
+    # ── MCP Server Tools ──
+    "mcp_create_rest_api_server", "mcp_list_servers",
+    "mcp_start_server", "mcp_stop_server", "mcp_server_status",
+    "mcp_create_from_openapi_spec", "mcp_create_tool_server",
+    "mcp_test_endpoint",
+
     # ── Higgsfield Video Generation ──
     "higgsfield_generate_video", "higgsfield_generate_from_image",
     "higgsfield_list_motions", "higgsfield_check_mcp", "higgsfield_status",
+
+    # ── Verification & Self-Reflection ──
+    "verify_code", "verify_artifact", "verify_html", "verify_presentation",
+    "reflection_analyze", "verify_image", "self_review_tool_output",
+
+    # ── MCP Server Creation ──
+    "mcp_create_rest_api_server", "mcp_list_servers",
+    "mcp_start_server", "mcp_stop_server", "mcp_server_status",
+    "mcp_create_from_openapi_spec", "mcp_create_tool_server", "mcp_test_endpoint",
+
+    # ── Artifact Upgrades (spec-based generation) ──
+    "artifact_create_website_from_spec", "artifact_create_game_from_spec",
+    "artifact_create_svg_from_desc", "artifact_create_dashboard",
 
     # ── Security-Use Bridge (unified security & pen-testing toolkit) ──
     "security_use_status",
