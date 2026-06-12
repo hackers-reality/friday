@@ -602,6 +602,9 @@ def build_new_tool_map() -> dict[str, Any]:
     # Autonomous Memory
     tool_map["autonomous_memory_tool"] = _LazyToolFunc("friday.autonomous_memory", "autonomous_memory_tool")
 
+    # API Server
+    tool_map["api_server_tool"] = _LazyToolFunc("friday.api_server", "api_server_tool")
+
     return tool_map
 
 
