@@ -550,6 +550,9 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
 
     # ── Bootstrap ──
     ("friday.bootstrap", "bootstrap_tool", "FRIDAY Bootstrap — start/stop background services (daemon, dashboard, checkpointer, validation).", {"action": {"type": "STRING", "description": "Action: start, stop, status"}, "services": {"type": "STRING", "description": "Comma-separated services: daemon,dashboard,checkpointer,validation"}}, ["action"]),
+
+    # ── Plugin System ──
+    ("friday.plugins", "plugin_tool", "Plugin System — manage dynamic plugins: list, discover, load, unload, reload, call, config, test, docs, template, install, uninstall, search, category, stats, event, watch, check, metadata.", {"action": {"type": "STRING", "description": "Action: list, discover, load, load_all, unload, reload, call, config, test, docs, template, install, uninstall, search, category, stats, event, watch, check, metadata"}, "plugin_name": {"type": "STRING", "description": "Plugin name for load/unload/reload/config/test/docs/watch"}, "tool_name": {"type": "STRING", "description": "Tool name for call action"}, "key": {"type": "STRING", "description": "Config key for config action"}, "value": {"type": "STRING", "description": "Config value for config action"}, "query": {"type": "STRING", "description": "Search query for search action"}, "category": {"type": "STRING", "description": "Category for category action"}, "author": {"type": "STRING", "description": "Author name for template action"}, "url": {"type": "STRING", "description": "Plugin URL for install action"}, "event": {"type": "STRING", "description": "Event type for event action"}, "handler": {"type": "STRING", "description": "Handler function name for event subscribe"}}, ["action"]),
 ]
 
 
@@ -604,6 +607,9 @@ def build_new_tool_map() -> dict[str, Any]:
 
     # API Server
     tool_map["api_server_tool"] = _LazyToolFunc("friday.api_server", "api_server_tool")
+
+    # Plugin System
+    tool_map["plugin_tool"] = _LazyToolFunc("friday.plugins", "plugin_tool")
 
     return tool_map
 
