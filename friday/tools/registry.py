@@ -596,6 +596,9 @@ def build_new_tool_map() -> dict[str, Any]:
     # Bootstrap
     tool_map["bootstrap_tool"] = _LazyToolFunc("friday.bootstrap", "bootstrap_tool")
 
+    # Autonomous Memory
+    tool_map["autonomous_memory_tool"] = _LazyToolFunc("friday.autonomous_memory", "autonomous_memory_tool")
+
     return tool_map
 
 

@@ -79,6 +79,7 @@ from friday.validation_middleware import validation_tool, auto_verify, validate_
 from friday.townhall_agents import townhall_tool
 from friday.dashboard_cli import dashboard_cli_tool
 from friday.bootstrap import bootstrap_tool
+from friday.autonomous_memory import autonomous_memory_tool
 from friday.tools.nlp_tools import (
     sentiment_analysis, extract_entities, summarize_text, classify_text, compute_embeddings,
 )
