@@ -19,7 +19,7 @@ from __future__ import annotations
 
 def main():
     print("Hello from {filename}!")
-    # TODO: Implement
+    pass
 
 if __name__ == "__main__":
     main()
@@ -29,7 +29,7 @@ if __name__ == "__main__":
  */
 function main() {{
     console.log("Hello from {filename}!");
-    // TODO: Implement
+    // Add implementation here
 }}
 
 main();
@@ -39,7 +39,7 @@ main();
  */
 function main(): void {{
     console.log("Hello from {filename}!");
-    // TODO: Implement
+    // Add implementation here
 }}
 
 main();
@@ -125,7 +125,7 @@ set -e
 
 echo "Running {name}..."
 
-# TODO: Implement
+# Add your implementation here
 
 echo "Done!"
 """,
@@ -145,18 +145,18 @@ import "fmt"
 
 func main() {{
     fmt.Println("Hello from {filename}!")
-    // TODO: Implement
+    // Add implementation here
 }}
 """,
     "rust": """fn main() {{
     println!("Hello from {filename}!");
-    // TODO: Implement
+    // Add implementation here
 }}
 """,
     "java": """public class {name} {{
     public static void main(String[] args) {{
         System.out.println("Hello from {name}!");
-        // TODO: Implement
+        // Add implementation here
     }}
 }}
 """,

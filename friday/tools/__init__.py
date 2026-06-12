@@ -65,6 +65,12 @@ from friday.tools.vision_advanced_tools import (
     ocr_image, detect_objects, detect_faces, pose_detection, hand_detection,
     image_enhance, image_analysis, resize_image,
 )
+from friday.tools.desktop_vision_agent import (
+    desktop_vision_observe, desktop_vision_query, desktop_vision_region, desktop_vision_interact,
+)
+from friday.tools.coding_auto_fix import (
+    coding_auto_fix_tool,
+)
 from friday.tools.nlp_tools import (
     sentiment_analysis, extract_entities, summarize_text, classify_text, compute_embeddings,
 )

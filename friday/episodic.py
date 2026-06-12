@@ -68,8 +68,10 @@ def record(
     content: str = "",
     tool_name: Optional[str] = None,
     metadata: Optional[dict] = None,
+    embed: bool = True,
 ) -> str:
-    """Record an episodic entry. Returns the session_id."""
+    """Record an episodic entry. Returns the session_id.
+    If embed=True, also stores a semantic embedding in vector memory."""
     sid = session_id or str(uuid.uuid4())
     conn = _get_conn()
     try:
@@ -82,6 +84,27 @@ def record(
         conn.commit()
     finally:
         conn.close()
+
+    if embed and len(content) > 20:
+        try:
+            from friday.vector_memory import get_vector_memory
+            vm = get_vector_memory()
+            if vm.is_available():
+                import hashlib
+                embed_id = hashlib.md5(f"{sid}_{datetime.now().isoformat()}_{content[:100]}".encode()).hexdigest()
+                vm.add(
+                    text=f"[{tool_name or speaker}] {content[:1500]}",
+                    metadata={
+                        "source": speaker,
+                        "tool": tool_name or "",
+                        "session": sid[:8],
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                    id=embed_id,
+                )
+        except Exception:
+            pass
+
     return sid
 
 
@@ -211,15 +234,20 @@ def stats() -> str:
 
 
 def episodic_tool(action: str = "status", **kwargs) -> str:
-    """Episodic memory: record and search past sessions with full-text search.
-    Actions: search (FTS query), recent (last N), record (manual entry),
-    session (full session by id), stats (archive statistics), status."""
+    """Episodic memory: record and search past sessions with full-text + semantic search.
+    Actions: search (FTS query), search_semantic (vector/meaning-based query), recent (last N),
+    record (manual entry), session (full session by id), stats, status."""
     try:
         if action == "search":
             q = kwargs.get("query", "")
             if not q:
                 return "[FAIL] Query required for search."
             return search(q, limit=kwargs.get("limit", 10))
+        elif action == "search_semantic":
+            q = kwargs.get("query", "")
+            if not q:
+                return "[FAIL] Query required for semantic search."
+            return search_semantic(q, limit=kwargs.get("limit", 10))
         elif action == "recent":
             return recent(limit=kwargs.get("limit", 20), speaker=kwargs.get("speaker"))
         elif action == "record":
@@ -246,6 +274,27 @@ def episodic_tool(action: str = "status", **kwargs) -> str:
             return f"[FAIL] Unknown action: {action}"
     except Exception as e:
         return f"[FAIL] Episodic error: {e}"
+
+
+def search_semantic(query: str, limit: int = 10) -> str:
+    """Semantic search across episodes using vector embeddings."""
+    try:
+        from friday.vector_memory import get_vector_memory
+        vm = get_vector_memory()
+        if vm.is_available():
+            results = vm.search(query, n_results=limit)
+            if results and "error" not in results[0]:
+                lines = [f"### SEMANTIC EPISODIC MEMORY ({len(results)} found)"]
+                for i, r in enumerate(results, 1):
+                    text = r["text"][:200]
+                    meta = r.get("metadata", {})
+                    ts = meta.get("timestamp", "")[:19]
+                    src = meta.get("source", "")
+                    lines.append(f"  {i}. [{ts}] {src}: {text}")
+                return "\n".join(lines)
+        return search(query, limit=limit)
+    except Exception:
+        return search(query, limit=limit)
 
 
 def auto_record_tool_call(name: str, args: dict, result: str, session=None) -> None:
