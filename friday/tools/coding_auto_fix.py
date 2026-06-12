@@ -1,5 +1,5 @@
 """
-Coding Auto-Fix Loop — Fable 5-equivalent self-testing code agent.
+Coding Auto-Fix Loop — FRIDAY self-testing code agent.
 Iteratively runs tests, parses failures, auto-fixes code via LLM,
 and re-runs until all pass or max iterations reached.
 

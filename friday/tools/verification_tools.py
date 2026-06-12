@@ -1,6 +1,6 @@
 """
-Self-verification and reflection system for FRIDAY — inspired by Fable 5's
-ability to validate its own work before returning results.  Provides code
+Self-verification and reflection system for FRIDAY — validates its own
+work before returning results.  Provides code
 syntax checking, artifact validation, HTML/CSS linting, tool-output review,
 image verification, and structured reflection analysis.
 """

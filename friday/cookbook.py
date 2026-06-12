@@ -1,5 +1,5 @@
 """
-FRIDAY Cookbook — Odysseus-inspired hardware scanner + model recommendations.
+FRIDAY Cookbook — Hardware scanner + model recommendations.
 Scans local GPU/CPU/RAM and recommends the best local AI models to run.
 """
 from __future__ import annotations

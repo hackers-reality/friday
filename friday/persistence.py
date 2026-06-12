@@ -1,5 +1,5 @@
 """
-Multi-Day Autonomous Persistence Framework — Fable 5-equivalent.
+Multi-Day Autonomous Persistence Framework — FRIDAY edition.
 Allows FRIDAY agents to persist state across sessions/days:
   1. Checkpoint agent state (memory, goals, task queues, active context)
   2. Restore agent state on restart

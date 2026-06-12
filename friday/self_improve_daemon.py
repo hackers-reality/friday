@@ -1,5 +1,5 @@
 """
-Continuous Self-Improvement Daemon — Fable 5-equivalent autonomous improvement loop.
+Continuous Self-Improvement Daemon — FRIDAY autonomous improvement loop.
 Runs in background, periodically:
   1. Scans code for improvement opportunities (lint, type check, complexity)
   2. Generates LLM proposals for each issue

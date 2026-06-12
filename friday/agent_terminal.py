@@ -2081,7 +2081,7 @@ async def close_all_agent_resources() -> dict[str, Any]:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Odysseus-style Parallel Quick Delegate (no terminal windows)
+# Parallel Quick Delegate (no terminal windows)
 # ═══════════════════════════════════════════════════════════════════
 
 async def friday_quick_delegate(
@@ -2090,7 +2090,7 @@ async def friday_quick_delegate(
 ) -> dict[str, Any]:
     """Delegate multiple tasks to sub-agents in parallel without terminal windows.
 
-    Odysseus-style lightweight agent spawning. Runs agents concurrently using
+    FRIDAY-style lightweight agent spawning. Runs agents concurrently using
     a thread pool, collects all results. No terminal windows, no polling.
 
     When deep=True, each agent's task gets prepended with instructions to
@@ -2245,7 +2245,7 @@ AGENT_TERMINAL_TOOL_DESCRIPTIONS: dict[str, dict[str, Any]] = {
     },
     "friday_quick_delegate": {
         "name": "friday_quick_delegate",
-        "description": "Odysseus-style lightweight parallel delegate. Spawns multiple sub-agents concurrently WITHOUT terminal windows. Use for quick parallel research/code/security tasks that don't need visual tracking.",
+        "description": "Lightweight parallel delegate. Spawns multiple sub-agents concurrently WITHOUT terminal windows. Use for quick parallel research/code/security tasks that don't need visual tracking.",
         "parameters": {
             "tasks": {
                 "type": "array",

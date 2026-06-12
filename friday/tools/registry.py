@@ -538,6 +538,18 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
     ("friday.tools.artifact_tools", "artifact_create_game_from_spec", "Generate a complete game from a JSON specification (genre, mechanics, theme).", {"spec_json": {"type": "STRING", "description": "JSON specification string for the game"}}, ["spec_json"]),
     ("friday.tools.artifact_tools", "artifact_create_svg_from_desc", "Generate SVG from a natural language description and style.", {"description": {"type": "STRING", "description": "Natural language description of the SVG"}, "style": {"type": "STRING", "description": "Style: modern, flat, minimal, detailed, isometric (default modern)"}}, ["description"]),
     ("friday.tools.artifact_tools", "artifact_create_dashboard", "Create a full HTML dashboard with metric/chart/table/text widgets.", {"title": {"type": "STRING", "description": "Dashboard title"}, "widgets_json": {"type": "STRING", "description": "JSON array of widget definitions"}}, ["title", "widgets_json"]),
+
+    # ── Town Hall Agents ──
+    ("friday.townhall_agents", "townhall_tool", "Agent Town Hall — autonomous deliberation, sessions, agendas, and multi-agent discussions.", {"action": {"type": "STRING", "description": "Action: status, agenda, add_agenda, resolve_agenda, start, post, conclude, session, sessions, deliberate"}, "topic": {"type": "STRING", "description": "Topic for deliberation or session"}, "session_id": {"type": "STRING", "description": "Session ID"}, "title": {"type": "STRING", "description": "Agenda item title"}, "description": {"type": "STRING", "description": "Agenda item description"}, "assigned_to": {"type": "STRING", "description": "Agent to assign agenda item to"}, "priority": {"type": "STRING", "description": "Priority: low, medium, high"}, "item_id": {"type": "STRING", "description": "Agenda item ID"}, "resolution": {"type": "STRING", "description": "Resolution: completed, cancelled"}, "message": {"type": "STRING", "description": "Message text for session"}, "agent": {"type": "STRING", "description": "Agent name posting message"}, "participants": {"type": "STRING", "description": "Comma-separated participants"}, "rounds": {"type": "INTEGER", "description": "Deliberation rounds"}}, ["action"]),
+
+    # ── Validation Middleware ──
+    ("friday.validation_middleware", "validation_tool", "Validation Middleware — verify tool calls and results, auto-validate code/files/HTML.", {"action": {"type": "STRING", "description": "Action: stats, verify_code, verify_file, verify_html, verify_json, verify_csv, verify_python"}, "tool_name": {"type": "STRING", "description": "Tool name to verify code for"}, "tool_args": {"type": "STRING", "description": "Tool arguments as JSON string"}, "tool_result": {"type": "STRING", "description": "Tool result as JSON string"}, "code": {"type": "STRING", "description": "Code to verify"}, "language": {"type": "STRING", "description": "Code language: python, javascript, html, css, json, csv"}, "file_path": {"type": "STRING", "description": "File path to verify"}, "html_content": {"type": "STRING", "description": "HTML content to verify"}}, ["action"]),
+
+    # ── Dashboard CLI ──
+    ("friday.dashboard_cli", "dashboard_cli_tool", "FRIDAY System Dashboard — CLI output, no flicker. Shows system health, agents, tools, services.", {"action": {"type": "STRING", "description": "Action: status, watch, json"}, "interval": {"type": "INTEGER", "description": "Watch interval in seconds (default 5)"}}, ["action"]),
+
+    # ── Bootstrap ──
+    ("friday.bootstrap", "bootstrap_tool", "FRIDAY Bootstrap — start/stop background services (daemon, dashboard, checkpointer, validation).", {"action": {"type": "STRING", "description": "Action: start, stop, status"}, "services": {"type": "STRING", "description": "Comma-separated services: daemon,dashboard,checkpointer,validation"}}, ["action"]),
 ]
 
 
@@ -571,6 +583,19 @@ def build_new_tool_map() -> dict[str, Any]:
         tool_map.update(build_osint_extra_tool_map())
     except Exception:
         pass
+
+    # Town hall agents
+    tool_map["townhall_tool"] = _LazyToolFunc("friday.townhall_agents", "townhall_tool")
+
+    # Validation middleware
+    tool_map["validation_tool"] = _LazyToolFunc("friday.validation_middleware", "validation_tool")
+
+    # Dashboard CLI
+    tool_map["dashboard_cli_tool"] = _LazyToolFunc("friday.dashboard_cli", "dashboard_cli_tool")
+
+    # Bootstrap
+    tool_map["bootstrap_tool"] = _LazyToolFunc("friday.bootstrap", "bootstrap_tool")
+
     return tool_map
 
 
