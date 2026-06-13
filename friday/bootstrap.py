@@ -1874,7 +1874,10 @@ def _signal_handler(sig, frame):
 
 
 def install_signal_handlers():
-    """Install signal handlers for graceful shutdown on SIGINT/SIGTERM."""
+    """Install signal handlers for graceful shutdown on SIGINT/SIGTERM.
+    Only works in the main thread; skipped silently in worker threads."""
+    if threading.current_thread() is not threading.main_thread():
+        return
     signal.signal(signal.SIGINT, _signal_handler)
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _signal_handler)
