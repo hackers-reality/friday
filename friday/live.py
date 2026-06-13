@@ -98,6 +98,7 @@ from friday.tools import (
     search_browser_history, open_history_item, tell_alexa,
     spotify_next, spotify_prev, spotify_volume,
     send_instagram_dm, netflix_play, google_authorize, gmail_authorize, exchange_oauth_code, read_emails, send_email,
+    read_discord_messages, read_slack_messages,
     close_app, list_running_apps, generate_file,
     get_active_window, draft_email, list_recent_history,
     generate_file_llm, search_and_open,
