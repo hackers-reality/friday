@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import csv
+import functools
 import hashlib
 import html as html_lib
 import io
@@ -1134,8 +1135,33 @@ def validate_call(tool_name: str):
     return decorator
 
 
-def auto_verify(result: Any, context: Optional[dict] = None) -> ValidationResult:
-    """Automatically verify a result; dispatches to type-specific validators."""
+def auto_verify(result_or_func: Any, context: Optional[dict] = None):
+    """Automatically verify a result or wrap a function for auto-verification.
+
+    Can be used as a decorator::
+
+        @auto_verify
+        def my_func(x, y):
+            return x + y
+
+    Or called directly::
+
+        vr = auto_verify(some_result, {"tool": "my_tool"})
+    """
+    if callable(result_or_func) and context is None:
+        func = result_or_func
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
+            vr = auto_verify(result)
+            if not vr.passed and _profile_should_fail(vr.severity.value):
+                log_validation(vr)
+            return result
+
+        return wrapper
+
+    result = result_or_func
     ctx = context or {}
     if isinstance(result, str):
         checks = []
@@ -2070,7 +2096,7 @@ def clear_validation_log() -> bool:
 # ---------------------------------------------------------------------------
 # Main validation_tool dispatcher
 # ---------------------------------------------------------------------------
-def validation_tool(action: str, **kwargs) -> dict:
+def validation_tool(action: str, **kwargs) -> str:
     """Unified entry point for validation operations.
 
     Actions:
@@ -2103,21 +2129,27 @@ def validation_tool(action: str, **kwargs) -> dict:
       - export_report
     """
     if action == "stats":
-        return {"success": True, "total_calls": sum(1 for _ in open(_VALIDATION_LOG) if _.strip()) if os.path.exists(_VALIDATION_LOG) else 0}
+        return json.dumps({"success": True, "total_calls": sum(1 for _ in open(_VALIDATION_LOG) if _.strip()) if os.path.exists(_VALIDATION_LOG) else 0})
 
     action_map = {
+        "verify_code": lambda: validate_python(kwargs.get("code", "")),
+        "verify_python": lambda: validate_python(kwargs.get("code", "")),
+        "verify_file": lambda: validate_file_content_by_type(kwargs.get("path", "")),
+        "verify_html": lambda: validate_html(kwargs.get("html_content", kwargs.get("html", ""))),
+        "verify_json": lambda: validate_json(kwargs.get("code", kwargs.get("json_str", "")), kwargs.get("schema")),
+        "verify_csv": lambda: validate_csv(kwargs.get("code", kwargs.get("csv", ""))),
         "validate_python": lambda: validate_python(kwargs.get("code", "")),
         "validate_javascript": lambda: validate_javascript(kwargs.get("code", "")),
-        "validate_html": lambda: validate_html(kwargs.get("html", "")),
-        "validate_css": lambda: validate_css(kwargs.get("css", "")),
-        "validate_json": lambda: validate_json(kwargs.get("json_str", ""), kwargs.get("schema")),
-        "validate_xml": lambda: validate_xml(kwargs.get("xml", "")),
-        "validate_yaml": lambda: validate_yaml(kwargs.get("yaml", "")),
-        "validate_csv": lambda: validate_csv(kwargs.get("csv", "")),
-        "validate_toml": lambda: validate_toml(kwargs.get("toml", "")),
-        "validate_sql": lambda: validate_sql(kwargs.get("sql", "")),
-        "validate_markdown": lambda: validate_markdown(kwargs.get("md", "")),
-        "validate_dockerfile": lambda: validate_dockerfile(kwargs.get("content", "")),
+        "validate_html": lambda: validate_html(kwargs.get("html_content", kwargs.get("html", ""))),
+        "validate_css": lambda: validate_css(kwargs.get("code", kwargs.get("css", ""))),
+        "validate_json": lambda: validate_json(kwargs.get("code", kwargs.get("json_str", ""))),
+        "validate_xml": lambda: validate_xml(kwargs.get("code", kwargs.get("xml", ""))),
+        "validate_yaml": lambda: validate_yaml(kwargs.get("code", kwargs.get("yaml", ""))),
+        "validate_csv": lambda: validate_csv(kwargs.get("code", kwargs.get("csv", ""))),
+        "validate_toml": lambda: validate_toml(kwargs.get("code", kwargs.get("toml", ""))),
+        "validate_sql": lambda: validate_sql(kwargs.get("code", kwargs.get("sql", ""))),
+        "validate_markdown": lambda: validate_markdown(kwargs.get("code", kwargs.get("md", ""))),
+        "validate_dockerfile": lambda: validate_dockerfile(kwargs.get("code", kwargs.get("content", ""))),
         "validate_file_exists": lambda: validate_file_exists(kwargs.get("path", "")),
         "validate_file_size": lambda: validate_file_size(kwargs.get("path", ""), kwargs.get("max_mb", 10.0)),
         "validate_file_extension": lambda: validate_file_extension(kwargs.get("path", ""), kwargs.get("allowed")),
@@ -2185,27 +2217,27 @@ def validation_tool(action: str, **kwargs) -> dict:
     }
     handler = action_map.get(action)
     if handler is None:
-        return {
+        return json.dumps({
             "success": False,
             "error": f"Unknown validation action: '{action}'",
             "available_actions": list(action_map.keys()),
-        }
+        })
     try:
         result = handler()
         if isinstance(result, ValidationResult):
             log_validation(result)
             d = result.to_dict()
             d["success"] = result.passed
-            return d
+            return json.dumps(d)
         if isinstance(result, dict):
-            return {"success": True, "data": result}
-        return {"success": True, "data": result}
+            return json.dumps({"success": True, "data": result})
+        return json.dumps({"success": True, "data": result})
     except Exception as exc:
-        return {
+        return json.dumps({
             "success": False,
             "error": f"Validation action '{action}' raised: {exc}",
             "traceback": traceback.format_exc(),
-        }
+        })
 
 
 def _add_rule_action(name: str, check_func: Optional[Callable], severity: str, description: str) -> dict:

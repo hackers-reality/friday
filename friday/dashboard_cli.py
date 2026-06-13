@@ -2221,8 +2221,7 @@ def dashboard_cli_tool(action: str = "status", **kwargs) -> str:
       config              - Show configuration
     """
     if action == "status":
-        print(build_text_report(), flush=True)
-        return "Done."
+        return build_text_report()
 
     elif action == "watch":
         interval = float(kwargs.get("interval", 5))

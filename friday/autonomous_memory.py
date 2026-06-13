@@ -2119,7 +2119,7 @@ def autonomous_memory_tool(action: str = "status", **kwargs) -> str:
             return json.dumps({"results": results, "count": len(results)}, indent=2)
 
         elif action == "learn":
-            text = kwargs.get("text", "")
+            text = kwargs.get("text", kwargs.get("content", ""))
             source = kwargs.get("source", "conversation")
             result = learn_from_text(text, source)
             return json.dumps(result, indent=2)

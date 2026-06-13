@@ -1860,7 +1860,7 @@ def api_server_tool(action: str = "status", **kwargs: Any) -> str:
         result = start_api_server(host=host, port=port)
         if result.get("success"):
             return (
-                f"### API SERVER STARTED\n\n"
+                f"[OK] API SERVER STARTED\n\n"
                 f"URL: {result['url']}\n"
                 f"Docs: {result['docs_url']}\n"
                 f"Version: {result['version']}\n"

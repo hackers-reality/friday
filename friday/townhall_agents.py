@@ -1,5 +1,5 @@
 """
-Agent Town Hall — autonomous agent deliberation & coordination system.
+Agent Town Hall -- autonomous agent deliberation & coordination system.
 Agents discuss tasks, delegate work, review results, and plan together.
 
 Architecture:
@@ -47,17 +47,17 @@ _ESCALATIONS_FILE = os.path.join(_TOWNHALL_DIR, "escalations.json")
 _ARCHIVE_DIR = os.path.join(_TOWNHALL_DIR, "archive")
 
 AGENT_ROLES = {
-    "veronica": "Deep research & intelligence — finds information, analyzes data",
-    "forge": "Code architect — writes, reviews, refactors code",
-    "ghost": "Cybersecurity — OSINT, recon, vulnerability assessment",
-    "atlas": "Knowledge curator — memory, graphs, relationships",
-    "jarvis": "Personal assistant — desktop, browser, system control",
-    "nova": "Strategist & scheduler — planning, timelines, coordination",
-    "athena": "Strategic planner — risk analysis, roadmaps",
-    "sentinel": "PR reviewer — code review, test validation",
+    "veronica": "Deep research & intelligence -- finds information, analyzes data",
+    "forge": "Code architect -- writes, reviews, refactors code",
+    "ghost": "Cybersecurity -- OSINT, recon, vulnerability assessment",
+    "atlas": "Knowledge curator -- memory, graphs, relationships",
+    "jarvis": "Personal assistant -- desktop, browser, system control",
+    "nova": "Strategist & scheduler -- planning, timelines, coordination",
+    "athena": "Strategic planner -- risk analysis, roadmaps",
+    "sentinel": "PR reviewer -- code review, test validation",
 }
 
-# ── Enums ──
+# -- Enums --
 
 class VoteType(Enum):
     APPROVE = "approve"
@@ -90,7 +90,7 @@ class SessionStatus(Enum):
     ARCHIVED = "archived"
     CANCELLED = "cancelled"
 
-# ── Personality Engine ──
+# -- Personality Engine --
 
 class PersonalityProfile:
     """Defines behavioral traits for an agent that influence voting, debate, and deliberation."""
@@ -141,7 +141,7 @@ class PersonalityProfile:
     def debate_aggressiveness(self) -> float:
         return self.assertiveness * 0.6 + (1 - self.cooperativeness) * 0.4
 
-# ── AgentProfile ──
+# -- AgentProfile --
 
 class AgentProfile:
     """Represents a single agent with role, personality, expertise, and communication style."""
@@ -193,7 +193,7 @@ class AgentProfile:
     def has_expertise_in(self, area: str) -> bool:
         return any(area.lower() in e.lower() for e in self.expertise_areas)
 
-# ── AgentRegistry (Singleton) ──
+# -- AgentRegistry (Singleton) --
 
 class AgentRegistry:
     """Singleton registry managing all AgentProfile instances."""
@@ -301,7 +301,7 @@ class AgentRegistry:
 def get_agent_registry() -> AgentRegistry:
     return AgentRegistry()
 
-# ── Role-Based Permissions ──
+# -- Role-Based Permissions --
 
 class Permission(Enum):
     PROPOSE = "propose"
@@ -355,7 +355,7 @@ class RolePermission:
         if agent_id in cls._permissions:
             cls._permissions[agent_id].discard(permission)
 
-# ── Helpers ──
+# -- Helpers --
 
 def _ensure_dirs():
     for d in (_TOWNHALL_DIR, _MINUTES_DIR, _ARCHIVE_DIR):
@@ -386,7 +386,7 @@ def _timestamp() -> str:
 def _date_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
-# ── Agenda Management ──
+# -- Agenda Management --
 
 def add_agenda_item(title: str, description: str = "", assigned_to: str = "", priority: str = "medium") -> dict:
     """Add an item to the town hall agenda."""
@@ -414,9 +414,9 @@ def list_agenda(status: str = "") -> str:
         return "No agenda items."
     lines = [f"### Town Hall Agenda ({len(items)} items)"]
     for item in items:
-        icon = {"open":"\u25cb","in_progress":"\u25d0","resolved":"\u25cf","cancelled":"\u2297"}.get(item.get("status","open"),"\u25cb")
-        assign = f" \u2192 {item["assigned_to"]}" if item.get("assigned_to") else ""
-        lines.append(f"  {icon} [{item["id"]}] {item["title"]}{assign} ({item.get("priority","medium")})")
+        icon = {"open":"[ ]","in_progress":"[/]","resolved":"[x]","cancelled":"[X]"}.get(item.get("status","open"),"[ ]")
+        assign = f" -> {item['assigned_to']}" if item.get("assigned_to") else ""
+        lines.append(f"  {icon} [{item['id']}] {item['title']}{assign} ({item.get('priority','medium')})")
         if item.get("description"):
             lines.append(f"      {item["description"][:100]}")
     return "\n".join(lines)
@@ -432,7 +432,7 @@ def resolve_agenda_item(item_id: str, resolution: str = "completed") -> str:
             return f"[OK] Agenda item {item_id} resolved: {resolution}"
     return f"[FAIL] Agenda item {item_id} not found"
 
-# ── Voting System ──
+# -- Voting System --
 
 def cast_vote(session_id: str, agent_name: str, vote: str, proposal_id: str = "") -> str:
     try:
@@ -484,7 +484,7 @@ def tally_votes(session_id: str, proposal_id: str = "") -> str:
     lines.append(f"\nTotal votes: {sum(tally.values())}")
     return "\n".join(lines)
 
-# ── Consensus Algorithms ──
+# -- Consensus Algorithms --
 
 def reach_consensus(session_id: str, proposal: str, algorithm: str = "majority") -> str:
     votes_data = _load_json(_VOTES_FILE, {"votes": []})
@@ -566,7 +566,7 @@ def detect_consensus_blockers(session_id: str) -> str:
         lines.append("\nNo blockers detected.")
     return "\n".join(lines)
 
-# ── Proposal System ──
+# -- Proposal System --
 
 def create_proposal(session_id: str, title: str, description: str, proposed_by: str) -> str:
     if not RolePermission.check_permission(proposed_by, Permission.PROPOSE):
@@ -620,7 +620,7 @@ def list_proposals(session_id: str = "") -> str:
             lines.append(f"      {p["description"][:120]}")
     return "\n".join(lines)
 
-# ── Deliberation Templates ──
+# -- Deliberation Templates --
 
 class DeliberationTemplate:
     def __init__(self, name: str, description: str, phases: list[dict[str, Any]], default_duration: int = 10):
@@ -702,7 +702,7 @@ def run_template(template_name: str, topic: str) -> str:
                 post_message(sid, agent, f"[{phase["name"]}] (unavailable: {e})")
     return sid
 
-# ── Session Management ──
+# -- Session Management --
 
 def start_session(topic: str, participants: Optional[list[str]] = None) -> str:
     _ensure_dirs()
@@ -790,7 +790,7 @@ def cancel_session(session_id: str) -> str:
             return f"[OK] Session {session_id[:8]} cancelled."
     return f"[FAIL] Session {session_id} not found"
 
-# ── Session Persistence & History ──
+# -- Session Persistence & History --
 
 def archive_session(session_id: str) -> str:
     sessions = _load_json(_SESSIONS_FILE, [])
@@ -899,7 +899,7 @@ def generate_daily_summary() -> str:
     with open(summary_path, "w", encoding="utf-8") as f: f.write(content)
     return content
 
-# ── Agent Communication Patterns ──
+# -- Agent Communication Patterns --
 
 def direct_message(from_agent: str, to_agent: str, message: str) -> str:
     if from_agent not in AGENT_ROLES and from_agent != "townhall": return f"[FAIL] Unknown sender: {from_agent}"
@@ -936,7 +936,7 @@ def broadcast(agent_name: str, message: str, channel: str = "general") -> str:
     _save_json(_SESSIONS_FILE, sessions)
     return f"[OK] {agent_name} broadcast to {count} active session(s)"
 
-# ── Debate System ──
+# -- Debate System --
 
 class DebateRound:
     def __init__(self, debate_id: str, round_number: int):
@@ -1010,7 +1010,7 @@ def list_debates(session_id: str = "") -> str:
         lines.append(f"  {icon} [{d["id"][:8]}] {d.get("motion","?")[:50]} ({d["status"]}, {len(d.get("rounds",[]))} rounds)")
     return "\n".join(lines)
 
-# ── Escalation ──
+# -- Escalation --
 
 def escalate_to_human(session_id: str, issue: str, agent_name: str = "") -> str:
     escalations = _load_json(_ESCALATIONS_FILE, {"escalations": []})
@@ -1059,7 +1059,7 @@ def check_auto_escalation(session_id: str, max_rounds: int = 3) -> str:
                 return f"[OK] Auto-escalation triggered for session {session_id[:8]}"
     return f"[OK] Session {session_id[:8]} within limits ({msg_count} msgs)"
 
-# ── Outcome Tracking ──
+# -- Outcome Tracking --
 
 class OutcomeTracker:
     def __init__(self):
@@ -1129,7 +1129,7 @@ def get_outcome_tracker() -> OutcomeTracker:
         _outcome_tracker = OutcomeTracker()
     return _outcome_tracker
 
-# ── Action Items ──
+# -- Action Items --
 
 def create_action_item(session_id: str, description: str, assignee: str, deadline: str = "") -> str:
     actions = _load_json(_ACTIONS_FILE, {"actions": []})
@@ -1192,7 +1192,7 @@ def auto_create_actions(session_id: str) -> str:
                 if desc: create_action_item(session_id, desc, assignee); created += 1
     return f"[OK] Created {created} action items."
 
-# ── Meeting Scheduling ──
+# -- Meeting Scheduling --
 
 def schedule_session(topic: str, participants: Optional[list[str]] = None, time_str: str = "") -> str:
     schedule = _load_json(_SCHEDULE_FILE, {"sessions": []})
@@ -1236,7 +1236,7 @@ def get_schedule() -> str:
         if len(past) > 5: lines.append(f"  ... and {len(past)-5} more")
     return "\n".join(lines)
 
-# ── Summarization Engine ──
+# -- Summarization Engine --
 
 def summarize_session(session_id: str, max_length: int = 500) -> str:
     sessions = _load_json(_SESSIONS_FILE, [])
@@ -1303,7 +1303,7 @@ def generate_minutes(session_id: str) -> str:
     with open(mp, "w", encoding="utf-8") as f: f.write(content)
     return content
 
-# ── Conflict Resolution ──
+# -- Conflict Resolution --
 
 def detect_conflict(session_id: str, agent_a: str, agent_b: str) -> str:
     sessions = _load_json(_SESSIONS_FILE, [])
@@ -1365,7 +1365,7 @@ def mediate_conflict(session_id: str) -> str:
     post_message(session_id, "townhall", f"[Mediation] Identified {len(graph)} conflict pair(s).", msg_type="system")
     return "\n".join(lines)
 
-# ── Autonomous Deliberation ──
+# -- Autonomous Deliberation --
 
 def auto_deliberate(topic: str, rounds: int = 2) -> str:
     sid = start_session(topic, participants=list(AGENT_ROLES.keys()))
@@ -1407,10 +1407,10 @@ def auto_deliberate(topic: str, rounds: int = 2) -> str:
     auto_create_actions(sid)
     return get_session(sid)
 
-# ── Tool Dispatcher ──
+# -- Tool Dispatcher --
 
 
-# ── Session Audit & Notifications ──
+# -- Session Audit & Notifications --
 
 class SessionAudit:
     """Records and tracks all changes made during town hall sessions.
@@ -1464,7 +1464,7 @@ def get_audit() -> SessionAudit:
     return SessionAudit()
 
 
-# ── Notification Manager ──
+# -- Notification Manager --
 
 class NotificationManager:
     """Manages agent-facing notifications for events requiring attention.
@@ -1500,7 +1500,7 @@ class NotificationManager:
         if not items: return f"No notifications for {agent_name}."
         lines = [f"### Notifications for {agent_name} ({len(items)})"]
         for n in items:
-            icon = {"high": "🔴", "normal": "🔵", "low": "⚪"}.get(n.get("priority","normal"), "🔵")
+            icon = {"high": "!", "normal": "o", "low": "."}.get(n.get("priority","normal"), "o")
             ts = n.get("created_at","?")[11:19]
             lines.append(f"  {icon} [{ts}] {n["subject"][:60]}")
             lines.append(f"      {n["message"][:120]}")
@@ -1531,7 +1531,7 @@ def get_notification_manager() -> NotificationManager:
     return NotificationManager()
 
 
-# ── Report Generator ──
+# -- Report Generator --
 
 class ReportGenerator:
     """Generates comprehensive reports from session data.
@@ -1621,7 +1621,7 @@ def get_report_generator() -> ReportGenerator:
 
 
 
-# ── Tag Management ──
+# -- Tag Management --
 
 def add_tag_to_session(session_id: str, tag: str) -> str:
     """Add a tag to a session for categorization and filtering."""
@@ -1660,7 +1660,7 @@ def list_tags() -> str:
         return "No tags in use."
     lines = [f"### Tags ({len(tag_counts)})"]
     for t, c in sorted(tag_counts.items(), key=lambda x: -x[1]):
-        lines.append(f"  • {t}: {c} session(s)")
+        lines.append(f"  * {t}: {c} session(s)")
     return "\n".join(lines)
 
 
@@ -1678,7 +1678,7 @@ def find_sessions_by_tag(tag: str) -> str:
     return "\n".join(lines)
 
 
-# ── Session Stats ──
+# -- Session Stats --
 
 def get_session_statistics() -> str:
     """Get comprehensive statistics about all town hall activity."""
@@ -1732,7 +1732,7 @@ def get_session_statistics() -> str:
     return "\n".join(lines)
 
 
-# ── Bulk Operations ──
+# -- Bulk Operations --
 
 def bulk_close_sessions(status: str = "in_progress") -> str:
     """Close all sessions with a given status."""
@@ -1759,7 +1759,7 @@ def purge_archived_sessions() -> str:
     return f"[OK] Purged {before - after} archived sessions. {after} remain."
 
 
-# ── Session Comparison ──
+# -- Session Comparison --
 
 def compare_sessions(session_id_a: str, session_id_b: str) -> str:
     """Compare two sessions side by side."""
@@ -1788,7 +1788,7 @@ def compare_sessions(session_id_a: str, session_id_b: str) -> str:
 
 
 def townhall_tool(action: str = "status", **kwargs) -> str:
-    """Agent Town Hall — autonomous agent deliberation & coordination.
+    """Agent Town Hall -- autonomous agent deliberation & coordination.
 
     Actions:
       status - Show town hall status

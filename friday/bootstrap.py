@@ -2344,8 +2344,8 @@ def run_diagnostics() -> dict:
 def _start_daemon() -> bool:
     """Start self-improve daemon in background thread."""
     try:
-        from friday.self_improve_daemon import start_daemon
-        daemon_thread = threading.Thread(target=start_daemon, daemon=True, name="self-improve")
+        from friday.self_improve_daemon import daemon_start
+        daemon_thread = threading.Thread(target=daemon_start, daemon=True, name="self-improve")
         daemon_thread.start()
         pid = os.getpid()
         _touch(os.path.join(FRIDAY_MEMORY, "_daemon_active.flag"), str(pid))
@@ -2526,8 +2526,8 @@ def _persistence_loop(interval: int = 300):
     """Periodically flush agent state to disk."""
     while not _persistence_stop.is_set():
         try:
-            from friday.persistence import save_checkpoint
-            save_checkpoint()
+            from friday.persistence import record_continuity
+            record_continuity("periodic_checkpoint", {"interval": interval})
             _log("persistence checkpoint flushed")
         except Exception as e:
             _log_error(f"persistence flush failed: {e}")
