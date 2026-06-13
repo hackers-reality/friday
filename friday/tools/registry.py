@@ -552,7 +552,13 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
     ("friday.bootstrap", "bootstrap_tool", "FRIDAY Bootstrap — start/stop background services (daemon, dashboard, checkpointer, validation).", {"action": {"type": "STRING", "description": "Action: start, stop, status"}, "services": {"type": "STRING", "description": "Comma-separated services: daemon,dashboard,checkpointer,validation"}}, ["action"]),
 
     # ── Plugin System ──
-    ("friday.plugins", "plugin_tool", "Plugin System — manage dynamic plugins: list, discover, load, unload, reload, call, config, test, docs, template, install, uninstall, search, category, stats, event, watch, check, metadata.", {"action": {"type": "STRING", "description": "Action: list, discover, load, load_all, unload, reload, call, config, test, docs, template, install, uninstall, search, category, stats, event, watch, check, metadata"}, "plugin_name": {"type": "STRING", "description": "Plugin name for load/unload/reload/config/test/docs/watch"}, "tool_name": {"type": "STRING", "description": "Tool name for call action"}, "key": {"type": "STRING", "description": "Config key for config action"}, "value": {"type": "STRING", "description": "Config value for config action"}, "query": {"type": "STRING", "description": "Search query for search action"}, "category": {"type": "STRING", "description": "Category for category action"}, "author": {"type": "STRING", "description": "Author name for template action"}, "url": {"type": "STRING", "description": "Plugin URL for install action"}, "event": {"type": "STRING", "description": "Event type for event action"}, "handler": {"type": "STRING", "description": "Handler function name for event subscribe"}}, ["action"]),
+    ("friday.plugins", "plugin_tool", "Plugin System -- manage dynamic plugins: list, discover, load, unload, reload, call, config, test, docs, template, install, uninstall, search, category, stats, event, watch, check, metadata.", {"action": {"type": "STRING", "description": "Action: list, discover, load, load_all, unload, reload, call, config, test, docs, template, install, uninstall, search, category, stats, event, watch, check, metadata"}, "plugin_name": {"type": "STRING", "description": "Plugin name for load/unload/reload/config/test/docs/watch"}, "tool_name": {"type": "STRING", "description": "Tool name for call action"}, "key": {"type": "STRING", "description": "Config key for config action"}, "value": {"type": "STRING", "description": "Config value for config action"}, "query": {"type": "STRING", "description": "Search query for search action"}, "category": {"type": "STRING", "description": "Category for category action"}, "author": {"type": "STRING", "description": "Author name for template action"}, "url": {"type": "STRING", "description": "Plugin URL for install action"}, "event": {"type": "STRING", "description": "Event type for event action"}, "handler": {"type": "STRING", "description": "Handler function name for event subscribe"}}, ["action"]),
+
+    # ── Code Review Agent ──
+    ("friday.code_review", "code_review_tool", "Code Review Agent -- analyze Python code for security, performance, style, bugs, complexity. Auto-fix issues.", {"action": {"type": "STRING", "description": "Action: review, review_file, review_dir, stats, fix, security_scan, analyze_complexity"}, "code": {"type": "STRING", "description": "Code to review (for review/fix/security_scan/analyze_complexity)"}, "filename": {"type": "STRING", "description": "Filename for review/fix"}, "path": {"type": "STRING", "description": "File/directory path for review_file/review_dir"}, "pattern": {"type": "STRING", "description": "File glob pattern for review_dir (default *.py)"}, "categories": {"type": "STRING", "description": "Comma-separated categories: security,performance,style,bug,complexity"}}, ["action"]),
+
+    # ── Workflow Engine ──
+    ("friday.workflow_engine", "workflow_tool", "Workflow Engine -- create and run multi-step pipelines combining FRIDAY tools. 8 built-in templates.", {"action": {"type": "STRING", "description": "Action: list, create, run, status, history, templates, create_from_template, save, load, delete, clone, validate, step_info"}, "workflow_id": {"type": "STRING", "description": "Workflow ID for run/status/delete/clone/save/validate/step_info"}, "name": {"type": "STRING", "description": "Workflow name for create"}, "description": {"type": "STRING", "description": "Workflow description for create"}, "steps_json": {"type": "STRING", "description": "JSON array of step configs for create"}, "initial_context_json": {"type": "STRING", "description": "JSON object of initial context for run"}, "template_name": {"type": "STRING", "description": "Template name for create_from_template"}, "path": {"type": "STRING", "description": "File path for save/load"}, "step_id": {"type": "STRING", "description": "Step ID for step_info"}}, ["action"]),
 ]
 
 
@@ -610,6 +616,12 @@ def build_new_tool_map() -> dict[str, Any]:
 
     # Plugin System
     tool_map["plugin_tool"] = _LazyToolFunc("friday.plugins", "plugin_tool")
+
+    # Code Review Agent
+    tool_map["code_review_tool"] = _LazyToolFunc("friday.code_review", "code_review_tool")
+
+    # Workflow Engine
+    tool_map["workflow_tool"] = _LazyToolFunc("friday.workflow_engine", "workflow_tool")
 
     return tool_map
 

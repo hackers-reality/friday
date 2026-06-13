@@ -83,6 +83,8 @@ from friday.autonomous_memory import autonomous_memory_tool
 from friday.codebase_analyzer import codebase_analyzer_tool
 from friday.api_server import api_server_tool
 from friday.plugins import plugin_tool
+from friday.code_review import code_review_tool
+from friday.workflow_engine import workflow_tool
 from friday.tools.nlp_tools import (
     sentiment_analysis, extract_entities, summarize_text, classify_text, compute_embeddings,
 )
@@ -598,4 +600,10 @@ __all__ = _tflat.__all__ + [
 
     # ── Plugin System ──
     "plugin_tool",
+
+    # ── Code Review Agent ──
+    "code_review_tool",
+
+    # ── Workflow Engine ──
+    "workflow_tool",
 ]
