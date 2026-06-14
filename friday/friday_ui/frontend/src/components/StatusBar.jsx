@@ -1,31 +1,45 @@
 import React from 'react';
 
-export default function StatusBar({ system }) {
+export default function StatusBar({ system, health, git }) {
   return (
-    <div className="status-bar">
-      <div className="status-item">
-        <span className="status-label">PLATFORM</span>
-        <span className="status-val">{system?.platform || '---'}</span>
+    <div className="jarvis-statusbar">
+      <div className="statusbar-left">
+        <div className="statusbar-item">
+          <span className={`statusbar-dot ${system?.cpu_percent < 80 ? 'green' : system?.cpu_percent < 95 ? 'yellow' : 'red'}`} />
+          <span>CPU {system?.cpu_percent?.toFixed(1) || 0}%</span>
+        </div>
+        <div className="statusbar-item">
+          <span className={`statusbar-dot ${system?.memory_percent < 85 ? 'green' : system?.memory_percent < 95 ? 'yellow' : 'red'}`} />
+          <span>MEM {system?.memory_percent?.toFixed(1) || 0}%</span>
+        </div>
+        <div className="statusbar-item">
+          <span className={`statusbar-dot ${system?.disk_percent < 90 ? 'green' : system?.disk_percent < 95 ? 'yellow' : 'red'}`} />
+          <span>DISK {system?.disk_percent?.toFixed(1) || 0}%</span>
+        </div>
+        <div className="statusbar-item">
+          <span className="statusbar-dot green" />
+          <span>PID {system?.pid || '---'}</span>
+        </div>
       </div>
-      <div className="status-item">
-        <span className="status-label">PYTHON</span>
-        <span className="status-val">{system?.python_version || '---'}</span>
-      </div>
-      <div className="status-item">
-        <span className="status-label">HOSTNAME</span>
-        <span className="status-val">{system?.hostname || '---'}</span>
-      </div>
-      <div className="status-item">
-        <span className="status-label">TOOLS</span>
-        <span className="status-val">{system?.services?.tools || 0}</span>
-      </div>
-      <div className="status-item">
-        <span className="status-label">MEMORY</span>
-        <span className="status-val">{system?.memory_entities || 0} entities</span>
-      </div>
-      <div className="status-item">
-        <span className="status-label">API</span>
-        <span className="status-val online">ACTIVE</span>
+      <div className="statusbar-right">
+        <div className="statusbar-item">
+          <span>{system?.hostname || '---'}</span>
+        </div>
+        <div className="statusbar-item">
+          <span>{system?.platform || '---'}</span>
+        </div>
+        <div className="statusbar-item">
+          <span>SESSION {system?.session_id || '---'}</span>
+        </div>
+        <div className="statusbar-item">
+          <span>UP {system?.uptime_formatted || '0h 0m 0s'}</span>
+        </div>
+        {git?.branch && (
+          <div className="statusbar-item">
+            <span className="statusbar-dot green" />
+            <span>GIT {git.branch}</span>
+          </div>
+        )}
       </div>
     </div>
   );

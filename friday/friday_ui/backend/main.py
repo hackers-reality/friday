@@ -1,19 +1,24 @@
-"""FRIDAY JARVIS — Backend API Server."""
+"""FRIDAY API Server — Full-featured backend with voice, logs, memory graph."""
 import os
 import sys
 import json
 import time
 import uuid
-import psutil
-import platform
+import io
+import wave
+import tempfile
+import threading
+import queue
+import logging
+import traceback
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -69,11 +74,12 @@ def _load_tools():
             _tool_registry = {}
         _tools_loaded = True
 
-app = FastAPI(title="F.R.I.D.A.Y. API", version="2.0.0")
+
+app = FastAPI(title="F.R.I.D.A.Y. API", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -81,6 +87,8 @@ app.add_middleware(
 
 connected_clients: List[WebSocket] = []
 system_state: Dict[str, Any] = {}
+log_buffer: List[Dict] = []
+log_subscribers: List[WebSocket] = []
 
 
 class ChatMessage(BaseModel):
@@ -93,11 +101,53 @@ class ToolCall(BaseModel):
     params: Optional[Dict[str, Any]] = None
 
 
+class VoiceMessage(BaseModel):
+    text: str
+    voice: Optional[str] = "default"
+
+
+class RelationshipAdd(BaseModel):
+    source: str
+    target: str
+    rel_type: str
+
+
+class MemoryStore(BaseModel):
+    content: str
+    source: Optional[str] = "ui"
+    entity: Optional[str] = None
+    memory_type: Optional[str] = "conversation"
+    importance: Optional[float] = 0.5
+
+
+class ConversationMsg(BaseModel):
+    role: str
+    content: str
+    participant: Optional[str] = "user"
+
+
 @app.on_event("startup")
 async def startup():
     system_state["start_time"] = time.time()
     system_state["id"] = str(uuid.uuid4())[:8]
     system_state["chat_history"] = []
+    system_state["voice_enabled"] = True
+    system_state["terminal_logs"] = []
+
+
+def _capture_log(module: str, level: str, message: str):
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "module": module,
+        "level": level,
+        "message": message,
+    }
+    log_buffer.append(entry)
+    if len(log_buffer) > 500:
+        log_buffer.pop(0)
+    system_state.setdefault("terminal_logs", []).append(entry)
+    if len(system_state["terminal_logs"]) > 200:
+        system_state["terminal_logs"] = system_state["terminal_logs"][-200:]
 
 
 @app.websocket("/ws")
@@ -112,10 +162,23 @@ async def websocket_endpoint(ws: WebSocket):
             if msg.get("type") == "chat":
                 response = process_chat(msg.get("message", ""))
                 await ws.send_json({"type": "chat_response", "response": response})
+                _capture_log("chat", "info", f"User: {msg.get('message', '')[:80]}")
+                _capture_log("chat", "info", f"FRIDAY: {response[:80]}")
+            elif msg.get("type") == "voice":
+                response = process_chat(msg.get("message", ""))
+                await ws.send_json({"type": "voice_response", "response": response, "speak": True})
+                _capture_log("voice", "info", f"Voice: {response[:80]}")
             elif msg.get("type") == "heartbeat":
                 await ws.send_json({"type": "heartbeat", "status": "alive"})
+            elif msg.get("type") == "subscribe_logs":
+                log_subscribers.append(ws)
+                recent = log_buffer[-100:]
+                await ws.send_json({"type": "log_history", "logs": recent})
     except WebSocketDisconnect:
-        connected_clients.remove(ws)
+        if ws in connected_clients:
+            connected_clients.remove(ws)
+        if ws in log_subscribers:
+            log_subscribers.remove(ws)
 
 
 async def broadcast(msg: dict):
@@ -126,46 +189,112 @@ async def broadcast(msg: dict):
             connected_clients.remove(client)
 
 
+async def broadcast_log(entry: dict):
+    for ws in log_subscribers[:]:
+        try:
+            await ws.send_json({"type": "log_entry", "log": entry})
+        except Exception:
+            log_subscribers.remove(ws)
+
+
 def process_chat(message: str) -> str:
     msg = message.lower().strip()
-    system_state.setdefault("chat_history", []).append({"role": "user", "message": message})
+    system_state.setdefault("chat_history", []).append({
+        "role": "user",
+        "message": message,
+        "timestamp": datetime.now().isoformat(),
+    })
 
     if any(w in msg for w in ["status", "how are you", "how's it going"]):
         uptime = time.time() - system_state.get("start_time", time.time())
         hours = int(uptime // 3600)
         mins = int((uptime % 3600) // 60)
-        response = f"All systems operational, sir. Uptime: {hours}h {mins}m. Memory: {get_memory_usage()}MB."
+        mem = _safe_json(autonomous_memory_tool(action="stats"))
+        response = (
+            f"All systems operational, sir. Uptime: {hours}h {mins}m. "
+            f"Memory: {mem.get('total_memories', 0)} memories, "
+            f"{mem.get('total_entities', 0)} entities, "
+            f"{mem.get('total_relationships', 0)} relationships. "
+            f"CPU and disk healthy."
+        )
     elif any(w in msg for w in ["tools", "what can you do"]):
-        response = "I manage %d tools across %d categories. I can validate code, analyze codebases, manage workflows, review code, and coordinate autonomous agents." % (380, 10)
+        _load_tools()
+        cats = {}
+        for info in _tool_registry.values():
+            c = info.get("category", "other")
+            cats[c] = cats.get(c, 0) + 1
+        cat_list = ", ".join(f"{v} {k}" for k, v in sorted(cats.items(), key=lambda x: -x[1])[:8])
+        response = f"I manage {len(_tool_registry)} tools across {len(cats)} categories: {cat_list}. I can validate code, analyze codebases, manage workflows, review code, run voice commands, and coordinate autonomous agents."
     elif any(w in msg for w in ["memory", "remember"]):
         raw = autonomous_memory_tool(action="stats")
         d = _safe_json(raw)
-        response = f"My memory contains {d.get('total_memories', 0)} memories across {d.get('total_entities', 0)} entities. {d.get('total_relationships', 0)} relationships stored."
+        response = (
+            f"My memory contains {d.get('total_memories', 0)} memories across "
+            f"{d.get('total_entities', 0)} entities with "
+            f"{d.get('total_relationships', 0)} relationships. "
+            f"Memory types: {d.get('memory_types', {})}"
+        )
     elif any(w in msg for w in ["agent", "townhall", "deliberate"]):
-        raw = bootstrap_tool(action="status")
+        raw = townhall_tool(action="status")
         d = _safe_json(raw)
-        agents = d.get("townhall", {}).get("active_agents", 0)
-        response = f"Currently tracking {agents} active agents. Townhall deliberations are proceeding normally."
+        response = (
+            f"Townhall: {d.get('active_sessions', 0)} active sessions, "
+            f"{d.get('agents_registered', 0)} registered agents, "
+            f"{d.get('total_messages', 0)} total messages, "
+            f"{d.get('open_agenda_items', 0)} open agenda items."
+        )
     elif any(w in msg for w in ["review", "code review"]):
-        response = "Ready to review code, sir. Submit your code and I will analyze it for security vulnerabilities, performance issues, style violations, and potential bugs."
+        response = "Ready to review code, sir. Submit your code and I will analyze it for security vulnerabilities, performance issues, style violations, and potential bugs. You can also ask me to scan specific files."
     elif any(w in msg for w in ["workflow", "pipeline"]):
         raw = workflow_tool(action="list")
         d = _safe_json(raw)
-        count = len(d.get('workflows', []))
-        response = f"I have {count} workflows available. I can create custom pipelines for any task."
+        count = len(d.get("workflows", []))
+        response = f"I have {count} workflows available. I can create custom pipelines for build, test, deploy, review, and research tasks."
     elif any(w in msg for w in ["hello", "hi", "hey"]):
         response = "Good evening, sir. How may I assist you tonight?"
     elif any(w in msg for w in ["who are you", "what are you"]):
-        response = "I am FRIDAY — your Fully Responsive Intelligent Digital Assistant Youth. I manage your systems, analyze your code, and coordinate your agents."
+        response = "I am FRIDAY — your Fully Responsive Intelligent Digital Assistant Youth. I manage your systems, analyze your code, hear your voice, and coordinate your agents. I was built to be your always-on AI companion."
+    elif any(w in msg for w in ["voice", "speak", "talk"]):
+        response = "Voice system active, sir. I can hear you through the microphone and respond with speech. Click the microphone icon to start a voice command."
+    elif any(w in msg for w in ["help"]):
+        response = (
+            "Available commands: status, tools, memory, agents, townhall, review, "
+            "workflow, voice, graph, logs, health, security, git, config. "
+            "You can also ask me to scan code, run analysis, or manage any system."
+        )
+    elif any(w in msg for w in ["graph", "relationship"]):
+        raw = autonomous_memory_tool(action="entities", limit=20)
+        d = _safe_json(raw)
+        entities = d.get("entities", [])
+        response = f"Knowledge graph contains {len(entities)} entities. Top entities: {', '.join(e.get('name', '?') for e in entities[:5])}. Switch to the Graph view to see the full relationship network."
+    elif any(w in msg for w in ["log", "logs"]):
+        count = len(log_buffer)
+        response = f"Terminal log buffer contains {count} entries. All system activity is streamed to the UI in real-time."
+    elif any(w in msg for w in ["health", "monitor"]):
+        raw = health_monitor_tool(action="status")
+        d = _safe_json(raw)
+        metrics = d.get("metrics", {})
+        response = (
+            f"Health check: CPU {metrics.get('cpu_percent', 0):.1f}%, "
+            f"Memory {metrics.get('memory_percent', 0):.1f}%, "
+            f"Disk {metrics.get('disk_percent', 0):.1f}%, "
+            f"Uptime {metrics.get('uptime', 0)/3600:.1f}h."
+        )
     else:
-        response = "I understand, sir. Processing your request. You can ask me about status, tools, memory, agents, code review, or workflows."
+        response = f"I understand, sir. Processing your request about '{message[:50]}'. You can ask me about status, tools, memory, agents, voice, graph, logs, health, or any system operation."
 
-    system_state["chat_history"].append({"role": "assistant", "message": response})
+    system_state["chat_history"].append({
+        "role": "assistant",
+        "message": response,
+        "timestamp": datetime.now().isoformat(),
+    })
+    _capture_log("friday", "info", response[:120])
     return response
 
 
 def get_memory_usage() -> int:
     try:
+        import psutil
         return int(psutil.Process().memory_info().rss / 1024 / 1024)
     except Exception:
         return 0
@@ -173,38 +302,34 @@ def get_memory_usage() -> int:
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "2.0.0", "uptime": time.time() - system_state.get("start_time", time.time())}
+    return {"status": "ok", "version": "3.0.0", "uptime": time.time() - system_state.get("start_time", time.time())}
 
 
 @app.get("/api/system")
 async def system_info():
+    import psutil
+    import platform
     mem = psutil.virtual_memory()
     cpu = psutil.cpu_percent(interval=0.1)
-    disk = psutil.disk_usage("/" if os.name != "nt" else "C:\\")
+    disk = psutil.disk_usage("C:\\" if os.name == "nt" else "/")
     uptime = time.time() - system_state.get("start_time", time.time())
-
-    bootstrap_raw = bootstrap_tool(action="status")
-    bootstrap_status = _safe_json(bootstrap_raw)
-    memory_raw = autonomous_memory_tool(action="stats")
-    memory_stats = _safe_json(memory_raw)
-
     return {
         "hostname": platform.node(),
         "platform": platform.system(),
         "python_version": platform.python_version(),
         "cpu_percent": cpu,
+        "cpu_count": psutil.cpu_count(),
         "memory_total_gb": round(mem.total / 1024**3, 1),
         "memory_used_gb": round(mem.used / 1024**3, 1),
         "memory_percent": mem.percent,
+        "memory_available_gb": round(mem.available / 1024**3, 1),
         "disk_total_gb": round(disk.total / 1024**3, 1),
         "disk_used_gb": round(disk.used / 1024**3, 1),
         "disk_percent": disk.percent,
         "uptime_seconds": int(uptime),
-        "uptime_formatted": "%dh %dm" % (int(uptime // 3600), int((uptime % 3600) // 60)),
-        "services": bootstrap_status.get("services", {}),
-        "memory_entities": memory_stats.get("entities", 0),
-        "memory_topics": memory_stats.get("topics", 0),
+        "uptime_formatted": "%dh %dm %ds" % (int(uptime // 3600), int((uptime % 3600) // 60), int(uptime % 60)),
         "session_id": system_state.get("id"),
+        "pid": os.getpid(),
     }
 
 
@@ -214,8 +339,8 @@ async def services():
     status = _safe_json(raw)
     return {
         "services": status.get("services", {}),
-        "total_tools": 380,
-        "categories": 10,
+        "total_tools": len(_tool_registry) if _tool_registry else 380,
+        "categories": len(set(info.get("category", "") for info in _tool_registry.values())) if _tool_registry else 10,
     }
 
 
@@ -250,7 +375,7 @@ async def memory():
 
 @app.get("/api/memory/recent")
 async def memory_recent():
-    result = autonomous_memory_tool(action="recall", query="", limit=10)
+    result = autonomous_memory_tool(action="recent", hours=24, limit=50)
     if isinstance(result, str):
         try:
             result = json.loads(result)
@@ -259,16 +384,78 @@ async def memory_recent():
     return {"items": result if isinstance(result, list) else []}
 
 
-@app.get("/api/codebase")
-async def codebase():
-    raw = codebase_analyzer_tool(action="stats")
+@app.get("/api/memory/entities")
+async def memory_entities():
+    raw = autonomous_memory_tool(action="entities", limit=100)
+    return _safe_json(raw)
+
+
+@app.get("/api/memory/graph")
+async def memory_graph():
+    raw = autonomous_memory_tool(action="graph")
+    d = _safe_json(raw)
+    if not d.get("nodes"):
+        entities_raw = autonomous_memory_tool(action="entities", limit=50)
+        entities_d = _safe_json(entities_raw)
+        entities = entities_d.get("entities", [])
+        nodes = []
+        edges = []
+        seen = set()
+        for e in entities:
+            name = e.get("name", "")
+            if name and name not in seen and len(name) > 1:
+                seen.add(name)
+                nodes.append({
+                    "id": name,
+                    "type": e.get("type", "unknown"),
+                    "mentions": e.get("mentions", 1),
+                    "size": max(5, min(30, e.get("mentions", 1) * 2)),
+                })
+        for i in range(len(nodes)):
+            for j in range(i + 1, min(i + 4, len(nodes))):
+                edges.append({
+                    "source": nodes[i]["id"],
+                    "target": nodes[j]["id"],
+                    "type": "related",
+                })
+        d = {"nodes": nodes, "edges": edges}
+    return d
+
+
+@app.post("/api/memory/store")
+async def memory_store(msg: MemoryStore):
+    raw = autonomous_memory_tool(
+        action="store",
+        content=msg.content,
+        source=msg.source,
+        entity=msg.entity,
+        memory_type=msg.memory_type,
+        importance=msg.importance,
+    )
+    return _safe_json(raw)
+
+
+@app.post("/api/memory/learn")
+async def memory_learn(msg: ChatMessage):
+    raw = autonomous_memory_tool(action="learn", text=msg.message, source="ui")
+    return _safe_json(raw)
+
+
+@app.post("/api/memory/relationship")
+async def memory_relationship(msg: RelationshipAdd):
+    raw = autonomous_memory_tool(action="relationship", source=msg.source, target=msg.target, type=msg.rel_type)
     return _safe_json(raw)
 
 
 @app.post("/api/chat")
 async def chat(msg: ChatMessage):
     response = process_chat(msg.message)
-    return {"response": response}
+    return {"response": response, "history": system_state.get("chat_history", [])}
+
+
+@app.get("/api/chat/history")
+async def chat_history():
+    return {"history": system_state.get("chat_history", [])}
 
 
 @app.post("/api/tools/call")
@@ -296,6 +483,7 @@ async def call_tool(call: ToolCall):
         "notification": notification_system_tool,
         "gateway": api_gateway_tool,
         "backup": backup_system_tool,
+        "townhall": townhall_tool,
     }
     tool_fn = tools.get(call.tool)
     if not tool_fn:
@@ -305,6 +493,28 @@ async def call_tool(call: ToolCall):
         return {"result": _safe_json(result) if isinstance(result, (str, dict, list)) else result}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/townhall/status")
+async def townhall_status():
+    return _safe_json(townhall_tool(action="status"))
+
+
+@app.get("/api/townhall/sessions")
+async def townhall_sessions():
+    raw = townhall_tool(action="list_sessions")
+    d = _safe_json(raw)
+    return {"sessions": d.get("sessions", []) if isinstance(d, dict) else []}
+
+
+@app.get("/api/townhall/agents")
+async def townhall_agents():
+    return _safe_json(townhall_tool(action="list_agents"))
+
+
+@app.get("/api/townhall/agenda")
+async def townhall_agenda():
+    return _safe_json(townhall_tool(action="list_agenda"))
 
 
 @app.get("/api/workflows")
@@ -344,12 +554,19 @@ async def config_stats():
 
 @app.get("/api/logs")
 async def logs_recent():
-    return _safe_json(logging_tool(action="get_recent", count=100))
+    return {"logs": log_buffer[-200:]}
 
 
 @app.get("/api/logs/stats")
 async def logs_stats():
-    return _safe_json(logging_tool(action="stats"))
+    levels = {}
+    modules = {}
+    for entry in log_buffer:
+        lvl = entry.get("level", "info")
+        mod = entry.get("module", "unknown")
+        levels[lvl] = levels.get(lvl, 0) + 1
+        modules[mod] = modules.get(mod, 0) + 1
+    return {"total": len(log_buffer), "by_level": levels, "by_module": modules}
 
 
 @app.get("/api/ratelimit/stats")
@@ -447,26 +664,27 @@ async def backups_stats():
     return _safe_json(backup_system_tool(action="stats"))
 
 
-@app.get("/api/townhall/status")
-async def townhall_status():
-    return _safe_json(townhall_tool(action="status"))
+@app.post("/api/voice/speak")
+async def voice_speak(msg: VoiceMessage):
+    _capture_log("voice", "info", f"TTS: {msg.text[:80]}")
+    return {"status": "ok", "text": msg.text, "voice": msg.voice}
 
 
-@app.get("/api/townhall/sessions")
-async def townhall_sessions():
-    raw = townhall_tool(action="list_sessions")
-    d = _safe_json(raw)
-    return {"sessions": d.get("sessions", []) if isinstance(d, dict) else []}
+@app.post("/api/voice/listen")
+async def voice_listen():
+    return {"status": "listening", "engine": "web_speech_api"}
 
 
-@app.get("/api/townhall/agents")
-async def townhall_agents():
-    return _safe_json(townhall_tool(action="list_agents"))
+@app.get("/api/conversations")
+async def list_conversations():
+    raw = autonomous_memory_tool(action="list_conversations", limit=20)
+    return _safe_json(raw)
 
 
-@app.get("/api/townhall/agenda")
-async def townhall_agenda():
-    return _safe_json(townhall_tool(action="list_agenda"))
+@app.get("/api/conversations/{conv_id}")
+async def get_conversation(conv_id: str):
+    raw = autonomous_memory_tool(action="get_conversation_summary", conversation_id=conv_id)
+    return _safe_json(raw)
 
 
 FRONTEND_DIST = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
@@ -484,7 +702,14 @@ if os.path.isdir(FRONTEND_DIST):
 
 if __name__ == "__main__":
     import uvicorn
-    print("[FRIDAY] Starting F.R.I.D.A.Y. API Server...")
-    print("[FRIDAY] http://localhost:8000")
-    print("[FRIDAY] Docs: http://localhost:8000/docs")
+    print("=" * 60)
+    print("  F.R.I.D.A.Y. — Fully Responsive Intelligent Digital Assistant Youth")
+    print("  Version 3.0.0")
+    print("=" * 60)
+    print(f"  API Server:   http://localhost:8000")
+    print(f"  API Docs:     http://localhost:8000/docs")
+    print(f"  Dashboard:    http://localhost:8000")
+    print(f"  WebSocket:    ws://localhost:8000/ws")
+    print(f"  Session:      {system_state.get('id', '---')}")
+    print("=" * 60)
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -6,6 +6,9 @@ import Panel from './components/Panel';
 import ChatPanel from './components/ChatPanel';
 import StatusBar from './components/StatusBar';
 import TownhallPanel from './components/TownhallPanel';
+import MemoryGraph from './components/MemoryGraph';
+import LogPanel from './components/LogPanel';
+import VoiceControl from './components/VoiceControl';
 import './App.css';
 
 const API = 'http://localhost:8000';
@@ -17,12 +20,18 @@ function App() {
   const [memory, setMemory] = useState(null);
   const [codebase, setCodebase] = useState(null);
   const [agents, setAgents] = useState(null);
-  const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', text: 'Good evening, sir. All systems operational.' }
-  ]);
+  const [chatHistory, setChatHistory] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const [orbPulse, setOrbPulse] = useState(0);
   const [time, setTime] = useState(new Date());
+  const [activeView, setActiveView] = useState('dashboard');
+  const [logs, setLogs] = useState([]);
+  const [townhall, setTownhall] = useState(null);
+  const [memoryEntities, setMemoryEntities] = useState([]);
+  const [memoryGraph, setMemoryGraph] = useState({ nodes: [], edges: [] });
+  const [gitStatus, setGitStatus] = useState(null);
+  const [healthStatus, setHealthStatus] = useState(null);
+  const [securityStats, setSecurityStats] = useState(null);
   const wsRef = useRef(null);
 
   useEffect(() => {
@@ -32,20 +41,32 @@ function App() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [sysRes, svcRes, toolRes, memRes, codeRes, agentRes] = await Promise.all([
-        fetch(`${API}/api/system`),
-        fetch(`${API}/api/services`),
-        fetch(`${API}/api/tools`),
-        fetch(`${API}/api/memory`),
-        fetch(`${API}/api/codebase`),
-        fetch(`${API}/api/agents`),
+      const [sysRes, svcRes, toolRes, memRes, codeRes, agentRes, thRes, gitRes, healthRes, secRes, graphRes, entRes] = await Promise.all([
+        fetch(`${API}/api/system`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/services`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/tools`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/memory`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/codebase`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/agents`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/townhall/status`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/git/status`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/health/status`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/security/stats`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/memory/graph`).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/memory/entities`).then(r => r.json()).catch(() => null),
       ]);
-      setSystem(await sysRes.json());
-      setServices(await svcRes.json());
-      setTools(await toolRes.json());
-      setMemory(await memRes.json());
-      setCodebase(await codeRes.json());
-      setAgents(await agentRes.json());
+      if (sysRes) setSystem(sysRes);
+      if (svcRes) setServices(svcRes);
+      if (toolRes) setTools(toolRes);
+      if (memRes) setMemory(memRes);
+      if (codeRes) setCodebase(codeRes);
+      if (agentRes) setAgents(agentRes);
+      if (thRes) setTownhall(thRes);
+      if (gitRes) setGitStatus(gitRes);
+      if (healthRes) setHealthStatus(healthRes);
+      if (secRes) setSecurityStats(secRes);
+      if (graphRes) setMemoryGraph(graphRes);
+      if (entRes) setMemoryEntities(entRes.entities || []);
     } catch (e) {
       console.error('Fetch error:', e);
     }
@@ -63,11 +84,33 @@ function App() {
       ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
         if (data.type === 'chat_response') {
-          setChatMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
+          setChatHistory(prev => [...prev, { role: 'assistant', text: data.response, time: new Date().toISOString() }]);
           setIsTyping(false);
           setOrbPulse(1);
           setTimeout(() => setOrbPulse(0), 1000);
+        } else if (data.type === 'voice_response') {
+          setChatHistory(prev => [...prev, { role: 'assistant', text: data.response, time: new Date().toISOString() }]);
+          setIsTyping(false);
+          setOrbPulse(1);
+          setTimeout(() => setOrbPulse(0), 1000);
+          if (data.speak && 'speechSynthesis' in window) {
+            const utt = new SpeechSynthesisUtterance(data.response);
+            utt.rate = 0.95;
+            utt.pitch = 0.9;
+            window.speechSynthesis.speak(utt);
+          }
+        } else if (data.type === 'log_entry') {
+          setLogs(prev => [...prev.slice(-499), data.log]);
+        } else if (data.type === 'log_history') {
+          setLogs(data.logs || []);
+        } else if (data.type === 'connected') {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'subscribe_logs' }));
+          }
         }
+      };
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'subscribe_logs' }));
       };
       ws.onclose = () => setTimeout(() => {}, 3000);
       wsRef.current = ws;
@@ -75,7 +118,7 @@ function App() {
   }, []);
 
   const sendMessage = useCallback((msg) => {
-    setChatMessages(prev => [...prev, { role: 'user', text: msg }]);
+    setChatHistory(prev => [...prev, { role: 'user', text: msg, time: new Date().toISOString() }]);
     setIsTyping(true);
     setOrbPulse(0.5);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -88,11 +131,20 @@ function App() {
       })
         .then(r => r.json())
         .then(data => {
-          setChatMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
+          setChatHistory(prev => [...prev, { role: 'assistant', text: data.response, time: new Date().toISOString() }]);
           setIsTyping(false);
           setOrbPulse(1);
           setTimeout(() => setOrbPulse(0), 1000);
         });
+    }
+  }, []);
+
+  const sendVoice = useCallback((text) => {
+    setChatHistory(prev => [...prev, { role: 'user', text: `[Voice] ${text}`, time: new Date().toISOString() }]);
+    setIsTyping(true);
+    setOrbPulse(0.7);
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'voice', message: text }));
     }
   }, []);
 
@@ -101,6 +153,7 @@ function App() {
     return Object.entries(tools.tools).map(([cat, items]) => ({
       category: cat,
       count: items.length,
+      items: items.slice(0, 5),
     }));
   }, [tools]);
 
@@ -127,8 +180,21 @@ function App() {
             <span>ONLINE</span>
           </div>
           <div className="header-session">SESSION: {system?.session_id || '---'}</div>
+          <div className="header-version">v3.0.0</div>
         </div>
       </header>
+
+      <nav className="jarvis-nav">
+        {['dashboard', 'graph', 'logs', 'tools', 'townhall'].map(view => (
+          <button
+            key={view}
+            className={`nav-btn ${activeView === view ? 'active' : ''}`}
+            onClick={() => setActiveView(view)}
+          >
+            {view.toUpperCase()}
+          </button>
+        ))}
+      </nav>
 
       <div className="jarvis-main">
         <div className="jarvis-sidebar left-sidebar">
@@ -151,7 +217,15 @@ function App() {
               </div>
               <div className="stat">
                 <div className="stat-label">UPTIME</div>
-                <div className="stat-value">{system?.uptime_formatted || '0h 0m'}</div>
+                <div className="stat-value">{system?.uptime_formatted || '0h 0m 0s'}</div>
+              </div>
+              <div className="stat">
+                <div className="stat-label">HOSTNAME</div>
+                <div className="stat-value small">{system?.hostname || '---'}</div>
+              </div>
+              <div className="stat">
+                <div className="stat-label">PID</div>
+                <div className="stat-value">{system?.pid || '---'}</div>
               </div>
             </div>
           </Panel>
@@ -159,70 +233,164 @@ function App() {
           <Panel title="AGENTS" delay={200}>
             <div className="agent-grid">
               <div className="agent-stat">
-                <div className="agent-num">{agents?.active_agents || 0}</div>
+                <div className="agent-num">{agents?.active_agents || townhall?.active_sessions || 0}</div>
                 <div className="agent-label">Active</div>
               </div>
               <div className="agent-stat">
-                <div className="agent-num">{agents?.sessions || 0}</div>
-                <div className="agent-label">Sessions</div>
+                <div className="agent-num">{townhall?.agents_registered || 0}</div>
+                <div className="agent-label">Registered</div>
               </div>
               <div className="agent-stat">
-                <div className="agent-num">{agents?.deliberations || 0}</div>
-                <div className="agent-label">Deliberations</div>
+                <div className="agent-num">{townhall?.total_messages || 0}</div>
+                <div className="agent-label">Messages</div>
+              </div>
+              <div className="agent-stat">
+                <div className="agent-num">{townhall?.open_agenda_items || 0}</div>
+                <div className="agent-label">Agenda</div>
               </div>
             </div>
           </Panel>
 
           <Panel title="MEMORY" delay={400}>
             <div className="memory-stats">
-              <div className="mem-stat"><span>{memory?.total_memories || memory?.entities || 0}</span> Memories</div>
-              <div className="mem-stat"><span>{memory?.total_entities || memory?.topics || 0}</span> Entities</div>
+              <div className="mem-stat"><span>{memory?.total_memories || 0}</span> Memories</div>
+              <div className="mem-stat"><span>{memory?.total_entities || 0}</span> Entities</div>
               <div className="mem-stat"><span>{memory?.total_relationships || 0}</span> Links</div>
+              <div className="mem-stat"><span>{memoryEntities.length}</span> Graph Nodes</div>
+            </div>
+            {memory?.memory_types && (
+              <div className="memory-types">
+                {Object.entries(memory.memory_types).map(([type, count]) => (
+                  <div key={type} className="mem-type">
+                    <span className="mem-type-name">{type}</span>
+                    <span className="mem-type-count">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="HEALTH" delay={500}>
+            <div className="health-grid">
+              <div className="health-item">
+                <span className={`health-dot ${healthStatus?.metrics?.cpu_percent < 80 ? 'good' : 'warn'}`} />
+                <span>CPU {healthStatus?.metrics?.cpu_percent?.toFixed(1) || 0}%</span>
+              </div>
+              <div className="health-item">
+                <span className={`health-dot ${healthStatus?.metrics?.memory_percent < 85 ? 'good' : 'warn'}`} />
+                <span>MEM {healthStatus?.metrics?.memory_percent?.toFixed(1) || 0}%</span>
+              </div>
+              <div className="health-item">
+                <span className={`health-dot ${healthStatus?.metrics?.disk_percent < 90 ? 'good' : 'warn'}`} />
+                <span>DISK {healthStatus?.metrics?.disk_percent?.toFixed(1) || 0}%</span>
+              </div>
+              <div className="health-item">
+                <span className="health-dot good" />
+                <span>PROCS {healthStatus?.metrics?.process_count || 0}</span>
+              </div>
             </div>
           </Panel>
         </div>
 
         <div className="jarvis-center">
-          <div className="orb-container">
-            <Canvas camera={{ position: [0, 0, 5], fov: 45 }}>
-              <ambientLight intensity={0.1} />
-              <pointLight position={[10, 10, 10]} intensity={0.5} />
-              <Orb pulse={orbPulse} />
-              <Stars radius={100} depth={50} count={3000} factor={4} saturation={0} fade speed={1} />
-              <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
-            </Canvas>
-            <div className="orb-label">FRIDAY CORE</div>
-            <div className="orb-ring ring-1" />
-            <div className="orb-ring ring-2" />
-            <div className="orb-ring ring-3" />
-          </div>
+          {activeView === 'dashboard' && (
+            <div className="orb-container">
+              <Canvas camera={{ position: [0, 0, 5], fov: 45 }}>
+                <ambientLight intensity={0.1} />
+                <pointLight position={[10, 10, 10]} intensity={0.5} />
+                <Orb pulse={orbPulse} />
+                <Stars radius={100} depth={50} count={3000} factor={4} saturation={0} fade speed={1} />
+                <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
+              </Canvas>
+              <div className="orb-label">FRIDAY CORE</div>
+              <div className="orb-ring ring-1" />
+              <div className="orb-ring ring-2" />
+              <div className="orb-ring ring-3" />
+            </div>
+          )}
+
+          {activeView === 'graph' && (
+            <MemoryGraph data={memoryGraph} entities={memoryEntities} />
+          )}
+
+          {activeView === 'logs' && (
+            <LogPanel logs={logs} />
+          )}
+
+          {activeView === 'tools' && (
+            <div className="tools-view">
+              <Panel title="ALL TOOLS" delay={0}>
+                <div className="tools-full-grid">
+                  {toolCategories.map((cat, i) => (
+                    <div key={i} className="tool-category">
+                      <div className="tool-cat-header">
+                        <span className="tool-cat-name">{cat.category}</span>
+                        <span className="tool-cat-count">{cat.count}</span>
+                      </div>
+                      <div className="tool-cat-items">
+                        {cat.items.map((t, j) => (
+                          <div key={j} className="tool-item-full">
+                            <span className="tool-name-full">{t.name}</span>
+                            <span className="tool-desc-full">{t.description}</span>
+                          </div>
+                        ))}
+                        {cat.count > 5 && <div className="tool-more">+{cat.count - 5} more</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="tool-total-full">
+                  <span>{tools?.total || 0}</span> TOTAL TOOLS ACROSS <span>{toolCategories.length}</span> CATEGORIES
+                </div>
+              </Panel>
+            </div>
+          )}
+
+          {activeView === 'townhall' && (
+            <div className="townhall-view">
+              <TownhallPanel full />
+            </div>
+          )}
         </div>
 
         <div className="jarvis-sidebar right-sidebar">
-          <Panel title="TOOLS" delay={100}>
-            <div className="tool-grid">
-              {toolCategories.map((t, i) => (
-                <div key={i} className="tool-item">
-                  <div className="tool-name">{t.category}</div>
-                  <div className="tool-count">{t.count}</div>
+          <Panel title="GIT" delay={100}>
+            <div className="git-info">
+              <div className="git-stat"><span className="git-label">Branch:</span> {gitStatus?.branch || '---'}</div>
+              <div className="git-stat"><span className="git-label">Dirty:</span> {gitStatus?.dirty_files || 0} files</div>
+              <div className="git-stat"><span className="git-label">Repo:</span> {gitStatus?.is_repo ? 'Yes' : 'No'}</div>
+              {gitStatus?.latest_commit && (
+                <div className="git-commit">
+                  <span className="git-hash">{gitStatus.latest_commit.hash?.slice(0, 8)}</span>
+                  <span className="git-msg">{gitStatus.latest_commit.message?.slice(0, 40)}</span>
                 </div>
-              ))}
-              <div className="tool-total">
-                <span>{tools?.total || 0}</span> TOTAL TOOLS
-              </div>
+              )}
             </div>
           </Panel>
 
-          <Panel title="CODEBASE" delay={300}>
+          <Panel title="CODEBASE" delay={200}>
             <div className="code-stats">
               <div className="code-stat"><span>{codebase?.total_files || 0}</span> Files</div>
               <div className="code-stat"><span>{(codebase?.total_lines_of_code || 0).toLocaleString()}</span> Lines</div>
               <div className="code-stat"><span>{codebase?.total_functions || 0}</span> Functions</div>
               <div className="code-stat"><span>{codebase?.total_classes || 0}</span> Classes</div>
+              <div className="code-stat"><span>{codebase?.total_imports || 0}</span> Imports</div>
+              <div className="code-stat"><span>{codebase?.num_cycles || 0}</span> Cycles</div>
             </div>
           </Panel>
 
-          <Panel title="SERVICES" delay={500}>
+          <Panel title="SECURITY" delay={300}>
+            <div className="security-info">
+              <div className="sec-stat"><span>Scans:</span> {securityStats?.total_scans || 0}</div>
+              <div className="sec-stat"><span>Vulns:</span> {securityStats?.total_vulnerabilities || 0}</div>
+              <div className="sec-status">
+                <span className={`health-dot ${securityStats?.total_vulnerabilities === 0 ? 'good' : 'warn'}`} />
+                {securityStats?.total_vulnerabilities === 0 ? 'SECURE' : 'ISSUES FOUND'}
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="SERVICES" delay={400}>
             <div className="service-list">
               {services?.services && Object.entries(services.services).map(([name, info], i) => {
                 const status = typeof info === 'string' ? info : (info?.status || 'unknown');
@@ -237,15 +405,26 @@ function App() {
             </div>
           </Panel>
 
-          <TownhallPanel />
+          <Panel title="TOOLS BY CATEGORY" delay={500}>
+            <div className="tool-grid">
+              {toolCategories.map((t, i) => (
+                <div key={i} className="tool-item">
+                  <div className="tool-name">{t.category}</div>
+                  <div className="tool-count">{t.count}</div>
+                </div>
+              ))}
+            </div>
+          </Panel>
         </div>
       </div>
 
       <div className="jarvis-chat">
-        <ChatPanel messages={chatMessages} onSend={sendMessage} isTyping={isTyping} />
+        <ChatPanel messages={chatHistory} onSend={sendMessage} isTyping={isTyping} />
       </div>
 
-      <StatusBar system={system} />
+      <VoiceControl onVoice={sendVoice} />
+
+      <StatusBar system={system} health={healthStatus} git={gitStatus} />
     </div>
   );
 }
