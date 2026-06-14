@@ -22,6 +22,7 @@ function App() {
   const [agents, setAgents] = useState(null);
   const [chatHistory, setChatHistory] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [orbPulse, setOrbPulse] = useState(0);
   const [time, setTime] = useState(new Date());
   const [activeView, setActiveView] = useState('dashboard');
@@ -33,10 +34,109 @@ function App() {
   const [healthStatus, setHealthStatus] = useState(null);
   const [securityStats, setSecurityStats] = useState(null);
   const wsRef = useRef(null);
+  const systemStateRef = useRef({});
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  const speak = useCallback((text) => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 0.95;
+    utt.pitch = 0.9;
+    utt.onstart = () => setIsSpeaking(true);
+    utt.onend = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utt);
+  }, []);
+
+  const proactiveGreeting = useCallback(() => {
+    const hour = new Date().getHours();
+    let greeting;
+    if (hour < 12) greeting = 'Good morning, sir.';
+    else if (hour < 17) greeting = 'Good afternoon, sir.';
+    else greeting = 'Good evening, sir.';
+
+    const parts = [greeting, 'All systems operational.'];
+    if (system?.uptime_formatted) parts.push(`Uptime: ${system.uptime_formatted}.`);
+    if (memory?.total_memories) parts.push(`Memory: ${memory.total_memories} memories, ${memory.total_entities} entities.`);
+    if (townhall?.active_sessions) parts.push(`${townhall.active_sessions} active agent sessions.`);
+    parts.push('I am ready.');
+
+    const fullText = parts.join(' ');
+    setChatHistory(prev => [...prev, { role: 'assistant', text: fullText, time: new Date().toISOString() }]);
+    speak(fullText);
+  }, [system, memory, townhall, speak]);
+
+  useEffect(() => {
+    const timer = setTimeout(proactiveGreeting, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!system || !healthStatus) return;
+    const last = systemStateRef.current;
+    const cpu = system.cpu_percent;
+    const mem = system.memory_percent;
+    const disk = system.disk_percent;
+
+    if (cpu > 90 && (!last.cpuAlert || Date.now() - last.cpuAlert > 60000)) {
+      const msg = `Warning, sir. CPU usage is at ${cpu.toFixed(1)} percent. I recommend checking running processes.`;
+      setChatHistory(prev => [...prev, { role: 'assistant', text: `[ALERT] ${msg}`, time: new Date().toISOString() }]);
+      speak(msg);
+      last.cpuAlert = Date.now();
+    }
+    if (mem > 90 && (!last.memAlert || Date.now() - last.memAlert > 60000)) {
+      const msg = `Warning, sir. Memory usage is at ${mem.toFixed(1)} percent. I recommend clearing unnecessary processes.`;
+      setChatHistory(prev => [...prev, { role: 'assistant', text: `[ALERT] ${msg}`, time: new Date().toISOString() }]);
+      speak(msg);
+      last.memAlert = Date.now();
+    }
+    if (disk > 95 && (!last.diskAlert || Date.now() - last.diskAlert > 120000)) {
+      const msg = `Critical, sir. Disk usage is at ${disk.toFixed(1)} percent. Immediate cleanup required.`;
+      setChatHistory(prev => [...prev, { role: 'assistant', text: `[ALERT] ${msg}`, time: new Date().toISOString() }]);
+      speak(msg);
+      last.diskAlert = Date.now();
+    }
+  }, [system, healthStatus, speak]);
+
+  useEffect(() => {
+    const proactiveCheck = async () => {
+      try {
+        const [healthRes, memRes] = await Promise.all([
+          fetch(`${API}/api/health/status`).then(r => r.json()).catch(() => null),
+          fetch(`${API}/api/memory/stats`).then(r => r.json()).catch(() => null),
+        ]);
+
+        if (healthRes?.alerts?.length > 0) {
+          const alert = healthRes.alerts[0];
+          const msg = `I detected a health alert: ${alert.message || alert}`;
+          if (!systemStateRef.current.lastHealthAlert || Date.now() - systemStateRef.current.lastHealthAlert > 120000) {
+            setChatHistory(prev => [...prev, { role: 'assistant', text: `[PROACTIVE] ${msg}`, time: new Date().toISOString() }]);
+            speak(msg);
+            systemStateRef.current.lastHealthAlert = Date.now();
+          }
+        }
+
+        if (memRes?.total_memories && memRes.total_memories > 0 && !systemStateRef.current.memoryAnnounced) {
+          systemStateRef.current.memoryAnnounced = true;
+        }
+
+        const gitRes = await fetch(`${API}/api/git/status`).then(r => r.json()).catch(() => null);
+        if (gitRes?.dirty_files > 10 && !systemStateRef.current.gitWarned) {
+          const msg = `Sir, you have ${gitRes.dirty_files} uncommitted changes. I recommend reviewing and committing them.`;
+          setChatHistory(prev => [...prev, { role: 'assistant', text: `[PROACTIVE] ${msg}`, time: new Date().toISOString() }]);
+          speak(msg);
+          systemStateRef.current.gitWarned = true;
+        }
+      } catch (e) {}
+    };
+
+    const timer = setTimeout(proactiveCheck, 5000);
+    const interval = setInterval(proactiveCheck, 60000);
+    return () => { clearTimeout(timer); clearInterval(interval); };
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -88,17 +188,13 @@ function App() {
           setIsTyping(false);
           setOrbPulse(1);
           setTimeout(() => setOrbPulse(0), 1000);
+          speak(data.response);
         } else if (data.type === 'voice_response') {
           setChatHistory(prev => [...prev, { role: 'assistant', text: data.response, time: new Date().toISOString() }]);
           setIsTyping(false);
           setOrbPulse(1);
           setTimeout(() => setOrbPulse(0), 1000);
-          if (data.speak && 'speechSynthesis' in window) {
-            const utt = new SpeechSynthesisUtterance(data.response);
-            utt.rate = 0.95;
-            utt.pitch = 0.9;
-            window.speechSynthesis.speak(utt);
-          }
+          speak(data.response);
         } else if (data.type === 'log_entry') {
           setLogs(prev => [...prev.slice(-499), data.log]);
         } else if (data.type === 'log_history') {
@@ -135,6 +231,7 @@ function App() {
           setIsTyping(false);
           setOrbPulse(1);
           setTimeout(() => setOrbPulse(0), 1000);
+          speak(data.response);
         });
     }
   }, []);

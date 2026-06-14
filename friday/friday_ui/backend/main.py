@@ -1,99 +1,161 @@
-"""FRIDAY API Server — Full-featured backend with voice, logs, memory graph."""
+"""FRIDAY API Server v4 — FULL engine from live.py with all 500+ tools."""
 import os
 import sys
 import json
 import time
 import uuid
-import io
-import wave
-import tempfile
+import asyncio
 import threading
-import queue
-import logging
 import traceback
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, ROOT)
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from friday.bootstrap import bootstrap_tool
-from friday.validation_middleware import validation_tool
-from friday.autonomous_memory import autonomous_memory_tool
-from friday.dashboard_cli import dashboard_cli_tool
-from friday.codebase_analyzer import codebase_analyzer_tool
-from friday.code_review import code_review_tool
-from friday.workflow_engine import workflow_tool
-from friday.plugins import plugin_tool
-from friday.security_scanner import security_scanner_tool
-from friday.config_manager import config_manager_tool
-from friday.logging_system import logging_tool
-from friday.rate_limiter import rate_limiter_tool
-from friday.task_scheduler import task_scheduler_tool
-from friday.health_monitor import health_monitor_tool
-from friday.cache_system import cache_system_tool
-from friday.metrics_collector import metrics_collector_tool
-from friday.document_parser import document_parser_tool
-from friday.database_connector import database_connector_tool
-from friday.git_operations import git_operations_tool
-from friday.notification_system import notification_system_tool
-from friday.api_gateway import api_gateway_tool
-from friday.backup_system import backup_system_tool
-from friday.townhall_agents import townhall_tool
+from friday.live import TOOL_MAP, _invoke_tool, _build_tools
 
 _tools_loaded = False
-_tool_registry = {}
+_tool_descriptions = {}
 
 
-def _safe_json(raw):
-    if isinstance(raw, dict):
-        return raw
-    if isinstance(raw, str):
-        try:
-            return json.loads(raw)
-        except Exception:
-            pass
-    return {}
+def _load_all_tools():
+    global _tools_loaded, _tool_descriptions
+    if _tools_loaded:
+        return
+    for name, func in TOOL_MAP.items():
+        desc = getattr(func, '__doc__', '') or ''
+        _tool_descriptions[name] = {
+            "name": name,
+            "description": desc.strip().split('\n')[0][:200],
+            "category": _categorize(name),
+        }
+    _tools_loaded = True
 
 
-def _load_tools():
-    global _tools_loaded, _tool_registry
-    if not _tools_loaded:
-        try:
-            from friday.tools.registry import TOOL_DESCRIPTORS
-            for desc in TOOL_DESCRIPTORS:
-                mod_path, fn_name = desc[0], desc[1]
-                cat = mod_path.split(".")[-1].replace("_tools", "")
-                _tool_registry[fn_name] = {"category": cat, "description": desc[2], "module": mod_path}
-        except Exception:
-            _tool_registry = {}
-        _tools_loaded = True
+def _categorize(name):
+    categories = {
+        "spotify": "music", "camera": "vision", "cv_": "vision", "ask_camera": "vision",
+        "show_camera": "vision", "hide_camera": "vision", "locate_on_camera": "vision",
+        "nim_describe": "vision", "vision_": "vision",
+        "web_search": "search", "deep_research": "research", "v_deep_research": "research",
+        "knowledge_": "knowledge", "osint": "osint", "generate_research": "research",
+        "github_": "github", "git_": "git",
+        "open_app": "system", "close_app": "system", "list_running": "system",
+        "run_cmd": "system", "safe_run_cmd": "system", "system_": "system",
+        "type_text": "desktop", "click": "desktop", "double_click": "desktop",
+        "right_click": "desktop", "move_mouse": "desktop", "drag": "desktop",
+        "hotkey": "desktop", "press_key": "desktop", "scroll": "desktop",
+        "read_file": "files", "write_file": "files", "list_files": "files",
+        "find_files": "files", "copy_file": "files", "move_file": "files",
+        "delete_file": "files", "generate_file": "files",
+        "clipboard_": "desktop", "take_snapshot": "desktop", "recall_snapshot": "desktop",
+        "browser_use_": "browser", "opencli_": "browser", "webbridge_": "browser",
+        "desktop_use_": "desktop", "desktop_list_": "desktop", "desktop_get_": "desktop",
+        "desktop_focus": "desktop", "desktop_launch": "desktop", "desktop_click": "desktop",
+        "desktop_type": "desktop", "desktop_extract": "desktop", "desktop_screenshot": "desktop",
+        "desktop_scroll": "desktop", "desktop_press": "desktop",
+        "voice_use_": "voice", "voice_list": "voice", "voice_record": "voice",
+        "voice_transcribe": "voice", "voice_speak": "voice", "voice_play": "voice",
+        "voice_detect": "voice", "voice_analyze": "voice",
+        "memory_": "memory", "chroma_": "memory", "redis_": "memory",
+        "neo4j_": "memory", "vm_": "memory", "kyu_": "memory",
+        "email": "email", "gmail": "email", "send_email": "email", "read_email": "email",
+        "sheets_": "google", "docs_": "google", "slides_": "google", "drive_": "google",
+        "calendar_": "google", "tasks_": "google", "photos_": "google", "forms_": "google",
+        "analytics_": "google", "searchconsole_": "google", "books_": "google",
+        "people_": "google", "bigquery_": "google", "storage_": "google", "firestore_": "google",
+        "youtube_": "google", "translate_": "google", "tts_": "voice", "stt_": "voice",
+        "maps_": "google", "nlp_": "nlp",
+        "wifi_": "security", "network_": "security", "arp_": "security",
+        "traceroute": "security", "dns_": "security", "port_scan": "security",
+        "ping_": "security", "ssl_": "security",
+        "shodan_": "security", "whois_": "security", "geoip_": "security", "hibp_": "security",
+        "metasploit_": "pentest", "msf_": "pentest", "pentest_": "pentest",
+        "analyze_email": "security", "trace_email": "security", "detect_email": "security",
+        "check_spf": "security", "check_dkim": "security", "check_dmarc": "security",
+        "email_security": "security", "verify_email": "security",
+        "email_disposable": "security", "email_full": "security", "email_domain": "security",
+        "email_trace": "security", "behind_the_email": "security",
+        "forensic_": "security",
+        "agent_": "agents", "multi_agent": "agents", "friday_should": "agents",
+        "friday_parse": "agents", "friday_key": "agents", "friday_workflow": "agents",
+        "friday_multi": "agents", "friday_quick": "agents", "close_all_agent": "agents",
+        "ecosystem_": "system", "proactive_": "system", "predictive_": "system",
+        "reflection_": "system", "context_": "system", "monitor_": "system",
+        "dream_": "system", "scheduler_": "system", "skills_": "system",
+        "self_improve": "system", "auto_update": "system", "crash_": "system",
+        "pr_manager": "github", "protector_": "system",
+        "deep_code_review": "code", "code_review_report": "code",
+        "workflow_tool": "workflow", "plugin_tool": "plugins",
+        "knowledge_graph": "knowledge",
+        "mcp_": "mcp", "episodic_": "memory", "authority_": "system",
+        "snapshot_": "system", "sidecar_": "system", "autonomy_": "system",
+        "capabilities_": "system", "ironman_": "system",
+        "memory_tree": "memory", "model_router": "ai", "extension_registry": "system",
+        "diagnostics_": "system", "health_monitor": "health",
+        "cookbook_": "system", "show_pointer": "ui", "show_cursor": "ui",
+        "show_annotation": "ui", "clear_overlays": "ui",
+        "social_analyzer": "osint", "instagram_": "osint", "twitter_": "osint",
+        "facebook_": "osint", "linkedin_": "osint", "tiktok_": "osint",
+        "telegram_": "osint", "reddit_": "osint",
+        "holehe_": "osint", "email_rep": "osint", "username_search": "osint",
+        "phone_": "osint", "dns_enum": "osint", "dns_bruteforce": "osint",
+        "dns_zone": "osint", "dns_reverse": "osint",
+        "spf_check": "osint", "dkim_check": "osint", "dmarc_check": "osint",
+        "mx_lookup": "osint", "whatweb": "osint", "whatcms": "osint",
+        "cdn_detect": "osint", "web_server_headers": "osint",
+        "urlscan_": "osint", "virus_total": "osint",
+        "wayback_": "osint", "leak_check": "osint", "intelx_": "osint", "dehashed_": "osint",
+        "ip_": "osint", "domain_": "osint", "certificate_": "osint",
+        "web_crawl": "osint", "email_extractor": "osint", "meta_extractor": "osint",
+        "page_text": "osint", "security_headers": "osint", "cors_check": "osint",
+        "hsts_check": "osint", "robots_txt": "osint",
+        "btc_": "osint", "eth_": "osint",
+        "format_osint": "osint", "summarize_osint": "osint", "osint_to_": "osint",
+        "generate_smart": "security", "wifi_smart": "security", "wifi_capture": "security",
+        "wifi_crack_handshake": "security", "download_wordlist": "security",
+        "wordlist_stats": "security", "wifi_detect": "security",
+        "wifi_list": "security", "wifi_show": "security", "wifi_scan": "security",
+        "wifi_connection": "security", "wifi_crack": "security", "wifi_interface": "security",
+        "wifi_all": "security",
+        "generate_": "system", "see_screen": "vision", "open_url": "system",
+        "climb_codebase": "code", "situational_awareness": "system",
+        "get_time": "system", "open_roblox": "system", "open_microsoft": "system",
+        "netflix_": "entertainment", "alexa_": "smart_home", "tell_alexa": "smart_home",
+        "home_assistant": "smart_home", "smart_home": "smart_home",
+        "queue_": "system", "multi_task": "system",
+        "message_channel": "comms", "send_notification": "comms",
+        "get_pending": "comms", "clear_notifications": "comms",
+        "google_authorize": "google", "exchange_oauth": "google",
+        "search_browser": "browser", "open_history": "browser",
+        "stayfree_": "browser", "send_instagram": "social",
+        "read_discord": "social", "read_slack": "social",
+        "video_search": "search", "opencli_init": "browser",
+    }
+    for pattern, cat in categories.items():
+        if pattern in name:
+            return cat
+    return "other"
 
 
-app = FastAPI(title="F.R.I.D.A.Y. API", version="3.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="F.R.I.D.A.Y. API", version="4.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+                   allow_methods=["*"], allow_headers=["*"])
 
 connected_clients: List[WebSocket] = []
 system_state: Dict[str, Any] = {}
 log_buffer: List[Dict] = []
-log_subscribers: List[WebSocket] = []
 
 
 class ChatMessage(BaseModel):
     message: str
-
 
 class ToolCall(BaseModel):
     tool: str
@@ -101,53 +163,13 @@ class ToolCall(BaseModel):
     params: Optional[Dict[str, Any]] = None
 
 
-class VoiceMessage(BaseModel):
-    text: str
-    voice: Optional[str] = "default"
-
-
-class RelationshipAdd(BaseModel):
-    source: str
-    target: str
-    rel_type: str
-
-
-class MemoryStore(BaseModel):
-    content: str
-    source: Optional[str] = "ui"
-    entity: Optional[str] = None
-    memory_type: Optional[str] = "conversation"
-    importance: Optional[float] = 0.5
-
-
-class ConversationMsg(BaseModel):
-    role: str
-    content: str
-    participant: Optional[str] = "user"
-
-
 @app.on_event("startup")
 async def startup():
     system_state["start_time"] = time.time()
     system_state["id"] = str(uuid.uuid4())[:8]
     system_state["chat_history"] = []
-    system_state["voice_enabled"] = True
-    system_state["terminal_logs"] = []
-
-
-def _capture_log(module: str, level: str, message: str):
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "module": module,
-        "level": level,
-        "message": message,
-    }
-    log_buffer.append(entry)
-    if len(log_buffer) > 500:
-        log_buffer.pop(0)
-    system_state.setdefault("terminal_logs", []).append(entry)
-    if len(system_state["terminal_logs"]) > 200:
-        system_state["terminal_logs"] = system_state["terminal_logs"][-200:]
+    system_state["tool_calls"] = []
+    _load_all_tools()
 
 
 @app.websocket("/ws")
@@ -155,537 +177,389 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     connected_clients.append(ws)
     try:
-        await ws.send_json({"type": "connected", "session": system_state.get("id")})
+        await ws.send_json({"type": "connected", "session": system_state.get("id"),
+                            "tools_count": len(TOOL_MAP)})
         while True:
             data = await ws.receive_text()
             msg = json.loads(data)
             if msg.get("type") == "chat":
-                response = process_chat(msg.get("message", ""))
+                response = await process_chat_ai(msg.get("message", ""))
                 await ws.send_json({"type": "chat_response", "response": response})
-                _capture_log("chat", "info", f"User: {msg.get('message', '')[:80]}")
-                _capture_log("chat", "info", f"FRIDAY: {response[:80]}")
             elif msg.get("type") == "voice":
-                response = process_chat(msg.get("message", ""))
+                response = await process_chat_ai(msg.get("message", ""))
                 await ws.send_json({"type": "voice_response", "response": response, "speak": True})
-                _capture_log("voice", "info", f"Voice: {response[:80]}")
+            elif msg.get("type") == "tool_call":
+                result = await execute_tool(msg.get("tool", ""), msg.get("args", {}))
+                await ws.send_json({"type": "tool_result", "tool": msg.get("tool"), "result": result})
             elif msg.get("type") == "heartbeat":
                 await ws.send_json({"type": "heartbeat", "status": "alive"})
-            elif msg.get("type") == "subscribe_logs":
-                log_subscribers.append(ws)
-                recent = log_buffer[-100:]
-                await ws.send_json({"type": "log_history", "logs": recent})
     except WebSocketDisconnect:
-        if ws in connected_clients:
-            connected_clients.remove(ws)
-        if ws in log_subscribers:
-            log_subscribers.remove(ws)
+        connected_clients.remove(ws)
 
 
-async def broadcast(msg: dict):
-    for client in connected_clients[:]:
-        try:
-            await client.send_json(msg)
-        except Exception:
-            connected_clients.remove(client)
+async def execute_tool(func_name: str, args: dict) -> dict:
+    try:
+        result = await _invoke_tool(func_name, args)
+        if hasattr(result, '__await__'):
+            result = await result
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except Exception:
+                pass
+        system_state.setdefault("tool_calls", []).append({
+            "tool": func_name, "args": args, "timestamp": datetime.now().isoformat(),
+            "success": True,
+        })
+        return {"success": True, "result": result}
+    except Exception as e:
+        system_state.setdefault("tool_calls", []).append({
+            "tool": func_name, "args": args, "timestamp": datetime.now().isoformat(),
+            "success": False, "error": str(e),
+        })
+        return {"success": False, "error": str(e)}
 
 
-async def broadcast_log(entry: dict):
-    for ws in log_subscribers[:]:
-        try:
-            await ws.send_json({"type": "log_entry", "log": entry})
-        except Exception:
-            log_subscribers.remove(ws)
-
-
-def process_chat(message: str) -> str:
-    msg = message.lower().strip()
+async def process_chat_ai(message: str) -> str:
     system_state.setdefault("chat_history", []).append({
-        "role": "user",
-        "message": message,
-        "timestamp": datetime.now().isoformat(),
+        "role": "user", "message": message, "timestamp": datetime.now().isoformat(),
     })
 
-    if any(w in msg for w in ["status", "how are you", "how's it going"]):
-        uptime = time.time() - system_state.get("start_time", time.time())
-        hours = int(uptime // 3600)
-        mins = int((uptime % 3600) // 60)
-        mem = _safe_json(autonomous_memory_tool(action="stats"))
-        response = (
-            f"All systems operational, sir. Uptime: {hours}h {mins}m. "
-            f"Memory: {mem.get('total_memories', 0)} memories, "
-            f"{mem.get('total_entities', 0)} entities, "
-            f"{mem.get('total_relationships', 0)} relationships. "
-            f"CPU and disk healthy."
-        )
-    elif any(w in msg for w in ["tools", "what can you do"]):
-        _load_tools()
-        cats = {}
-        for info in _tool_registry.values():
-            c = info.get("category", "other")
-            cats[c] = cats.get(c, 0) + 1
-        cat_list = ", ".join(f"{v} {k}" for k, v in sorted(cats.items(), key=lambda x: -x[1])[:8])
-        response = f"I manage {len(_tool_registry)} tools across {len(cats)} categories: {cat_list}. I can validate code, analyze codebases, manage workflows, review code, run voice commands, and coordinate autonomous agents."
-    elif any(w in msg for w in ["memory", "remember"]):
-        raw = autonomous_memory_tool(action="stats")
-        d = _safe_json(raw)
-        response = (
-            f"My memory contains {d.get('total_memories', 0)} memories across "
-            f"{d.get('total_entities', 0)} entities with "
-            f"{d.get('total_relationships', 0)} relationships. "
-            f"Memory types: {d.get('memory_types', {})}"
-        )
-    elif any(w in msg for w in ["agent", "townhall", "deliberate"]):
-        raw = townhall_tool(action="status")
-        d = _safe_json(raw)
-        response = (
-            f"Townhall: {d.get('active_sessions', 0)} active sessions, "
-            f"{d.get('agents_registered', 0)} registered agents, "
-            f"{d.get('total_messages', 0)} total messages, "
-            f"{d.get('open_agenda_items', 0)} open agenda items."
-        )
-    elif any(w in msg for w in ["review", "code review"]):
-        response = "Ready to review code, sir. Submit your code and I will analyze it for security vulnerabilities, performance issues, style violations, and potential bugs. You can also ask me to scan specific files."
-    elif any(w in msg for w in ["workflow", "pipeline"]):
-        raw = workflow_tool(action="list")
-        d = _safe_json(raw)
-        count = len(d.get("workflows", []))
-        response = f"I have {count} workflows available. I can create custom pipelines for build, test, deploy, review, and research tasks."
-    elif any(w in msg for w in ["hello", "hi", "hey"]):
-        response = "Good evening, sir. How may I assist you tonight?"
-    elif any(w in msg for w in ["who are you", "what are you"]):
-        response = "I am FRIDAY — your Fully Responsive Intelligent Digital Assistant Youth. I manage your systems, analyze your code, hear your voice, and coordinate your agents. I was built to be your always-on AI companion."
-    elif any(w in msg for w in ["voice", "speak", "talk"]):
-        response = "Voice system active, sir. I can hear you through the microphone and respond with speech. Click the microphone icon to start a voice command."
-    elif any(w in msg for w in ["help"]):
-        response = (
-            "Available commands: status, tools, memory, agents, townhall, review, "
-            "workflow, voice, graph, logs, health, security, git, config. "
-            "You can also ask me to scan code, run analysis, or manage any system."
-        )
-    elif any(w in msg for w in ["graph", "relationship"]):
-        raw = autonomous_memory_tool(action="entities", limit=20)
-        d = _safe_json(raw)
-        entities = d.get("entities", [])
-        response = f"Knowledge graph contains {len(entities)} entities. Top entities: {', '.join(e.get('name', '?') for e in entities[:5])}. Switch to the Graph view to see the full relationship network."
-    elif any(w in msg for w in ["log", "logs"]):
-        count = len(log_buffer)
-        response = f"Terminal log buffer contains {count} entries. All system activity is streamed to the UI in real-time."
-    elif any(w in msg for w in ["health", "monitor"]):
-        raw = health_monitor_tool(action="status")
-        d = _safe_json(raw)
-        metrics = d.get("metrics", {})
-        response = (
-            f"Health check: CPU {metrics.get('cpu_percent', 0):.1f}%, "
-            f"Memory {metrics.get('memory_percent', 0):.1f}%, "
-            f"Disk {metrics.get('disk_percent', 0):.1f}%, "
-            f"Uptime {metrics.get('uptime', 0)/3600:.1f}h."
-        )
-    else:
-        response = f"I understand, sir. Processing your request about '{message[:50]}'. You can ask me about status, tools, memory, agents, voice, graph, logs, health, or any system operation."
+    try:
+        import google.genai as genai
+        from google.genai import types
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
+        if not api_key:
+            for line in open(os.path.join(ROOT, ".env"), "r").readlines() if os.path.exists(os.path.join(ROOT, ".env")) else []:
+                if line.strip().startswith("GEMINI_API_KEY=") or line.strip().startswith("GOOGLE_API_KEY="):
+                    api_key = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+
+        if api_key:
+            client = genai.Client(api_key=api_key)
+            tool_decls = _build_tools()
+
+            contents = [types.Content(role="user", parts=[types.Part.from_text(text=message)])]
+
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    tools=tool_decls if tool_decls else None,
+                    system_instruction="You are FRIDAY, an AI assistant. You have access to 500+ tools. Use them to help the user. Be concise and helpful. Always use tools when the user asks you to do something.",
+                ),
+            )
+
+            text_parts = []
+            for candidate in response.candidates:
+                for part in candidate.content.parts:
+                    if part.text:
+                        text_parts.append(part.text)
+                    if part.function_call:
+                        fc = part.function_call
+                        args = dict(fc.args) if fc.args else {}
+                        result = await execute_tool(fc.name, args)
+                        text_parts.append(f"[Used tool: {fc.name}]")
+
+            reply = " ".join(text_parts) if text_parts else "I processed your request, sir."
+        else:
+            reply = _fallback_chat(message)
+
+    except Exception as e:
+        reply = _fallback_chat(message)
 
     system_state["chat_history"].append({
-        "role": "assistant",
-        "message": response,
-        "timestamp": datetime.now().isoformat(),
+        "role": "assistant", "message": reply, "timestamp": datetime.now().isoformat(),
     })
-    _capture_log("friday", "info", response[:120])
-    return response
+    return reply
 
 
-def get_memory_usage() -> int:
-    try:
-        import psutil
-        return int(psutil.Process().memory_info().rss / 1024 / 1024)
-    except Exception:
-        return 0
+def _fallback_chat(message: str) -> str:
+    msg = message.lower().strip()
+    if any(w in msg for w in ["status", "how are you"]):
+        uptime = time.time() - system_state.get("start_time", time.time())
+        return f"All systems operational, sir. Uptime: {int(uptime//3600)}h {int((uptime%3600)//60)}m. {len(TOOL_MAP)} tools loaded and ready."
+    elif any(w in msg for w in ["tools", "what can you do"]):
+        cats = {}
+        for name in TOOL_MAP:
+            cat = _categorize(name)
+            cats[cat] = cats.get(cat, 0) + 1
+        top = ", ".join(f"{v} {k}" for k, v in sorted(cats.items(), key=lambda x: -x[1])[:10])
+        return f"I have {len(TOOL_MAP)} tools across {len(cats)} categories: {top}. Ask me anything."
+    elif any(w in msg for w in ["hello", "hi", "hey"]):
+        return "Good evening, sir. All systems operational. How may I assist you tonight?"
+    elif any(w in msg for w in ["who are you"]):
+        return "I am FRIDAY — your Fully Responsive Intelligent Digital Assistant Youth. I have 500+ tools covering voice, vision, security, research, code, OSINT, Google, GitHub, browser, desktop, and more."
+    elif any(w in msg for w in ["memory", "remember"]):
+        from friday.autonomous_memory import autonomous_memory_tool
+        raw = autonomous_memory_tool(action="stats")
+        import json as _json
+        d = _json.loads(raw) if isinstance(raw, str) else raw
+        return f"Memory: {d.get('total_memories', 0)} memories, {d.get('total_entities', 0)} entities, {d.get('total_relationships', 0)} relationships."
+    elif any(w in msg for w in ["agent", "townhall"]):
+        from friday.townhall_agents import townhall_tool
+        raw = townhall_tool(action="status")
+        import json as _json
+        d = _json.loads(raw) if isinstance(raw, str) else raw
+        return f"Townhall: {d.get('active_sessions', 0)} active sessions, {d.get('agents_registered', 0)} agents, {d.get('total_messages', 0)} messages."
+    else:
+        return f"I understand, sir. Processing '{message[:50]}'. I have {len(TOOL_MAP)} tools available — ask me to use any of them."
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "3.0.0", "uptime": time.time() - system_state.get("start_time", time.time())}
-
+    return {"status": "ok", "version": "4.0.0", "tools_count": len(TOOL_MAP),
+            "uptime": time.time() - system_state.get("start_time", time.time())}
 
 @app.get("/api/system")
 async def system_info():
-    import psutil
-    import platform
+    import psutil, platform
     mem = psutil.virtual_memory()
-    cpu = psutil.cpu_percent(interval=0.1)
-    disk = psutil.disk_usage("C:\\" if os.name == "nt" else "/")
+    disk = psutil.disk_usage("C:\\")
     uptime = time.time() - system_state.get("start_time", time.time())
     return {
-        "hostname": platform.node(),
-        "platform": platform.system(),
+        "hostname": platform.node(), "platform": platform.system(),
         "python_version": platform.python_version(),
-        "cpu_percent": cpu,
-        "cpu_count": psutil.cpu_count(),
-        "memory_total_gb": round(mem.total / 1024**3, 1),
-        "memory_used_gb": round(mem.used / 1024**3, 1),
-        "memory_percent": mem.percent,
-        "memory_available_gb": round(mem.available / 1024**3, 1),
-        "disk_total_gb": round(disk.total / 1024**3, 1),
-        "disk_used_gb": round(disk.used / 1024**3, 1),
+        "cpu_percent": psutil.cpu_percent(interval=0.1), "cpu_count": psutil.cpu_count(),
+        "memory_total_gb": round(mem.total/1024**3, 1), "memory_used_gb": round(mem.used/1024**3, 1),
+        "memory_percent": mem.percent, "memory_available_gb": round(mem.available/1024**3, 1),
+        "disk_total_gb": round(disk.total/1024**3, 1), "disk_used_gb": round(disk.used/1024**3, 1),
         "disk_percent": disk.percent,
         "uptime_seconds": int(uptime),
-        "uptime_formatted": "%dh %dm %ds" % (int(uptime // 3600), int((uptime % 3600) // 60), int(uptime % 60)),
-        "session_id": system_state.get("id"),
-        "pid": os.getpid(),
+        "uptime_formatted": "%dh %dm %ds" % (int(uptime//3600), int((uptime%3600)//60), int(uptime%60)),
+        "session_id": system_state.get("id"), "pid": os.getpid(),
+        "tools_count": len(TOOL_MAP),
     }
-
-
-@app.get("/api/services")
-async def services():
-    raw = bootstrap_tool(action="status")
-    status = _safe_json(raw)
-    return {
-        "services": status.get("services", {}),
-        "total_tools": len(_tool_registry) if _tool_registry else 380,
-        "categories": len(set(info.get("category", "") for info in _tool_registry.values())) if _tool_registry else 10,
-    }
-
 
 @app.get("/api/tools")
 async def tools():
-    _load_tools()
-    tools_by_category = {}
-    for name, info in _tool_registry.items():
-        cat = info.get("category", "other")
-        if cat not in tools_by_category:
-            tools_by_category[cat] = []
-        tools_by_category[cat].append({"name": name, "description": info.get("description", "")})
-    return {"tools": tools_by_category, "total": len(_tool_registry)}
+    _load_all_tools()
+    by_cat = {}
+    for name, info in _tool_descriptions.items():
+        cat = info["category"]
+        if cat not in by_cat:
+            by_cat[cat] = []
+        by_cat[cat].append({"name": name, "description": info["description"]})
+    return {"tools": by_cat, "total": len(TOOL_MAP), "categories": len(by_cat)}
 
+@app.get("/api/tool/list")
+async def tool_list():
+    return {"tools": list(TOOL_MAP.keys()), "count": len(TOOL_MAP)}
 
-@app.get("/api/agents")
-async def agents():
-    raw = bootstrap_tool(action="status")
-    status = _safe_json(raw)
-    return {
-        "active_agents": status.get("townhall", {}).get("active_agents", 0) if isinstance(status, dict) else 0,
-        "sessions": status.get("townhall", {}).get("sessions", 0) if isinstance(status, dict) else 0,
-        "deliberations": status.get("townhall", {}).get("deliberations", 0) if isinstance(status, dict) else 0,
-    }
-
-
-@app.get("/api/memory")
-async def memory():
-    raw = autonomous_memory_tool(action="stats")
-    return _safe_json(raw)
-
-
-@app.get("/api/memory/recent")
-async def memory_recent():
-    result = autonomous_memory_tool(action="recent", hours=24, limit=50)
-    if isinstance(result, str):
-        try:
-            result = json.loads(result)
-        except Exception:
-            result = []
-    return {"items": result if isinstance(result, list) else []}
-
-
-@app.get("/api/memory/entities")
-async def memory_entities():
-    raw = autonomous_memory_tool(action="entities", limit=100)
-    return _safe_json(raw)
-
-
-@app.get("/api/memory/graph")
-async def memory_graph():
-    raw = autonomous_memory_tool(action="graph")
-    d = _safe_json(raw)
-    if not d.get("nodes"):
-        entities_raw = autonomous_memory_tool(action="entities", limit=50)
-        entities_d = _safe_json(entities_raw)
-        entities = entities_d.get("entities", [])
-        nodes = []
-        edges = []
-        seen = set()
-        for e in entities:
-            name = e.get("name", "")
-            if name and name not in seen and len(name) > 1:
-                seen.add(name)
-                nodes.append({
-                    "id": name,
-                    "type": e.get("type", "unknown"),
-                    "mentions": e.get("mentions", 1),
-                    "size": max(5, min(30, e.get("mentions", 1) * 2)),
-                })
-        for i in range(len(nodes)):
-            for j in range(i + 1, min(i + 4, len(nodes))):
-                edges.append({
-                    "source": nodes[i]["id"],
-                    "target": nodes[j]["id"],
-                    "type": "related",
-                })
-        d = {"nodes": nodes, "edges": edges}
-    return d
-
-
-@app.post("/api/memory/store")
-async def memory_store(msg: MemoryStore):
-    raw = autonomous_memory_tool(
-        action="store",
-        content=msg.content,
-        source=msg.source,
-        entity=msg.entity,
-        memory_type=msg.memory_type,
-        importance=msg.importance,
-    )
-    return _safe_json(raw)
-
-
-@app.post("/api/memory/learn")
-async def memory_learn(msg: ChatMessage):
-    raw = autonomous_memory_tool(action="learn", text=msg.message, source="ui")
-    return _safe_json(raw)
-
-
-@app.post("/api/memory/relationship")
-async def memory_relationship(msg: RelationshipAdd):
-    raw = autonomous_memory_tool(action="relationship", source=msg.source, target=msg.target, type=msg.rel_type)
-    return _safe_json(raw)
-
+@app.post("/api/tool/invoke")
+async def invoke_tool_endpoint(call: ToolCall):
+    result = await execute_tool(call.tool, call.params or {})
+    return result
 
 @app.post("/api/chat")
 async def chat(msg: ChatMessage):
-    response = process_chat(msg.message)
-    return {"response": response, "history": system_state.get("chat_history", [])}
-
+    response = await process_chat_ai(msg.message)
+    return {"response": response, "history": system_state.get("chat_history", [])[-50:]}
 
 @app.get("/api/chat/history")
 async def chat_history():
     return {"history": system_state.get("chat_history", [])}
 
+@app.get("/api/tool/calls")
+async def tool_calls():
+    return {"calls": system_state.get("tool_calls", [])[-100:], "total": len(system_state.get("tool_calls", []))}
 
-@app.post("/api/tools/call")
-async def call_tool(call: ToolCall):
-    tools = {
-        "bootstrap": bootstrap_tool,
-        "validation": validation_tool,
-        "memory": autonomous_memory_tool,
-        "dashboard": dashboard_cli_tool,
-        "analyzer": codebase_analyzer_tool,
-        "review": code_review_tool,
-        "workflow": workflow_tool,
-        "plugin": plugin_tool,
-        "security": security_scanner_tool,
-        "config": config_manager_tool,
-        "logging": logging_tool,
-        "rate_limiter": rate_limiter_tool,
-        "scheduler": task_scheduler_tool,
-        "health": health_monitor_tool,
-        "cache": cache_system_tool,
-        "metrics": metrics_collector_tool,
-        "parser": document_parser_tool,
-        "database": database_connector_tool,
-        "git": git_operations_tool,
-        "notification": notification_system_tool,
-        "gateway": api_gateway_tool,
-        "backup": backup_system_tool,
-        "townhall": townhall_tool,
-    }
-    tool_fn = tools.get(call.tool)
-    if not tool_fn:
-        return JSONResponse(status_code=400, content={"error": f"Unknown tool: {call.tool}"})
+@app.get("/api/memory")
+async def memory():
+    from friday.autonomous_memory import autonomous_memory_tool
+    raw = autonomous_memory_tool(action="stats")
     try:
-        result = tool_fn(action=call.action, **(call.params or {}))
-        return {"result": _safe_json(result) if isinstance(result, (str, dict, list)) else result}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
+@app.get("/api/memory/entities")
+async def memory_entities():
+    from friday.autonomous_memory import autonomous_memory_tool
+    raw = autonomous_memory_tool(action="entities", limit=100)
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+
+@app.get("/api/memory/graph")
+async def memory_graph():
+    from friday.autonomous_memory import autonomous_memory_tool
+    raw = autonomous_memory_tool(action="graph")
+    try:
+        d = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        d = {}
+    if not d.get("nodes"):
+        ent_raw = autonomous_memory_tool(action="entities", limit=50)
+        try:
+            ent_d = json.loads(ent_raw) if isinstance(ent_raw, str) else ent_raw
+        except Exception:
+            ent_d = {}
+        entities = ent_d.get("entities", [])
+        nodes, edges, seen = [], [], set()
+        for e in entities:
+            name = e.get("name", "")
+            if name and name not in seen and len(name) > 1:
+                seen.add(name)
+                nodes.append({"id": name, "type": e.get("type", "unknown"),
+                              "mentions": e.get("mentions", 1), "size": max(5, min(30, e.get("mentions", 1)*2))})
+        for i in range(len(nodes)):
+            for j in range(i+1, min(i+4, len(nodes))):
+                edges.append({"source": nodes[i]["id"], "target": nodes[j]["id"], "type": "related"})
+        d = {"nodes": nodes, "edges": edges}
+    return d
+
+@app.post("/api/memory/store")
+async def memory_store(msg: dict):
+    from friday.autonomous_memory import autonomous_memory_tool
+    raw = autonomous_memory_tool(action="store", content=msg.get("content",""), source=msg.get("source","ui"))
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+
+@app.post("/api/memory/learn")
+async def memory_learn(msg: ChatMessage):
+    from friday.autonomous_memory import autonomous_memory_tool
+    raw = autonomous_memory_tool(action="learn", text=msg.message, source="ui")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
 @app.get("/api/townhall/status")
 async def townhall_status():
-    return _safe_json(townhall_tool(action="status"))
-
+    from friday.townhall_agents import townhall_tool
+    raw = townhall_tool(action="status")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
 @app.get("/api/townhall/sessions")
 async def townhall_sessions():
+    from friday.townhall_agents import townhall_tool
     raw = townhall_tool(action="list_sessions")
-    d = _safe_json(raw)
+    try:
+        d = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        d = {}
     return {"sessions": d.get("sessions", []) if isinstance(d, dict) else []}
-
 
 @app.get("/api/townhall/agents")
 async def townhall_agents():
-    return _safe_json(townhall_tool(action="list_agents"))
-
+    from friday.townhall_agents import townhall_tool
+    raw = townhall_tool(action="list_agents")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
 @app.get("/api/townhall/agenda")
 async def townhall_agenda():
-    return _safe_json(townhall_tool(action="list_agenda"))
+    from friday.townhall_agents import townhall_tool
+    raw = townhall_tool(action="list_agenda")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
+@app.get("/api/services")
+async def services():
+    return {"total_tools": len(TOOL_MAP), "categories": len(set(_categorize(n) for n in TOOL_MAP))}
 
-@app.get("/api/workflows")
-async def workflows():
-    return _safe_json(workflow_tool(action="list"))
+@app.get("/api/agents")
+async def agents():
+    from friday.bootstrap import bootstrap_tool
+    raw = bootstrap_tool(action="status")
+    try:
+        d = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        d = {}
+    return {"active_agents": d.get("townhall", {}).get("active_agents", 0),
+            "sessions": d.get("townhall", {}).get("sessions", 0),
+            "tools_count": len(TOOL_MAP)}
 
-
-@app.get("/api/plugins")
-async def plugins():
-    return _safe_json(plugin_tool(action="list"))
-
-
-@app.get("/api/reviews/stats")
-async def review_stats():
-    return {"total_reviews": 0, "issues_found": 0}
-
-
-@app.get("/api/security/stats")
-async def security_stats():
-    return _safe_json(security_scanner_tool(action="stats"))
-
-
-@app.post("/api/security/scan")
-async def security_scan(msg: ChatMessage):
-    return _safe_json(security_scanner_tool(action="scan_code", code=msg.message))
-
-
-@app.get("/api/config")
-async def config_get():
-    return _safe_json(config_manager_tool(action="get_all"))
-
-
-@app.get("/api/config/stats")
-async def config_stats():
-    return _safe_json(config_manager_tool(action="stats"))
-
-
-@app.get("/api/logs")
-async def logs_recent():
-    return {"logs": log_buffer[-200:]}
-
-
-@app.get("/api/logs/stats")
-async def logs_stats():
-    levels = {}
-    modules = {}
-    for entry in log_buffer:
-        lvl = entry.get("level", "info")
-        mod = entry.get("module", "unknown")
-        levels[lvl] = levels.get(lvl, 0) + 1
-        modules[mod] = modules.get(mod, 0) + 1
-    return {"total": len(log_buffer), "by_level": levels, "by_module": modules}
-
-
-@app.get("/api/ratelimit/stats")
-async def ratelimit_stats():
-    return _safe_json(rate_limiter_tool(action="stats"))
-
-
-@app.get("/api/scheduler/tasks")
-async def scheduler_tasks():
-    return _safe_json(task_scheduler_tool(action="list"))
-
-
-@app.get("/api/scheduler/stats")
-async def scheduler_stats():
-    return _safe_json(task_scheduler_tool(action="stats"))
-
-
-@app.get("/api/health/status")
-async def health_status():
-    return _safe_json(health_monitor_tool(action="status"))
-
-
-@app.get("/api/health/alerts")
-async def health_alerts():
-    return _safe_json(health_monitor_tool(action="alerts"))
-
-
-@app.get("/api/cache/stats")
-async def cache_stats():
-    return _safe_json(cache_system_tool(action="stats"))
-
-
-@app.get("/api/metrics/dashboard")
-async def metrics_dashboard():
-    return _safe_json(metrics_collector_tool(action="dashboard"))
-
-
-@app.get("/api/parser/supported")
-async def parser_supported():
-    return _safe_json(document_parser_tool(action="supported"))
-
-
-@app.get("/api/database/list")
-async def database_list():
-    return _safe_json(database_connector_tool(action="list"))
-
-
-@app.get("/api/database/stats")
-async def database_stats():
-    return _safe_json(database_connector_tool(action="stats"))
-
+@app.get("/api/codebase")
+async def codebase():
+    from friday.codebase_analyzer import codebase_analyzer_tool
+    raw = codebase_analyzer_tool(action="stats")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
 @app.get("/api/git/status")
 async def git_status():
-    return _safe_json(git_operations_tool(action="status"))
-
+    from friday.git_operations import git_operations_tool
+    raw = git_operations_tool(action="status")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
 @app.get("/api/git/log")
 async def git_log():
-    return _safe_json(git_operations_tool(action="log", count=10))
+    from friday.git_operations import git_operations_tool
+    raw = git_operations_tool(action="log", count=10)
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
+@app.get("/api/health/status")
+async def health_status():
+    from friday.health_monitor import health_monitor_tool
+    raw = health_monitor_tool(action="status")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
-@app.get("/api/git/stats")
-async def git_stats():
-    return _safe_json(git_operations_tool(action="stats"))
+@app.get("/api/security/stats")
+async def security_stats():
+    from friday.security_scanner import security_scanner_tool
+    raw = security_scanner_tool(action="stats")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
+@app.get("/api/logs")
+async def logs():
+    return {"logs": log_buffer[-200:]}
 
-@app.get("/api/notifications/stats")
-async def notifications_stats():
-    return _safe_json(notification_system_tool(action="stats"))
+@app.get("/api/logs/stats")
+async def logs_stats():
+    return {"total": len(log_buffer)}
 
+@app.get("/api/config")
+async def config_get():
+    from friday.config_manager import config_manager_tool
+    raw = config_manager_tool(action="get_all")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
-@app.get("/api/notifications/history")
-async def notifications_history():
-    return _safe_json(notification_system_tool(action="history"))
+@app.get("/api/workflows")
+async def workflows():
+    from friday.workflow_engine import workflow_tool
+    raw = workflow_tool(action="list")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
-
-@app.get("/api/gateway/routes")
-async def gateway_routes():
-    return _safe_json(api_gateway_tool(action="routes"))
-
-
-@app.get("/api/gateway/stats")
-async def gateway_stats():
-    return _safe_json(api_gateway_tool(action="stats"))
-
-
-@app.get("/api/backups")
-async def backups_list():
-    return _safe_json(backup_system_tool(action="list"))
-
-
-@app.get("/api/backups/stats")
-async def backups_stats():
-    return _safe_json(backup_system_tool(action="stats"))
-
-
-@app.post("/api/voice/speak")
-async def voice_speak(msg: VoiceMessage):
-    _capture_log("voice", "info", f"TTS: {msg.text[:80]}")
-    return {"status": "ok", "text": msg.text, "voice": msg.voice}
-
-
-@app.post("/api/voice/listen")
-async def voice_listen():
-    return {"status": "listening", "engine": "web_speech_api"}
-
-
-@app.get("/api/conversations")
-async def list_conversations():
-    raw = autonomous_memory_tool(action="list_conversations", limit=20)
-    return _safe_json(raw)
-
-
-@app.get("/api/conversations/{conv_id}")
-async def get_conversation(conv_id: str):
-    raw = autonomous_memory_tool(action="get_conversation_summary", conversation_id=conv_id)
-    return _safe_json(raw)
-
+@app.get("/api/plugins")
+async def plugins():
+    from friday.plugins import plugin_tool
+    raw = plugin_tool(action="list")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
 
 FRONTEND_DIST = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 
@@ -704,11 +578,10 @@ if __name__ == "__main__":
     import uvicorn
     print("=" * 60)
     print("  F.R.I.D.A.Y. — Fully Responsive Intelligent Digital Assistant Youth")
-    print("  Version 3.0.0")
+    print(f"  Version 4.0.0 | {len(TOOL_MAP)} tools loaded")
     print("=" * 60)
-    print(f"  API Server:   http://localhost:8000")
-    print(f"  API Docs:     http://localhost:8000/docs")
     print(f"  Dashboard:    http://localhost:8000")
+    print(f"  API Docs:     http://localhost:8000/docs")
     print(f"  WebSocket:    ws://localhost:8000/ws")
     print(f"  Session:      {system_state.get('id', '---')}")
     print("=" * 60)
