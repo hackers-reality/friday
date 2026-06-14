@@ -85,6 +85,20 @@ from friday.api_server import api_server_tool
 from friday.plugins import plugin_tool
 from friday.code_review import code_review_tool
 from friday.workflow_engine import workflow_tool
+from friday.security_scanner import security_scanner_tool
+from friday.config_manager import config_manager_tool
+from friday.logging_system import logging_tool
+from friday.rate_limiter import rate_limiter_tool
+from friday.task_scheduler import task_scheduler_tool
+from friday.health_monitor import health_monitor_tool
+from friday.cache_system import cache_system_tool
+from friday.metrics_collector import metrics_collector_tool
+from friday.document_parser import document_parser_tool
+from friday.database_connector import database_connector_tool
+from friday.git_operations import git_operations_tool
+from friday.notification_system import notification_system_tool
+from friday.api_gateway import api_gateway_tool
+from friday.backup_system import backup_system_tool
 from friday.tools.nlp_tools import (
     sentiment_analysis, extract_entities, summarize_text, classify_text, compute_embeddings,
 )
@@ -606,4 +620,46 @@ __all__ = _tflat.__all__ + [
 
     # ── Workflow Engine ──
     "workflow_tool",
+
+    # ── Security Scanner ──
+    "security_scanner_tool",
+
+    # ── Config Manager ──
+    "config_manager_tool",
+
+    # ── Logging System ──
+    "logging_tool",
+
+    # ── Rate Limiter ──
+    "rate_limiter_tool",
+
+    # ── Task Scheduler ──
+    "task_scheduler_tool",
+
+    # ── Health Monitor ──
+    "health_monitor_tool",
+
+    # ── Cache System ──
+    "cache_system_tool",
+
+    # ── Metrics Collector ──
+    "metrics_collector_tool",
+
+    # ── Document Parser ──
+    "document_parser_tool",
+
+    # ── Database Connector ──
+    "database_connector_tool",
+
+    # ── Git Operations ──
+    "git_operations_tool",
+
+    # ── Notification System ──
+    "notification_system_tool",
+
+    # ── API Gateway ──
+    "api_gateway_tool",
+
+    # ── Backup System ──
+    "backup_system_tool",
 ]

@@ -559,6 +559,39 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
 
     # ── Workflow Engine ──
     ("friday.workflow_engine", "workflow_tool", "Workflow Engine -- create and run multi-step pipelines combining FRIDAY tools. 8 built-in templates.", {"action": {"type": "STRING", "description": "Action: list, create, run, status, history, templates, create_from_template, save, load, delete, clone, validate, step_info"}, "workflow_id": {"type": "STRING", "description": "Workflow ID for run/status/delete/clone/save/validate/step_info"}, "name": {"type": "STRING", "description": "Workflow name for create"}, "description": {"type": "STRING", "description": "Workflow description for create"}, "steps_json": {"type": "STRING", "description": "JSON array of step configs for create"}, "initial_context_json": {"type": "STRING", "description": "JSON object of initial context for run"}, "template_name": {"type": "STRING", "description": "Template name for create_from_template"}, "path": {"type": "STRING", "description": "File path for save/load"}, "step_id": {"type": "STRING", "description": "Step ID for step_info"}}, ["action"]),
+
+    # ── Security Scanner ──
+    ("friday.security_scanner", "security_scanner_tool", "Security Scanner -- scan code/files/directories for vulnerabilities, secrets, injection, crypto issues.", {"action": {"type": "STRING", "description": "Action: scan_code, scan_file, scan_directory, stats, history, severity_report, fix_suggestions"}, "code": {"type": "STRING", "description": "Code to scan"}, "language": {"type": "STRING", "description": "Language (python, javascript)"}, "path": {"type": "STRING", "description": "File/directory path to scan"}, "extensions": {"type": "STRING", "description": "Comma-separated file extensions"}}, ["action"]),
+
+    # ── Config Manager ──
+    ("friday.config_manager", "config_manager_tool", "Config Manager -- centralized configuration with validation, hot-reload, and history.", {"action": {"type": "STRING", "description": "Action: get, set, set_many, delete, get_all, schema, register_schema, history, export, import, reset, validate, stats"}, "key": {"type": "STRING", "description": "Config key"}, "value": {"type": "STRING", "description": "Config value (for set)"}, "updates_json": {"type": "STRING", "description": "JSON object for set_many"}, "include_sensitive": {"type": "BOOLEAN", "description": "Include sensitive values in get_all"}}, ["action"]),
+
+    # ── Logging System ──
+    ("friday.logging_system", "logging_tool", "Logging System -- structured logging with rotation, search, and analysis.", {"action": {"type": "STRING", "description": "Action: log, get_recent, search, get_errors, stats, files, clear, set_level, correlation"}, "level": {"type": "STRING", "description": "Log level (debug, info, warning, error, critical)"}, "message": {"type": "STRING", "description": "Log message"}, "module": {"type": "STRING", "description": "Module name"}, "query": {"type": "STRING", "description": "Search query"}, "count": {"type": "INTEGER", "description": "Number of entries to return"}}, ["action"]),
+
+    # ── Rate Limiter ──
+    ("friday.rate_limiter", "rate_limiter_tool", "Rate Limiter -- token bucket, sliding window, adaptive rate limiting.", {"action": {"type": "STRING", "description": "Action: check, add_rule, remove_rule, rules, status, stats, reset, cleanup"}, "rule": {"type": "STRING", "description": "Rule name"}, "client_id": {"type": "STRING", "description": "Client identifier"}, "tokens": {"type": "INTEGER", "description": "Number of tokens to consume"}}, ["action"]),
+
+    # ── Task Scheduler ──
+    ("friday.task_scheduler", "task_scheduler_tool", "Task Scheduler -- cron-like scheduling with persistence and execution tracking.", {"action": {"type": "STRING", "description": "Action: list, add, get, update, delete, enable, disable, run, run_pending, runs, stats, start, stop, schedule_info"}, "task_id": {"type": "STRING", "description": "Task ID"}, "name": {"type": "STRING", "description": "Task name"}, "schedule_json": {"type": "STRING", "description": "Schedule config JSON"}, "task_action": {"type": "STRING", "description": "Action to execute"}, "params_json": {"type": "STRING", "description": "Parameters JSON"}}, ["action"]),
+
+    # ── Health Monitor ──
+    ("friday.health_monitor", "health_monitor_tool", "Health Monitor -- service health tracking, alerts, and auto-recovery.", {"action": {"type": "STRING", "description": "Action: status, checks, check, check_all, add_check, remove_check, alerts, resolve_alert, metrics, stats, start, stop"}, "name": {"type": "STRING", "description": "Check name"}, "check_json": {"type": "STRING", "description": "Check config JSON"}, "alert_id": {"type": "STRING", "description": "Alert ID for resolve"}}, ["action"]),
+
+    # ── Cache System ──
+    ("friday.cache_system", "cache_system_tool", "Cache System -- multi-tier caching with LRU, TTL, and persistence.", {"action": {"type": "STRING", "description": "Action: get, set, set_many, delete, exists, clear, cleanup, keys, stats"}, "key": {"type": "STRING", "description": "Cache key"}, "value": {"type": "STRING", "description": "Value to cache"}, "ttl": {"type": "INTEGER", "description": "Time to live in seconds"}, "tags": {"type": "STRING", "description": "Cache tags"}}, ["action"]),
+
+    # ── Metrics Collector ──
+    ("friday.metrics_collector", "metrics_collector_tool", "Metrics Collector -- system and application metrics with time series and aggregation.", {"action": {"type": "STRING", "description": "Action: dashboard, record, counter, gauge, histogram, query, latest, counters, gauges, histograms, summary, collect_system, export, clear"}, "name": {"type": "STRING", "description": "Metric name"}, "value": {"type": "STRING", "description": "Metric value"}, "tags": {"type": "STRING", "description": "Tags JSON"}}, ["action"]),
+
+    # ── Document Parser ──
+    ("friday.document_parser", "document_parser_tool", "Document Parser -- parse PDF, DOCX, TXT, CSV, JSON, XML, markdown, code files.", {"action": {"type": "STRING", "description": "Action: parse, parse_text, batch, supported, info"}, "path": {"type": "STRING", "description": "File path to parse"}, "text": {"type": "STRING", "description": "Text to parse (for parse_text)"}, "paths": {"type": "STRING", "description": "JSON array of paths for batch"}}, ["action"]),
+
+    # ── Database Connector ──
+    ("friday.database_connector", "database_connector_tool", "Database Connector -- SQLite database operations with query builder.", {"action": {"type": "STRING", "description": "Action: list, execute, tables, schema, table_info, create_table, insert, insert_many, select, update, delete, drop_table, backup, stats"}, "database": {"type": "STRING", "description": "Database name"}, "query": {"type": "STRING", "description": "SQL query"}, "table": {"type": "STRING", "description": "Table name"}, "data_json": {"type": "STRING", "description": "Data JSON for insert/update"}}, ["action"]),
+
+    # ── Git Operations ──
+    ("friday.git_operations", "git_operations_tool", "Git Operations -- git commands: status, log, diff, add, commit, push, pull, branch, merge, stash.", {"action": {"type": "STRING", "description": "Action: status, log, diff, diff_stat, add, commit, push, pull, branches, branch_create, branch_delete, checkout, merge, stash, stash_pop, remotes, tags, blame, show, search, stats"}, "path": {"type": "STRING", "description": "Repository path"}, "message": {"type": "STRING", "description": "Commit message"}, "branch": {"type": "STRING", "description": "Branch name"}, "files": {"type": "STRING", "description": "Files to add"}}, ["action"]),
 ]
 
 
@@ -622,6 +655,48 @@ def build_new_tool_map() -> dict[str, Any]:
 
     # Workflow Engine
     tool_map["workflow_tool"] = _LazyToolFunc("friday.workflow_engine", "workflow_tool")
+
+    # Security Scanner
+    tool_map["security_scanner_tool"] = _LazyToolFunc("friday.security_scanner", "security_scanner_tool")
+
+    # Config Manager
+    tool_map["config_manager_tool"] = _LazyToolFunc("friday.config_manager", "config_manager_tool")
+
+    # Logging System
+    tool_map["logging_tool"] = _LazyToolFunc("friday.logging_system", "logging_tool")
+
+    # Rate Limiter
+    tool_map["rate_limiter_tool"] = _LazyToolFunc("friday.rate_limiter", "rate_limiter_tool")
+
+    # Task Scheduler
+    tool_map["task_scheduler_tool"] = _LazyToolFunc("friday.task_scheduler", "task_scheduler_tool")
+
+    # Health Monitor
+    tool_map["health_monitor_tool"] = _LazyToolFunc("friday.health_monitor", "health_monitor_tool")
+
+    # Cache System
+    tool_map["cache_system_tool"] = _LazyToolFunc("friday.cache_system", "cache_system_tool")
+
+    # Metrics Collector
+    tool_map["metrics_collector_tool"] = _LazyToolFunc("friday.metrics_collector", "metrics_collector_tool")
+
+    # Document Parser
+    tool_map["document_parser_tool"] = _LazyToolFunc("friday.document_parser", "document_parser_tool")
+
+    # Database Connector
+    tool_map["database_connector_tool"] = _LazyToolFunc("friday.database_connector", "database_connector_tool")
+
+    # Git Operations
+    tool_map["git_operations_tool"] = _LazyToolFunc("friday.git_operations", "git_operations_tool")
+
+    # Notification System
+    tool_map["notification_system_tool"] = _LazyToolFunc("friday.notification_system", "notification_system_tool")
+
+    # API Gateway
+    tool_map["api_gateway_tool"] = _LazyToolFunc("friday.api_gateway", "api_gateway_tool")
+
+    # Backup System
+    tool_map["backup_system_tool"] = _LazyToolFunc("friday.backup_system", "backup_system_tool")
 
     return tool_map
 

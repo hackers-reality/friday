@@ -507,6 +507,8 @@ def validate_html(html_content: str) -> ValidationResult:
             details={"unclosed": unclosed},
         )
     issues = []
+    if re.search(r"<script\b", html_content, re.I):
+        issues.append("<script> tag found — potential XSS risk")
     if re.search(r"<script[^>]*>[^<]*document\.write\s*\(", html_content):
         issues.append("document.write() inside <script>")
     if re.search(r"onerror\s*=", html_content, re.I):

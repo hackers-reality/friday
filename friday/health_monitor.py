@@ -1,381 +1,551 @@
-"""
-FRIDAY Unified Health Monitor — central hub that aggregates health data from all
-subsystems (system monitor, diagnostics, browser, context bus, agents, etc.)
-
-Publishes periodic snapshots to the context bus so that the AI agent, proactive
-speaker, morning briefing builder, and terminal health display can all read from
-one source of truth.
-"""
-
-from __future__ import annotations
-
-import json
+"""FRIDAY Health Monitor — service health tracking, alerts, and auto-recovery."""
 import os
-import threading
+import json
 import time
+import uuid
+import threading
+import psutil
+from typing import Dict, List, Any, Optional, Callable
+from dataclasses import dataclass, field, asdict
+from collections import defaultdict, deque
 from datetime import datetime
-from typing import Any, Callable, Optional
 
-from friday._paths import FRIDAY_MEMORY
 
-_HEALTH_STATE_FILE = os.path.join(FRIDAY_MEMORY, "health_state.json")
+@dataclass
+class HealthCheck:
+    name: str
+    check_type: str
+    target: str = ""
+    interval: int = 30
+    timeout: int = 10
+    enabled: bool = True
+    last_check: float = 0.0
+    last_status: str = "unknown"
+    last_response_time: float = 0.0
+    failure_count: int = 0
+    success_count: int = 0
+    config: Dict = field(default_factory=dict)
+
+    def to_dict(self):
+        return asdict(self)
+
+
+@dataclass
+class Alert:
+    alert_id: str
+    name: str
+    severity: str
+    message: str
+    source: str
+    timestamp: float
+    resolved: bool = False
+    resolved_at: float = 0.0
+    acknowledged: bool = False
+    acknowledged_by: str = ""
+    metadata: Dict = field(default_factory=dict)
+
+    def to_dict(self):
+        return asdict(self)
+
+
+@dataclass
+class HealthSnapshot:
+    timestamp: float
+    checks: Dict[str, str]
+    metrics: Dict[str, float]
+    alerts: List[Dict]
+    overall_status: str
+
+    def to_dict(self):
+        return asdict(self)
+
+
+class HealthChecker:
+    @staticmethod
+    def check_process(name: str = "python", **kwargs) -> Dict:
+        try:
+            for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):
+                if name.lower() in proc.info["name"].lower():
+                    return {
+                        "status": "healthy",
+                        "pid": proc.info["pid"],
+                        "cpu": proc.info["cpu_percent"],
+                        "memory": proc.info["memory_percent"],
+                    }
+            return {"status": "warning", "message": f"Process '{name}' not found"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
+    def check_port(host: str = "localhost", port: int = 8000, **kwargs) -> Dict:
+        import socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            if result == 0:
+                return {"status": "healthy", "host": host, "port": port}
+            return {"status": "error", "message": f"Port {port} not reachable"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
+    def check_disk(threshold: float = 90, path: str = "/", **kwargs) -> Dict:
+        try:
+            usage = psutil.disk_usage(path)
+            percent = usage.percent
+            status = "healthy" if percent < threshold else "error"
+            if percent >= threshold * 0.8:
+                status = "warning"
+            return {
+                "status": status,
+                "percent": percent,
+                "total_gb": round(usage.total / 1024**3, 2),
+                "used_gb": round(usage.used / 1024**3, 2),
+                "free_gb": round(usage.free / 1024**3, 2),
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
+    def check_memory(threshold: float = 90, **kwargs) -> Dict:
+        try:
+            mem = psutil.virtual_memory()
+            percent = mem.percent
+            status = "healthy" if percent < threshold else "error"
+            if percent >= threshold * 0.8:
+                status = "warning"
+            return {
+                "status": status,
+                "percent": percent,
+                "total_gb": round(mem.total / 1024**3, 2),
+                "used_gb": round(mem.used / 1024**3, 2),
+                "available_gb": round(mem.available / 1024**3, 2),
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
+    def check_cpu(threshold: float = 90, **kwargs) -> Dict:
+        try:
+            cpu = psutil.cpu_percent(interval=1)
+            status = "healthy" if cpu < threshold else "error"
+            if cpu >= threshold * 0.8:
+                status = "warning"
+            return {
+                "status": status,
+                "percent": cpu,
+                "count": psutil.cpu_count(),
+                "freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
+    def check_http(url: str = "http://localhost:8000", timeout: int = 10, **kwargs) -> Dict:
+        import urllib.request
+        try:
+            start = time.time()
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                duration = time.time() - start
+                return {
+                    "status": "healthy",
+                    "url": url,
+                    "status_code": resp.status,
+                    "response_time_ms": round(duration * 1000, 2),
+                }
+        except Exception as e:
+            return {"status": "error", "url": url, "message": str(e)}
+
+    @staticmethod
+    def check_file(path: str, **kwargs) -> Dict:
+        try:
+            exists = os.path.exists(path)
+            if exists:
+                stat = os.stat(path)
+                return {
+                    "status": "healthy",
+                    "path": path,
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime,
+                }
+            return {"status": "warning", "path": path, "message": "File not found"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
+    def check_database(path: str = None, **kwargs) -> Dict:
+        if path is None:
+            path = os.path.join(os.path.expanduser("~"), ".friday", "memory", "friday_memory.db")
+        try:
+            if os.path.exists(path):
+                size = os.path.getsize(path)
+                return {"status": "healthy", "path": path, "size": size}
+            return {"status": "warning", "path": path, "message": "Database not found"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    CHECKERS = {
+        "process": check_process.__func__,
+        "port": check_port.__func__,
+        "disk": check_disk.__func__,
+        "memory": check_memory.__func__,
+        "cpu": check_cpu.__func__,
+        "http": check_http.__func__,
+        "file": check_file.__func__,
+        "database": check_database.__func__,
+    }
 
 
 class HealthMonitor:
-    """
-    Singleton health monitor that aggregates component health.
-    
-    Components register a check function (returning dict with "status" key).
-    The monitor runs all checks periodically and publishes to context_bus.
-    """
+    def __init__(self, data_dir: str = None):
+        if data_dir is None:
+            data_dir = os.path.join(os.path.expanduser("~"), ".friday", "health")
+        self.data_dir = data_dir
+        os.makedirs(data_dir, exist_ok=True)
 
-    _instance: Optional[HealthMonitor] = None
-    _lock = threading.Lock()
-
-    def __init__(self):
-        self._components: dict[str, dict] = {}
-        self._statuses: dict[str, dict] = {}
-        self._alerts: list[dict] = []
+        self._checks: Dict[str, HealthCheck] = {}
+        self._alerts: List[Alert] = []
+        self._history: deque = deque(maxlen=1000)
+        self._handlers: Dict[str, Callable] = {}
+        self._alert_handlers: List[Callable] = []
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._stop = threading.Event()
-        self._start_time = time.time()
-        self._check_interval = 30
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
 
-    @classmethod
-    def get_instance(cls) -> HealthMonitor:
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
+        self._load_checks()
+        self._load_alerts()
+        self._register_defaults()
 
-    # ── Component Registration ─────────────────────────────────
+    def _register_defaults(self):
+        defaults = [
+            HealthCheck("cpu", "cpu", interval=30, config={"threshold": 90}),
+            HealthCheck("memory", "memory", interval=30, config={"threshold": 90}),
+            HealthCheck("disk", "disk", interval=60, config={"threshold": 90, "path": "/"}),
+            HealthCheck("api_server", "port", interval=30, config={"host": "localhost", "port": 8000}),
+        ]
+        for check in defaults:
+            if check.name not in self._checks:
+                self._checks[check.name] = check
 
-    def register(self, name: str, check_fn: Callable[[], dict], interval: float = 60.0):
-        """Register a component to be monitored.
-        
-        check_fn must return a dict with at minimum {"status": "ok"|"degraded"|"error"|"stopped"}
-        """
-        self._components[name] = {"fn": check_fn, "interval": interval}
+    def _checks_file(self) -> str:
+        return os.path.join(self.data_dir, "checks.json")
 
-    def unregister(self, name: str):
-        self._components.pop(name, None)
-        self._statuses.pop(name, None)
+    def _alerts_file(self) -> str:
+        return os.path.join(self.data_dir, "alerts.json")
 
-    # ── Lifecycle ───────────────────────────────────────────────
+    def _load_checks(self):
+        if os.path.exists(self._checks_file()):
+            try:
+                with open(self._checks_file(), "r") as f:
+                    data = json.load(f)
+                for name, cdata in data.items():
+                    self._checks[name] = HealthCheck(**cdata)
+            except Exception:
+                pass
 
-    def start(self, interval: float = 30.0):
+    def _save_checks(self):
+        try:
+            data = {name: c.to_dict() for name, c in self._checks.items()}
+            with open(self._checks_file(), "w") as f:
+                json.dump(data, f, indent=2, default=str)
+        except Exception:
+            pass
+
+    def _load_alerts(self):
+        if os.path.exists(self._alerts_file()):
+            try:
+                with open(self._alerts_file(), "r") as f:
+                    data = json.load(f)
+                self._alerts = [Alert(**a) for a in data[-500:]]
+            except Exception:
+                pass
+
+    def _save_alerts(self):
+        try:
+            data = [a.to_dict() for a in self._alerts[-500:]]
+            with open(self._alerts_file(), "w") as f:
+                json.dump(data, f, indent=2, default=str)
+        except Exception:
+            pass
+
+    def add_check(self, check: HealthCheck):
+        with self._lock:
+            self._checks[check.name] = check
+            self._save_checks()
+
+    def remove_check(self, name: str) -> bool:
+        with self._lock:
+            if name in self._checks:
+                del self._checks[name]
+                self._save_checks()
+                return True
+            return False
+
+    def get_check(self, name: str) -> Optional[Dict]:
+        check = self._checks.get(name)
+        return check.to_dict() if check else None
+
+    def list_checks(self) -> List[Dict]:
+        with self._lock:
+            return [c.to_dict() for c in self._checks.values()]
+
+    def run_check(self, name: str) -> Dict:
+        check = self._checks.get(name)
+        if not check:
+            return {"error": f"Check not found: {name}"}
+
+        checker = HealthChecker.CHECKERS.get(check.check_type)
+        if not checker:
+            return {"error": f"Unknown check type: {check.check_type}"}
+
+        start = time.time()
+        result = checker(**check.config)
+        duration = time.time() - start
+
+        with self._lock:
+            check.last_check = time.time()
+            check.last_status = result.get("status", "unknown")
+            check.last_response_time = duration
+            if result.get("status") in ("error", "warning"):
+                check.failure_count += 1
+            else:
+                check.success_count += 1
+                check.failure_count = max(0, check.failure_count - 1)
+            self._save_checks()
+
+        if result.get("status") == "error":
+            self._create_alert(
+                name=f"health_{name}",
+                severity="high" if check.failure_count >= 3 else "medium",
+                message=f"Health check '{name}' failed: {result.get('message', 'unknown')}",
+                source=name,
+            )
+        elif result.get("status") == "warning":
+            self._create_alert(
+                name=f"health_{name}_warning",
+                severity="low",
+                message=f"Health check '{name}' warning: {result.get('message', 'threshold exceeded')}",
+                source=name,
+            )
+
+        return result
+
+    def run_all_checks(self) -> Dict[str, Dict]:
+        results = {}
+        with self._lock:
+            check_names = list(self._checks.keys())
+        for name in check_names:
+            results[name] = self.run_check(name)
+        return results
+
+    def _create_alert(self, name: str, severity: str, message: str, source: str, metadata: Dict = None):
+        alert = Alert(
+            alert_id=f"alert-{uuid.uuid4().hex[:8]}",
+            name=name,
+            severity=severity,
+            message=message,
+            source=source,
+            timestamp=time.time(),
+            metadata=metadata or {},
+        )
+        with self._lock:
+            existing = [a for a in self._alerts if a.name == name and not a.resolved]
+            if existing:
+                return existing[0]
+            self._alerts.append(alert)
+            self._save_alerts()
+
+        for handler in self._alert_handlers:
+            try:
+                handler(alert)
+            except Exception:
+                pass
+
+        return alert
+
+    def get_alerts(self, unresolved_only: bool = True, severity: str = None, limit: int = 50) -> List[Dict]:
+        with self._lock:
+            alerts = list(self._alerts)
+        if unresolved_only:
+            alerts = [a for a in alerts if not a.resolved]
+        if severity:
+            alerts = [a for a in alerts if a.severity == severity]
+        return [a.to_dict() for a in alerts[-limit:]]
+
+    def resolve_alert(self, alert_id: str) -> bool:
+        with self._lock:
+            for alert in self._alerts:
+                if alert.alert_id == alert_id:
+                    alert.resolved = True
+                    alert.resolved_at = time.time()
+                    self._save_alerts()
+                    return True
+            return False
+
+    def acknowledge_alert(self, alert_id: str, user: str = "system") -> bool:
+        with self._lock:
+            for alert in self._alerts:
+                if alert.alert_id == alert_id:
+                    alert.acknowledged = True
+                    alert.acknowledged_by = user
+                    self._save_alerts()
+                    return True
+            return False
+
+    def on_alert(self, handler: Callable):
+        self._alert_handlers.append(handler)
+
+    def get_metrics(self) -> Dict:
+        try:
+            return {
+                "cpu_percent": psutil.cpu_percent(interval=0.1),
+                "memory_percent": psutil.virtual_memory().percent,
+                "disk_percent": psutil.disk_usage("/").percent if os.name != "nt" else psutil.disk_usage("C:\\").percent,
+                "boot_time": psutil.boot_time(),
+                "uptime": time.time() - psutil.boot_time(),
+                "process_count": len(psutil.pids()),
+            }
+        except Exception:
+            return {}
+
+    def get_snapshot(self) -> Dict:
+        checks = {}
+        with self._lock:
+            check_names = list(self._checks.keys())
+        for name in check_names:
+            check = self._checks.get(name)
+            if check:
+                checks[name] = check.last_status
+
+        statuses = list(checks.values())
+        if all(s == "healthy" for s in statuses):
+            overall = "healthy"
+        elif any(s == "error" for s in statuses):
+            overall = "error"
+        elif any(s == "warning" for s in statuses):
+            overall = "warning"
+        else:
+            overall = "unknown"
+
+        return HealthSnapshot(
+            timestamp=time.time(),
+            checks=checks,
+            metrics=self.get_metrics(),
+            alerts=self.get_alerts(unresolved_only=True, limit=10),
+            overall_status=overall,
+        ).to_dict()
+
+    def get_stats(self) -> Dict:
+        with self._lock:
+            checks = list(self._checks.values())
+            alerts = [a for a in self._alerts if not a.resolved]
+            return {
+                "total_checks": len(checks),
+                "enabled": sum(1 for c in checks if c.enabled),
+                "healthy": sum(1 for c in checks if c.last_status == "healthy"),
+                "warning": sum(1 for c in checks if c.last_status == "warning"),
+                "error": sum(1 for c in checks if c.last_status == "error"),
+                "unresolved_alerts": len(alerts),
+                "total_alerts": len(self._alerts),
+            }
+
+    def start(self, check_interval: int = 30):
         if self._running:
             return
-        self._check_interval = interval
         self._running = True
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._loop, args=(check_interval,), daemon=True)
         self._thread.start()
 
     def stop(self):
-        self._stop.set()
+        self._running = False
+        self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
-        self._running = False
-        self._save_state()
 
-    def _run_loop(self):
-        while not self._stop.is_set():
+    def _loop(self, check_interval: int):
+        while self._running and not self._stop_event.is_set():
             try:
-                self._check_all()
-                self._publish()
-                self._save_state()
+                self.run_all_checks()
             except Exception:
                 pass
-            self._stop.wait(self._check_interval)
-
-    # ── Checks ──────────────────────────────────────────────────
-
-    def _check_all(self):
-        for name, comp in list(self._components.items()):
-            try:
-                result = comp["fn"]()
-                if not isinstance(result, dict):
-                    result = {"status": "unknown", "detail": str(result)}
-                if "status" not in result:
-                    result["status"] = "unknown"
-                result["last_check"] = datetime.now().isoformat()
-                self._statuses[name] = result
-            except Exception as e:
-                self._statuses[name] = {"status": "error", "detail": str(e), "last_check": datetime.now().isoformat()}
-
-    # ── Alerts ──────────────────────────────────────────────────
-
-    def add_alert(self, severity: str, source: str, message: str):
-        alert = {
-            "severity": severity,
-            "source": source,
-            "message": message,
-            "time": datetime.now().isoformat(),
-        }
-        self._alerts.append(alert)
-        self._alerts = self._alerts[-50:]
-
-    def recent_alerts(self, limit: int = 10) -> list[dict]:
-        return self._alerts[-limit:]
-
-    # ── Snapshot ────────────────────────────────────────────────
-
-    def snapshot(self) -> dict:
-        """Return a complete health snapshot."""
-        uptime = time.time() - self._start_time
-        statuses = dict(self._statuses)
-        overall = self._overall_status(statuses)
-        return {
-            "timestamp": datetime.now().isoformat(),
-            "uptime_seconds": uptime,
-            "uptime_human": self._format_uptime(uptime),
-            "overall": overall,
-            "components": statuses,
-            "alerts": self.recent_alerts(10),
-            "monitored_count": len(self._components),
-        }
-
-    def _overall_status(self, statuses: dict) -> str:
-        if not statuses:
-            return "starting"
-        errors = sum(1 for s in statuses.values() if s.get("status") in ("error", "fail", "critical"))
-        degraded = sum(1 for s in statuses.values() if s.get("status") == "degraded")
-        if errors:
-            return "critical" if errors > 1 else "degraded"
-        if degraded:
-            return "degraded"
-        return "healthy"
-
-    @staticmethod
-    def _format_uptime(seconds: float) -> str:
-        hours, remainder = divmod(int(seconds), 3600)
-        minutes, secs = divmod(remainder, 60)
-        if hours:
-            return f"{hours}h {minutes}m {secs}s"
-        if minutes:
-            return f"{minutes}m {secs}s"
-        return f"{secs}s"
-
-    # ── Publish to Context Bus ──────────────────────────────────
-
-    def _publish(self):
-        try:
-            snap = self.snapshot()
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(self._async_publish(snap))
-                else:
-                    loop.run_until_complete(self._async_publish(snap))
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                loop.run_until_complete(self._async_publish(snap))
-                loop.close()
-        except Exception:
-            pass
-
-    async def _async_publish(self, snap: dict):
-        try:
-            from friday.context_bus import get_bus
-            await get_bus().publish("system.health_snapshot", snap)
-        except Exception:
-            pass
-
-    # ── Persistence ─────────────────────────────────────────────
-
-    def _save_state(self):
-        try:
-            data = {
-                "statuses": self._statuses,
-                "alerts": self._alerts[-50:],
-                "last_update": datetime.now().isoformat(),
-                "uptime": time.time() - self._start_time,
-            }
-            os.makedirs(os.path.dirname(_HEALTH_STATE_FILE), exist_ok=True)
-            with open(_HEALTH_STATE_FILE, "w") as f:
-                json.dump(data, f, indent=2)
-        except Exception:
-            pass
-
-    @classmethod
-    def load_saved_state(cls) -> dict:
-        if os.path.exists(_HEALTH_STATE_FILE):
-            try:
-                with open(_HEALTH_STATE_FILE) as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return {}
-
-    # ── Status for display ──────────────────────────────────────
-
-    def component_status(self, name: str) -> str:
-        comp = self._statuses.get(name, {})
-        return comp.get("status", "unknown")
-
-    def is_healthy(self) -> bool:
-        return self._overall_status(self._statuses) == "healthy"
+            self._stop_event.wait(check_interval)
 
 
-# ── Singleton Accessor ─────────────────────────────────────────
-
-def get_health_monitor() -> HealthMonitor:
-    return HealthMonitor.get_instance()
+_monitor = None
 
 
-# ── Bundled Check Functions ────────────────────────────────────
+def _get_monitor() -> HealthMonitor:
+    global _monitor
+    if _monitor is None:
+        _monitor = HealthMonitor()
+    return _monitor
 
-def check_system_resources() -> dict:
-    """Check CPU, memory, disk."""
-    result = {"status": "ok", "checks": {}}
+
+def health_monitor_tool(action: str = "status", **kwargs) -> Any:
+    """Health monitor tool dispatcher."""
     try:
-        from friday.system_monitor import get_cpu_usage, get_memory_usage
-        cpu = get_cpu_usage()
-        mem = get_memory_usage()
-        result["checks"]["cpu"] = f"{cpu:.0f}%"
-        result["checks"]["memory"] = f"{mem.get('percent', 0)}%"
-        if cpu > 90:
-            result["status"] = "degraded"
-            result["detail"] = f"High CPU: {cpu:.0f}%"
-        elif mem.get("percent", 0) > 90:
-            result["status"] = "degraded"
-            result["detail"] = f"High memory: {mem.get('percent', 0)}%"
+        monitor = _get_monitor()
+
+        if action == "status":
+            return monitor.get_snapshot()
+
+        elif action == "checks":
+            return {"checks": monitor.list_checks()}
+
+        elif action == "check":
+            name = kwargs.get("name", "")
+            if not name:
+                return {"error": "No check name provided"}
+            return monitor.run_check(name)
+
+        elif action == "check_all":
+            results = monitor.run_all_checks()
+            return {"results": results}
+
+        elif action == "add_check":
+            check_data = kwargs.get("check", {})
+            check = HealthCheck(**check_data)
+            monitor.add_check(check)
+            return {"success": True}
+
+        elif action == "remove_check":
+            name = kwargs.get("name", "")
+            ok = monitor.remove_check(name)
+            return {"success": ok}
+
+        elif action == "alerts":
+            unresolved = kwargs.get("unresolved_only", True)
+            severity = kwargs.get("severity")
+            limit = kwargs.get("limit", 50)
+            return {"alerts": monitor.get_alerts(unresolved, severity, limit)}
+
+        elif action == "resolve_alert":
+            alert_id = kwargs.get("alert_id", "")
+            ok = monitor.resolve_alert(alert_id)
+            return {"success": ok}
+
+        elif action == "metrics":
+            return monitor.get_metrics()
+
+        elif action == "stats":
+            return monitor.get_stats()
+
+        elif action == "start":
+            interval = kwargs.get("check_interval", 30)
+            monitor.start(interval)
+            return {"success": True}
+
+        elif action == "stop":
+            monitor.stop()
+            return {"success": True}
+
+        else:
+            return {"error": f"Unknown action: {action}"}
+
     except Exception as e:
-        result["status"] = "error"
-        result["detail"] = str(e)
-    return result
-
-
-def check_browser() -> dict:
-    """Check browser_manager health."""
-    try:
-        from friday.browser_manager import BrowserManager
-        bm = BrowserManager.get_instance()
-        return bm.health_check()
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
-
-
-def check_context_bus() -> dict:
-    """Check context bus health."""
-    try:
-        from friday.context_bus import get_bus
-        bus = get_bus()
-        snap = bus.status_snapshot()
-        return {"status": "ok", "detail": f"{snap['subscriptions']} subscribers, {snap['history_size']} events"}
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
-
-
-def check_disk_space() -> dict:
-    """Check available disk space."""
-    try:
-        import shutil
-        total, used, free = shutil.disk_usage(os.path.dirname(FRIDAY_MEMORY) if os.path.exists(FRIDAY_MEMORY) else ".")
-        free_gb = free // (1024 ** 3)
-        if free_gb < 1:
-            return {"status": "critical", "detail": f"Only {free_gb}GB free!"}
-        if free_gb < 5:
-            return {"status": "degraded", "detail": f"{free_gb}GB free"}
-        return {"status": "ok", "detail": f"{free_gb}GB free"}
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
-
-
-def check_active_monitors() -> dict:
-    """Check if proactive monitors are running."""
-    details = []
-    try:
-        from friday.monitor import _monitor_thread, _load_state
-        sys_mon_running = _monitor_thread is not None and _monitor_thread.is_alive()
-        details.append(f"system: {'running' if sys_mon_running else 'idle'}")
-    except Exception:
-        details.append("system: unavailable")
-    try:
-        from friday.proactivity_monitor import get_proactive_monitor
-        pm = get_proactive_monitor()
-        details.append(f"screen: {'running' if pm._thread and pm._thread.is_alive() else 'idle'}")
-    except Exception:
-        details.append("screen: unavailable")
-    status = "ok" if any("running" in d for d in details) else "degraded"
-    return {"status": status, "detail": ", ".join(details)}
-
-
-# ─── Register Default Components ──────────────────────────────
-
-def register_default_checks(health: HealthMonitor):
-    """Register all built-in health checks."""
-    health.register("system_resources", check_system_resources, interval=30)
-    health.register("browser", check_browser, interval=60)
-    health.register("context_bus", check_context_bus, interval=60)
-    health.register("disk_space", check_disk_space, interval=120)
-    health.register("active_monitors", check_active_monitors, interval=60)
-
-
-# ─── Tool Function ────────────────────────────────────────────
-
-def health_monitor_tool(action: str = "status") -> str:
-    """Unified health monitor: check status of all FRIDAY subsystems.
-    
-    Actions:
-        status         - Show overall health snapshot
-        alerts         - Show recent alerts
-        components     - List registered components
-        refresh        - Force immediate check of all components
-    """
-    hm = get_health_monitor()
-
-    if action == "status":
-        snap = hm.snapshot()
-        lines = [
-            "=" * 60,
-            "  FRIDAY HEALTH DASHBOARD",
-            f"  {snap['timestamp']}",
-            f"  Uptime: {snap['uptime_human']}",
-            f"  Overall: {snap['overall'].upper()}",
-            f"  Components monitored: {snap['monitored_count']}",
-            "-" * 60,
-        ]
-        for name, status in snap["components"].items():
-            st = status.get("status", "?").upper()
-            detail = status.get("detail", "")
-            icon = {"OK": "[OK]", "DEGRADED": "[WARN]", "ERROR": "[FAIL]", "CRITICAL": "[CRIT]", "STOPPED": "[STOP]"}.get(st, "[?]")
-            lines.append(f"  {icon} {name}: {st}  {detail}")
-        if snap["alerts"]:
-            lines.append("-" * 60)
-            lines.append("  RECENT ALERTS:")
-            for a in snap["alerts"][-5:]:
-                ts = a.get("time", "?")[11:19] if len(a.get("time", "")) > 19 else a.get("time", "?")
-                lines.append(f"    [{ts}] [{a.get('severity','info').upper()}] {a.get('source','?')}: {a.get('message','')}")
-        lines.append("=" * 60)
-        return "\n".join(lines)
-
-    elif action == "alerts":
-        alerts = hm.recent_alerts()
-        if not alerts:
-            return "No alerts recorded."
-        lines = ["### RECENT HEALTH ALERTS"]
-        for a in alerts:
-            ts = a.get("time", "?")[11:19] if len(a.get("time", "")) > 19 else a.get("time", "?")
-            lines.append(f"  [{ts}] [{a.get('severity','').upper()}] {a.get('source','')}: {a.get('message','')}")
-        return "\n".join(lines)
-
-    elif action == "components":
-        if not hm._components:
-            return "No components registered."
-        lines = ["### REGISTERED COMPONENTS"]
-        for name in hm._components:
-            status = hm._statuses.get(name, {}).get("status", "unknown")
-            lines.append(f"  {name}: {status}")
-        return "\n".join(lines)
-
-    elif action == "refresh":
-        hm._check_all()
-        snap = hm.snapshot()
-        return f"[OK] Health check refreshed. Overall status: {snap['overall']}"
-
-    return f"[FAIL] Unknown action: {action}"
+        return {"error": str(e)}

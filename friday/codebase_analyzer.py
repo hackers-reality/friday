@@ -1631,7 +1631,12 @@ class StyleAnalyzer:
         import_lines: list[tuple[int, str, bool]] = []
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
-                import_lines.append((node.lineno, node.module or "", isinstance(node, ast.ImportFrom)))
+                mod_name = ""
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    mod_name = node.module
+                elif isinstance(node, ast.Import) and node.names:
+                    mod_name = node.names[0].name
+                import_lines.append((node.lineno, mod_name, isinstance(node, ast.ImportFrom)))
         for i in range(1, len(import_lines)):
             _, prev_mod, prev_from = import_lines[i - 1]
             _, curr_mod, curr_from = import_lines[i]
