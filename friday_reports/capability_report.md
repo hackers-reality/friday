@@ -1,6 +1,6 @@
 # FRIDAY Capability Report
 
-_Generated: 2026-05-24T10:30:17_
+_Generated: 2026-06-14T13:25:56_
 
 This report documents all major FRIDAY systems, their stability status, dependencies, and limitations.
 

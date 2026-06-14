@@ -5,6 +5,7 @@ import Orb from './components/Orb';
 import Panel from './components/Panel';
 import ChatPanel from './components/ChatPanel';
 import StatusBar from './components/StatusBar';
+import TownhallPanel from './components/TownhallPanel';
 import './App.css';
 
 const API = 'http://localhost:8000';
@@ -174,9 +175,9 @@ function App() {
 
           <Panel title="MEMORY" delay={400}>
             <div className="memory-stats">
-              <div className="mem-stat"><span>{memory?.entities || 0}</span> Entities</div>
-              <div className="mem-stat"><span>{memory?.topics || 0}</span> Topics</div>
-              <div className="mem-stat"><span>{memory?.total_items || 0}</span> Items</div>
+              <div className="mem-stat"><span>{memory?.total_memories || memory?.entities || 0}</span> Memories</div>
+              <div className="mem-stat"><span>{memory?.total_entities || memory?.topics || 0}</span> Entities</div>
+              <div className="mem-stat"><span>{memory?.total_relationships || 0}</span> Links</div>
             </div>
           </Panel>
         </div>
@@ -223,15 +224,20 @@ function App() {
 
           <Panel title="SERVICES" delay={500}>
             <div className="service-list">
-              {services?.services && Object.entries(services.services).map(([name, status], i) => (
-                <div key={i} className="service-item">
-                  <span className={`svc-dot ${status === 'running' ? 'active' : ''}`} />
-                  <span className="svc-name">{name}</span>
-                  <span className="svc-status">{status}</span>
-                </div>
-              ))}
+              {services?.services && Object.entries(services.services).map(([name, info], i) => {
+                const status = typeof info === 'string' ? info : (info?.status || 'unknown');
+                return (
+                  <div key={i} className="service-item">
+                    <span className={`svc-dot ${status === 'running' ? 'active' : ''}`} />
+                    <span className="svc-name">{name}</span>
+                    <span className="svc-status">{status}</span>
+                  </div>
+                );
+              })}
             </div>
           </Panel>
+
+          <TownhallPanel />
         </div>
       </div>
 

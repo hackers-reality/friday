@@ -62,7 +62,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "id": "research_agent",
             "name": "Veronica",
             "task_types": ["research", "summarization"],
-            "nim_model": "meta/llama-3.1-405b-instruct",
+            "nim_model": "opencode/mimo-v2.5-free",
             "tools": ["web_search", "deep_research"],
             "enabled": False,
         },

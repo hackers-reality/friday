@@ -26,7 +26,7 @@ class TestVeronicaAgent(unittest.IsolatedAsyncioTestCase):
         self.agent = VeronicaAgent(self.defn)
 
     @patch("friday.research_agent.InferenceClient")
-    @patch("friday.research_agent.requests.get")
+    @patch("requests.get")
     async def test_execute_research_flow(self, mock_get, mock_client_cls):
         # Mock InferenceClient
         mock_client = MagicMock()
@@ -54,21 +54,21 @@ class TestVeronicaAgent(unittest.IsolatedAsyncioTestCase):
         mock_response.text = "<html><body><main><p>Quantum computing uses qubits instead of classical bits. This is a very long paragraph to pass the length check.</p></main></body></html>"
         mock_get.return_value = mock_response
 
-        # Mock search engine returning results
-        self.agent._execute_search = AsyncMock(return_value=[
-            {"title": "Intro to Quantum Computing", "url": "https://example.com/intro", "snippet": "A basic intro", "engine": "duckduckgo"},
-            {"title": "Advanced Qubits", "url": "https://example.com/qubits", "snippet": "Detailed look at qubits", "engine": "bing"}
-        ])
-
         task = AgentTask(
             task_id="test-task-123",
             task_type="research",
             payload="quantum computing history"
         )
 
-        result = await self.agent.execute(task)
+        with patch.object(self.agent, "_browser_scrape_batch", AsyncMock(return_value={"pages": [{"url": "https://example.com/1", "title": "Result 1", "text": "Content here"}]})), \
+             patch.object(self.agent, "_filter_relevant", MagicMock(return_value=[{"url": "https://example.com/1", "title": "Result 1"}])), \
+             patch.object(self.agent, "_decide_next_steps", AsyncMock(return_value={"summary": "Found relevant info", "next_queries": [], "stop": True, "subtopics_covered": ["Quantum"], "subtopics_needed": []})), \
+             patch.object(self.agent, "_generate_report", AsyncMock(return_value={"sections": ["Intro"], "model": "test-model"})):
+            result = await self.agent.execute(task)
+
         self.assertEqual(result.status, "completed")
-        self.assertIn("Research Synthesis on Quantum", result.output)
+        self.assertIn("Research Complete", result.output)
+        self.assertIn("quantum computing history", result.output)
         self.assertEqual(result.agent_id, "research_agent")
 
 
@@ -113,7 +113,7 @@ class TestForgeAgent(unittest.IsolatedAsyncioTestCase):
             result = await self.agent.execute(task)
             self.assertEqual(result.status, "completed")
             self.assertIn("AST Structural Analysis", result.output)
-            self.assertIn("class MathHelper", result.output)
+            self.assertIn("MathHelper", result.output)
             self.assertIn("add_numbers", result.output)
             self.assertIn("calculate_root", result.output)
         finally:

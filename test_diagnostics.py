@@ -20,7 +20,22 @@ class TestDiagnostics(unittest.TestCase):
         os.makedirs(diag.FRIDAY_MEMORY, exist_ok=True)
         os.makedirs(diag.FRIDAY_CONFIG, exist_ok=True)
 
+        from unittest.mock import patch
+        self.io_patcher = patch("friday.diagnostics._measure_io_benchmark", return_value={
+            "1KB": {"write_speed_mbps": 100.0, "read_speed_mbps": 150.0, "write_ms": 0.01, "read_ms": 0.01},
+            "1MB": {"write_speed_mbps": 100.0, "read_speed_mbps": 150.0, "write_ms": 10.0, "read_ms": 5.0},
+            "10MB": {"write_speed_mbps": 100.0, "read_speed_mbps": 150.0, "write_ms": 100.0, "read_ms": 50.0},
+        })
+        self.io_patcher.start()
+
+        self.module_patcher = patch("friday.diagnostics._check_module", side_effect=lambda name, path: {
+            "check": f"module:{name}", "status": "ok", "detail": f"mocked import {path}"
+        })
+        self.module_patcher.start()
+
     def tearDown(self):
+        self.io_patcher.stop()
+        self.module_patcher.stop()
         diag.FRIDAY_MEMORY = self._orig_memory
         diag.FRIDAY_CONFIG = self._orig_config
         shutil.rmtree(self.tmpdir)

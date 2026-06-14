@@ -20,20 +20,22 @@ _DEFAULT_MODEL_MAP: dict[str, list[str]] = {
         "meta/llama-3.2-11b-vision-instruct",
     ],
     "research": [
-        "big-pickle",
+        "opencode/mimo-v2.5-free",
         "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
     ],
     "summarization": [
-        "big-pickle",
+        "opencode/mimo-v2.5-free",
         "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
     ],
     "reasoning": [
+        "opencode/mimo-v2.5-free",
         "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
     ],
     "general": [
+        "opencode/mimo-v2.5-free",
         "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
     ],

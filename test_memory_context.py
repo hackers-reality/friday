@@ -185,7 +185,7 @@ def test_github_setup_in_tool_map():
         source = f.read()
     assert '"github_setup"' in source, "github_setup not found in live.py"
     # Should appear at least in TOOL_MAP dict (not just FunctionDeclaration)
-    tool_map_section = source.split("TOOL_MAP")[1].split("}")[0] if "TOOL_MAP" in source else ""
+    tool_map_section = source.split("TOOL_MAP = {")[1].split("}")[0] if "TOOL_MAP = {" in source else ""
     has_in_map = '"github_setup"' in tool_map_section if tool_map_section else False
     assert has_in_map, "github_setup is not in TOOL_MAP dict"
     print("[PASS] test_github_setup_in_tool_map")

@@ -39,16 +39,32 @@ from friday.git_operations import git_operations_tool
 from friday.notification_system import notification_system_tool
 from friday.api_gateway import api_gateway_tool
 from friday.backup_system import backup_system_tool
+from friday.townhall_agents import townhall_tool
 
 _tools_loaded = False
 _tool_registry = {}
+
+
+def _safe_json(raw):
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    return {}
+
 
 def _load_tools():
     global _tools_loaded, _tool_registry
     if not _tools_loaded:
         try:
-            from friday.tools import TOOL_REGISTRY
-            _tool_registry = TOOL_REGISTRY
+            from friday.tools.registry import TOOL_DESCRIPTORS
+            for desc in TOOL_DESCRIPTORS:
+                mod_path, fn_name = desc[0], desc[1]
+                cat = mod_path.split(".")[-1].replace("_tools", "")
+                _tool_registry[fn_name] = {"category": cat, "description": desc[2], "module": mod_path}
         except Exception:
             _tool_registry = {}
         _tools_loaded = True
@@ -123,27 +139,19 @@ def process_chat(message: str) -> str:
         response = "I manage %d tools across %d categories. I can validate code, analyze codebases, manage workflows, review code, and coordinate autonomous agents." % (380, 10)
     elif any(w in msg for w in ["memory", "remember"]):
         raw = autonomous_memory_tool(action="stats")
-        if isinstance(raw, dict):
-            response = f"My memory contains {raw.get('entities', 0)} entities across {raw.get('topics', 0)} topics. {raw.get('total_items', 0)} total items stored."
-        else:
-            response = f"My memory system is active. {raw}"
+        d = _safe_json(raw)
+        response = f"My memory contains {d.get('total_memories', 0)} memories across {d.get('total_entities', 0)} entities. {d.get('total_relationships', 0)} relationships stored."
     elif any(w in msg for w in ["agent", "townhall", "deliberate"]):
         raw = bootstrap_tool(action="status")
-        if isinstance(raw, dict):
-            agents = raw.get("townhall", {}).get("active_agents", 0)
-        else:
-            agents = 0
+        d = _safe_json(raw)
+        agents = d.get("townhall", {}).get("active_agents", 0)
         response = f"Currently tracking {agents} active agents. Townhall deliberations are proceeding normally."
     elif any(w in msg for w in ["review", "code review"]):
         response = "Ready to review code, sir. Submit your code and I will analyze it for security vulnerabilities, performance issues, style violations, and potential bugs."
     elif any(w in msg for w in ["workflow", "pipeline"]):
         raw = workflow_tool(action="list")
-        if isinstance(raw, dict):
-            count = len(raw.get('workflows', []))
-        elif isinstance(raw, list):
-            count = len(raw)
-        else:
-            count = 0
+        d = _safe_json(raw)
+        count = len(d.get('workflows', []))
         response = f"I have {count} workflows available. I can create custom pipelines for any task."
     elif any(w in msg for w in ["hello", "hi", "hey"]):
         response = "Good evening, sir. How may I assist you tonight?"
@@ -176,9 +184,9 @@ async def system_info():
     uptime = time.time() - system_state.get("start_time", time.time())
 
     bootstrap_raw = bootstrap_tool(action="status")
-    bootstrap_status = bootstrap_raw if isinstance(bootstrap_raw, dict) else {"services": {}}
+    bootstrap_status = _safe_json(bootstrap_raw)
     memory_raw = autonomous_memory_tool(action="stats")
-    memory_stats = memory_raw if isinstance(memory_raw, dict) else {"entities": 0, "topics": 0, "total_items": 0}
+    memory_stats = _safe_json(memory_raw)
 
     return {
         "hostname": platform.node(),
@@ -203,7 +211,7 @@ async def system_info():
 @app.get("/api/services")
 async def services():
     raw = bootstrap_tool(action="status")
-    status = raw if isinstance(raw, dict) else {"services": {}}
+    status = _safe_json(raw)
     return {
         "services": status.get("services", {}),
         "total_tools": 380,
@@ -226,7 +234,7 @@ async def tools():
 @app.get("/api/agents")
 async def agents():
     raw = bootstrap_tool(action="status")
-    status = raw if isinstance(raw, dict) else {}
+    status = _safe_json(raw)
     return {
         "active_agents": status.get("townhall", {}).get("active_agents", 0) if isinstance(status, dict) else 0,
         "sessions": status.get("townhall", {}).get("sessions", 0) if isinstance(status, dict) else 0,
@@ -237,21 +245,24 @@ async def agents():
 @app.get("/api/memory")
 async def memory():
     raw = autonomous_memory_tool(action="stats")
-    if isinstance(raw, dict):
-        return raw
-    return {"entities": 0, "topics": 0, "total_items": 0}
+    return _safe_json(raw)
 
 
 @app.get("/api/memory/recent")
 async def memory_recent():
     result = autonomous_memory_tool(action="recall", query="", limit=10)
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except Exception:
+            result = []
     return {"items": result if isinstance(result, list) else []}
 
 
 @app.get("/api/codebase")
 async def codebase():
-    stats = codebase_analyzer_tool(action="stats")
-    return stats
+    raw = codebase_analyzer_tool(action="stats")
+    return _safe_json(raw)
 
 
 @app.post("/api/chat")
@@ -291,19 +302,19 @@ async def call_tool(call: ToolCall):
         return JSONResponse(status_code=400, content={"error": f"Unknown tool: {call.tool}"})
     try:
         result = tool_fn(action=call.action, **(call.params or {}))
-        return {"result": result}
+        return {"result": _safe_json(result) if isinstance(result, (str, dict, list)) else result}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/workflows")
 async def workflows():
-    return workflow_tool(action="list")
+    return _safe_json(workflow_tool(action="list"))
 
 
 @app.get("/api/plugins")
 async def plugins():
-    return plugin_tool(action="list")
+    return _safe_json(plugin_tool(action="list"))
 
 
 @app.get("/api/reviews/stats")
@@ -313,127 +324,149 @@ async def review_stats():
 
 @app.get("/api/security/stats")
 async def security_stats():
-    return security_scanner_tool(action="stats")
+    return _safe_json(security_scanner_tool(action="stats"))
 
 
 @app.post("/api/security/scan")
 async def security_scan(msg: ChatMessage):
-    return security_scanner_tool(action="scan_code", code=msg.message)
+    return _safe_json(security_scanner_tool(action="scan_code", code=msg.message))
 
 
 @app.get("/api/config")
 async def config_get():
-    return config_manager_tool(action="get_all")
+    return _safe_json(config_manager_tool(action="get_all"))
 
 
 @app.get("/api/config/stats")
 async def config_stats():
-    return config_manager_tool(action="stats")
+    return _safe_json(config_manager_tool(action="stats"))
 
 
 @app.get("/api/logs")
 async def logs_recent():
-    return logging_tool(action="get_recent", count=100)
+    return _safe_json(logging_tool(action="get_recent", count=100))
 
 
 @app.get("/api/logs/stats")
 async def logs_stats():
-    return logging_tool(action="stats")
+    return _safe_json(logging_tool(action="stats"))
 
 
 @app.get("/api/ratelimit/stats")
 async def ratelimit_stats():
-    return rate_limiter_tool(action="stats")
+    return _safe_json(rate_limiter_tool(action="stats"))
 
 
 @app.get("/api/scheduler/tasks")
 async def scheduler_tasks():
-    return task_scheduler_tool(action="list")
+    return _safe_json(task_scheduler_tool(action="list"))
 
 
 @app.get("/api/scheduler/stats")
 async def scheduler_stats():
-    return task_scheduler_tool(action="stats")
+    return _safe_json(task_scheduler_tool(action="stats"))
 
 
 @app.get("/api/health/status")
 async def health_status():
-    return health_monitor_tool(action="status")
+    return _safe_json(health_monitor_tool(action="status"))
 
 
 @app.get("/api/health/alerts")
 async def health_alerts():
-    return health_monitor_tool(action="alerts")
+    return _safe_json(health_monitor_tool(action="alerts"))
 
 
 @app.get("/api/cache/stats")
 async def cache_stats():
-    return cache_system_tool(action="stats")
+    return _safe_json(cache_system_tool(action="stats"))
 
 
 @app.get("/api/metrics/dashboard")
 async def metrics_dashboard():
-    return metrics_collector_tool(action="dashboard")
+    return _safe_json(metrics_collector_tool(action="dashboard"))
 
 
 @app.get("/api/parser/supported")
 async def parser_supported():
-    return document_parser_tool(action="supported")
+    return _safe_json(document_parser_tool(action="supported"))
 
 
 @app.get("/api/database/list")
 async def database_list():
-    return database_connector_tool(action="list")
+    return _safe_json(database_connector_tool(action="list"))
 
 
 @app.get("/api/database/stats")
 async def database_stats():
-    return database_connector_tool(action="stats")
+    return _safe_json(database_connector_tool(action="stats"))
 
 
 @app.get("/api/git/status")
 async def git_status():
-    return git_operations_tool(action="status")
+    return _safe_json(git_operations_tool(action="status"))
 
 
 @app.get("/api/git/log")
 async def git_log():
-    return git_operations_tool(action="log", count=10)
+    return _safe_json(git_operations_tool(action="log", count=10))
 
 
 @app.get("/api/git/stats")
 async def git_stats():
-    return git_operations_tool(action="stats")
+    return _safe_json(git_operations_tool(action="stats"))
 
 
 @app.get("/api/notifications/stats")
 async def notifications_stats():
-    return notification_system_tool(action="stats")
+    return _safe_json(notification_system_tool(action="stats"))
 
 
 @app.get("/api/notifications/history")
 async def notifications_history():
-    return notification_system_tool(action="history")
+    return _safe_json(notification_system_tool(action="history"))
 
 
 @app.get("/api/gateway/routes")
 async def gateway_routes():
-    return api_gateway_tool(action="routes")
+    return _safe_json(api_gateway_tool(action="routes"))
 
 
 @app.get("/api/gateway/stats")
 async def gateway_stats():
-    return api_gateway_tool(action="stats")
+    return _safe_json(api_gateway_tool(action="stats"))
 
 
 @app.get("/api/backups")
 async def backups_list():
-    return backup_system_tool(action="list")
+    return _safe_json(backup_system_tool(action="list"))
 
 
 @app.get("/api/backups/stats")
 async def backups_stats():
-    return backup_system_tool(action="stats")
+    return _safe_json(backup_system_tool(action="stats"))
+
+
+@app.get("/api/townhall/status")
+async def townhall_status():
+    return _safe_json(townhall_tool(action="status"))
+
+
+@app.get("/api/townhall/sessions")
+async def townhall_sessions():
+    raw = townhall_tool(action="list_sessions")
+    d = _safe_json(raw)
+    return {"sessions": d.get("sessions", []) if isinstance(d, dict) else []}
+
+
+@app.get("/api/townhall/agents")
+async def townhall_agents():
+    return _safe_json(townhall_tool(action="list_agents"))
+
+
+@app.get("/api/townhall/agenda")
+async def townhall_agenda():
+    return _safe_json(townhall_tool(action="list_agenda"))
 
 
 FRONTEND_DIST = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")

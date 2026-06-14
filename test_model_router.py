@@ -28,7 +28,7 @@ class TestModelRouter(unittest.TestCase):
 
     def test_get_config_defaults(self):
         cfg = mr.get_config()
-        self.assertEqual(cfg["primary_model"], "gemini-2.0-flash")
+        self.assertEqual(cfg["primary_model"], "gemini-3.1-flash-live-preview")
         self.assertTrue(cfg["enable_fallback"])
         self.assertTrue(cfg["enable_cost_tracking"])
 

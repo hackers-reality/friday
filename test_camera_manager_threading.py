@@ -3,6 +3,26 @@ from __future__ import annotations
 
 import threading
 import time
+import cv2
+import numpy as np
+
+class DummyVideoCapture:
+    def __init__(self, camera_index=0, *args, **kwargs):
+        self.is_open = (camera_index != 999)
+    def isOpened(self):
+        return self.is_open
+    def read(self):
+        if not self.is_open:
+            return False, None
+        return True, np.zeros((480, 640, 3), dtype=np.uint8)
+    def release(self):
+        self.is_open = False
+    def set(self, *args, **kwargs):
+        return True
+    def get(self, *args, **kwargs):
+        return 0.0
+
+cv2.VideoCapture = DummyVideoCapture
 
 from friday.camera_manager import CameraManager
 from friday.frame_buffer import FrameBuffer

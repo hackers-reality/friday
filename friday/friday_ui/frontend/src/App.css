@@ -470,6 +470,20 @@ body {
 
 .status-val.online { color: #00ff88; }
 
+/* Townhall Panel */
+.townhall-panel { display: flex; flex-direction: column; gap: 10px; }
+.th-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.th-stat { text-align: center; padding: 6px; background: rgba(0,212,255,0.03); border: 1px solid var(--border); border-radius: 4px; }
+.th-num { font-family: 'Orbitron', monospace; font-size: 16px; color: var(--cyan); }
+.th-label { font-size: 9px; color: var(--text-dim); letter-spacing: 1px; margin-top: 2px; }
+.th-sessions { display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; }
+.th-session { display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: rgba(0,212,255,0.02); border: 1px solid var(--border); border-radius: 3px; font-size: 10px; }
+.th-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+.th-dot.active { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.th-topic { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-agents { color: var(--text-dim); font-size: 9px; }
+.th-empty { color: var(--text-dim); font-size: 10px; text-align: center; padding: 8px; }
+
 /* Responsive */
 @media (max-width: 1200px) {
   .jarvis-sidebar { width: 220px; }
