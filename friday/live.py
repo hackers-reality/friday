@@ -332,7 +332,13 @@ PORCUPINE_MODEL_PATH = PICOVOICE_MODEL
 MODEL_ID = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview")
 MAX_RECONNECT_ATTEMPTS = 5
 
-client = genai.Client(api_key=GOOGLE_API_KEY, http_options={"api_version": "v1alpha"})
+_gemini_client = None
+def _get_live_client():
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=GOOGLE_API_KEY, http_options={"api_version": "v1alpha"})
+    return _gemini_client
+client = _get_live_client()
 
 # BANNER
 BANNER = (
@@ -4030,9 +4036,10 @@ def _build_tool_reference() -> str:
     return "\n".join(lines)
 
 
-async def _fallback_text_mode(chat):
-    """Fallback when Live API quota is exhausted. Uses NIM/Zen with 3-tier tool execution."""
-    console.print("[yellow]Gemini Live API quota exhausted. Falling back to NIM/Zen text mode.[/]")
+async def _fallback_text_mode(chat, reason=""):
+    """Fallback when Live API is unavailable. Uses NIM/Zen with 3-tier tool execution."""
+    msg = f"Gemini Live API unavailable. {reason}".strip() if reason else "Gemini Live API unavailable."
+    console.print(f"[yellow]{msg} Falling back to NIM/Zen text mode.[/]")
     console.print("[dim]Same system prompt, same tools. Type 'exit' to quit.[/]")
 
     from friday.nim_client import NIM_API_BASE, ZEN_API_BASE
@@ -4927,8 +4934,8 @@ async def friday_live_engine():
                 if reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
                     await asyncio.sleep(3 * reconnect_attempts)
                 else:
-                    console.print("[bold red]Max reconnects reached. Falling back to text mode...[/]")
-                    await _fallback_text_mode(chat)
+                    console.print(f"[bold red]Max reconnects reached. Last error: {escape(str(e)[:200])}[/]")
+                    await _fallback_text_mode(chat, reason=str(e)[:200])
     finally:
         try:
             porcupine.delete()
