@@ -4014,18 +4014,36 @@ async def audio_worker(recorder, session, audio_ready, porcupine, winsound, inte
         await asyncio.sleep(0)
 
 
+def _build_tool_reference() -> str:
+    """Build compact tool reference for system prompt injection."""
+    cats = {}
+    for name in list(TOOL_MAP.keys())[:300]:
+        cat = name.split("_")[0] if "_" in name else "misc"
+        if cat not in cats:
+            cats[cat] = []
+        cats[cat].append(name)
+    lines = ["[AVAILABLE TOOLS - call them by name]"]
+    for cat in sorted(cats):
+        names = cats[cat][:15]
+        lines.append(f"  {cat}: {', '.join(names)}")
+    lines.append("[To call a tool, write its name with args: tool_name(key=value, ...)]")
+    return "\n".join(lines)
+
+
 async def _fallback_text_mode(chat):
-    """Fallback when Live API quota is exhausted. Uses NVIDIA NIM with full tool definitions."""
+    """Fallback when Live API quota is exhausted. Uses NIM/Zen with 3-tier tool execution."""
     console.print("[yellow]Gemini Live API quota exhausted. Falling back to NIM/Zen text mode.[/]")
     console.print("[dim]Same system prompt, same tools. Type 'exit' to quit.[/]")
 
     from friday.nim_client import NIM_API_BASE, ZEN_API_BASE
-    import httpx, json
+    import httpx, json, re, traceback
 
     nim_key = os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or ""
     zen_key = os.getenv("ZEN_API_KEY") or os.getenv("OPENCODE_API_KEY") or ""
 
     openai_tools = _build_openai_tools()
+    tool_ref = _build_tool_reference()
+    fallback_system = SYSTEM_INSTRUCTION + "\n\n" + tool_ref
     history: list[dict] = []
 
     nim_models = [
@@ -4042,57 +4060,72 @@ async def _fallback_text_mode(chat):
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as http:
 
-        async def _call_model(messages: list[dict]) -> tuple[str, list[dict]]:
-            tools_payload = {"tools": openai_tools} if openai_tools else {}
-
-            # Try NIM with configured models
+        async def _call_api(payload: dict, with_tools: bool = True) -> str | None:
+            """Try NIM chain (with or without tool defs). Returns content or None."""
+            p = {**payload}
+            if with_tools and openai_tools:
+                p["tools"] = openai_tools
             if nim_key:
                 for model in nim_models:
                     try:
                         resp = await http.post(
                             f"{NIM_API_BASE}/chat/completions",
                             headers={"Authorization": f"Bearer {nim_key}", "Content-Type": "application/json"},
-                            json={
-                                "model": model,
-                                "messages": messages,
-                                "max_tokens": 8192,
-                                "temperature": 0.7,
-                                **tools_payload,
-                            },
+                            json={**p, "model": model},
                         )
                         if resp.status_code == 200:
-                            data = resp.json()
-                            msg = data["choices"][0]["message"]
-                            return msg.get("content", ""), msg.get("tool_calls", [])
-                        if resp.status_code == 429:
+                            return resp.text
+                        if resp.status_code in (429, 404):
                             continue
-                        if resp.status_code == 404:
-                            continue
-                    except Exception:
+                        try:
+                            err = resp.json()
+                            console.print(f"[dim]{model}: {err.get('error',{}).get('message','')[:120]}[/]")
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        console.print(f"[dim]{model}: {str(e)[:80]}[/]")
                         continue
-
-            # Fallback to Zen
             if zen_key:
                 try:
                     resp = await http.post(
                         f"{ZEN_API_BASE}/chat/completions",
                         headers={"Authorization": f"Bearer {zen_key}", "Content-Type": "application/json"},
-                        json={
-                            "model": "mimo-v2.5-free",
-                            "messages": messages,
-                            "max_tokens": 8192,
-                            "temperature": 0.7,
-                            **tools_payload,
-                        },
+                        json={**p, "model": "mimo-v2.5-free"},
                     )
                     if resp.status_code == 200:
-                        data = resp.json()
-                        msg = data["choices"][0]["message"]
-                        return msg.get("content", ""), msg.get("tool_calls", [])
+                        return resp.text
                 except Exception:
                     pass
+            return None
 
-            return "I'm having trouble connecting, Boss.", []
+        def _parse_response(raw: str) -> tuple[str, list[dict]]:
+            """Parse raw API response into (content, tool_calls)."""
+            try:
+                data = json.loads(raw)
+                msg = data["choices"][0]["message"]
+                content = msg.get("content", "") or ""
+                tool_calls = msg.get("tool_calls", [])
+                return content, tool_calls
+            except Exception:
+                return "", []
+
+        def _extract_text_tool_calls(text: str) -> list[tuple[str, dict]]:
+            """Regex-extract tool calls from text: tool_name(arg=val, ...)"""
+            calls = []
+            for name in list(TOOL_MAP.keys())[:100]:
+                pat = rf'`?{re.escape(name)}\s*\(([^)]*)\)`?'
+                for m in re.finditer(pat, text):
+                    raw = m.group(1)
+                    args = {}
+                    if raw.strip():
+                        for pair in raw.split(","):
+                            if "=" in pair:
+                                k, v = pair.split("=", 1)
+                                k = k.strip().strip('"').strip("'")
+                                v = v.strip().strip('"').strip("'")
+                                args[k] = v
+                    calls.append((name, args))
+            return calls
 
         while True:
             user_input = await _voice_or_keyboard_input(chat)
@@ -4100,12 +4133,22 @@ async def _fallback_text_mode(chat):
                 break
 
             chat.add_user_message(user_input)
-            messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}, *history,
-                        {"role": "user", "content": user_input}]
+            base_messages = [{"role": "system", "content": fallback_system}, *history,
+                             {"role": "user", "content": user_input}]
+            payload = {"messages": base_messages, "max_tokens": 8192, "temperature": 0.7}
 
             try:
-                reply, tool_calls = await _call_model(messages)
+                # Tier 1: try with structured tool definitions
+                raw = await _call_api(payload, with_tools=True)
+                if not raw:
+                    raw = await _call_api(payload, with_tools=False)
+                if not raw:
+                    chat.add_friday_message("I'm having trouble connecting, Boss.")
+                    continue
 
+                reply, tool_calls = _parse_response(raw)
+
+                # Tier 2: structured function calling
                 if tool_calls:
                     for tc in tool_calls:
                         func_name = tc["function"]["name"]
@@ -4117,11 +4160,25 @@ async def _fallback_text_mode(chat):
                         result = await _invoke_tool(func_name, args, session=None)
                         result_str = json.dumps(result)[:500] if isinstance(result, dict) else str(result)[:500]
                         chat.add_tool_result(func_name, result_str)
-                        messages.append({"role": "assistant", "content": None, "tool_calls": [tc]})
-                        messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result_str})
-                    reply2, _ = await _call_model(messages)
-                    if reply2:
-                        reply = reply2
+                        history.append({"role": "assistant", "content": None, "tool_calls": [tc]})
+                        history.append({"role": "tool", "tool_call_id": tc["id"], "content": result_str})
+                    base_messages = [{"role": "system", "content": fallback_system}, *history,
+                                     {"role": "user", "content": user_input}]
+                    raw2 = await _call_api({"messages": base_messages, "max_tokens": 8192, "temperature": 0.7},
+                                           with_tools=True)
+                    if raw2:
+                        reply2, _ = _parse_response(raw2)
+                        if reply2:
+                            reply = reply2
+
+                # Tier 3: regex text-based tool extraction
+                if not tool_calls and reply:
+                    text_calls = _extract_text_tool_calls(reply)
+                    for func_name, args in text_calls:
+                        chat.add_tool_call(func_name, args)
+                        result = await _invoke_tool(func_name, args, session=None)
+                        result_str = json.dumps(result)[:300] if isinstance(result, dict) else str(result)[:300]
+                        chat.add_tool_result(func_name, result_str)
 
                 if reply:
                     chat.add_friday_message(reply)
@@ -4131,7 +4188,8 @@ async def _fallback_text_mode(chat):
                     chat.add_friday_message("On it, Boss.")
                     history.append({"role": "assistant", "content": "On it, Boss."})
             except Exception as e:
-                chat.add_error(str(e))
+                chat.add_error(f"{e}")
+                traceback.print_exc()
 
     console.print("[bold cyan]Text session ended. Goodbye, Boss.[]")
 
