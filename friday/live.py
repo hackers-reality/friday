@@ -4054,15 +4054,12 @@ async def _fallback_text_mode(chat, reason=""):
     history: list[dict] = []
 
     nim_models = [
-        os.getenv("NVIDIA_NIM_MODEL", "deepseek-ai/deepseek-v4-flash"),
-        "moonshotai/kimi-k2.6",
-        "nvidia/llama-3.1-nemotron-ultra-253b-v1",
-        "deepseek-ai/deepseek-v4-pro",
-        "deepseek-ai/deepseek-v4-flash",
-        "meta/llama-4-maverick-17b-128e-instruct",
-        "mistralai/mistral-large-3-675b-instruct-2512",
-        "qwen/qwen3.5-122b-a10b",
+        os.getenv("NVIDIA_NIM_MODEL", "meta/llama-3.3-70b-instruct"),
         "meta/llama-3.3-70b-instruct",
+        "mistralai/mistral-large-3-675b-instruct-2512",
+        "meta/llama-4-maverick-17b-128e-instruct",
+        "deepseek-ai/deepseek-v4-flash",
+        "deepseek-ai/deepseek-v4-pro",
     ]
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as http:
