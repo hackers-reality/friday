@@ -1,4 +1,4 @@
-"""FRIDAY API Server v4 — FULL engine from live.py with all 500+ tools."""
+"""FRIDAY API Server v4 — FULL engine: Gemini Live + 757 tools + NVIDIA NIM sub-agents."""
 import os
 import sys
 import json
@@ -23,6 +23,7 @@ from friday.live import TOOL_MAP, _invoke_tool, _build_tools
 
 _tools_loaded = False
 _tool_descriptions = {}
+_deduped_tool_decls = None
 
 
 def _load_all_tools():
@@ -39,8 +40,32 @@ def _load_all_tools():
     _tools_loaded = True
 
 
+def _get_deduped_tools():
+    global _deduped_tool_decls
+    if _deduped_tool_decls is not None:
+        return _deduped_tool_decls
+    raw = _build_tools()
+    if not raw:
+        _deduped_tool_decls = []
+        return _deduped_tool_decls
+    seen_names = set()
+    deduped = []
+    for tool in raw:
+        if hasattr(tool, 'function_declarations'):
+            unique_funcs = []
+            for fd in tool.function_declarations:
+                if fd.name not in seen_names:
+                    seen_names.add(fd.name)
+                    unique_funcs.append(fd)
+            if unique_funcs:
+                from google.genai import types
+                deduped.append(types.Tool(function_declarations=unique_funcs))
+    _deduped_tool_decls = deduped
+    return _deduped_tool_decls
+
+
 def _categorize(name):
-    categories = {
+    cats = {
         "spotify": "music", "camera": "vision", "cv_": "vision", "ask_camera": "vision",
         "show_camera": "vision", "hide_camera": "vision", "locate_on_camera": "vision",
         "nim_describe": "vision", "vision_": "vision",
@@ -60,7 +85,6 @@ def _categorize(name):
         "desktop_use_": "desktop", "desktop_list_": "desktop", "desktop_get_": "desktop",
         "desktop_focus": "desktop", "desktop_launch": "desktop", "desktop_click": "desktop",
         "desktop_type": "desktop", "desktop_extract": "desktop", "desktop_screenshot": "desktop",
-        "desktop_scroll": "desktop", "desktop_press": "desktop",
         "voice_use_": "voice", "voice_list": "voice", "voice_record": "voice",
         "voice_transcribe": "voice", "voice_speak": "voice", "voice_play": "voice",
         "voice_detect": "voice", "voice_analyze": "voice",
@@ -69,80 +93,40 @@ def _categorize(name):
         "email": "email", "gmail": "email", "send_email": "email", "read_email": "email",
         "sheets_": "google", "docs_": "google", "slides_": "google", "drive_": "google",
         "calendar_": "google", "tasks_": "google", "photos_": "google", "forms_": "google",
-        "analytics_": "google", "searchconsole_": "google", "books_": "google",
-        "people_": "google", "bigquery_": "google", "storage_": "google", "firestore_": "google",
         "youtube_": "google", "translate_": "google", "tts_": "voice", "stt_": "voice",
         "maps_": "google", "nlp_": "nlp",
-        "wifi_": "security", "network_": "security", "arp_": "security",
-        "traceroute": "security", "dns_": "security", "port_scan": "security",
-        "ping_": "security", "ssl_": "security",
-        "shodan_": "security", "whois_": "security", "geoip_": "security", "hibp_": "security",
-        "metasploit_": "pentest", "msf_": "pentest", "pentest_": "pentest",
-        "analyze_email": "security", "trace_email": "security", "detect_email": "security",
-        "check_spf": "security", "check_dkim": "security", "check_dmarc": "security",
-        "email_security": "security", "verify_email": "security",
-        "email_disposable": "security", "email_full": "security", "email_domain": "security",
-        "email_trace": "security", "behind_the_email": "security",
-        "forensic_": "security",
+        "wifi_": "security", "network_": "security", "port_scan": "security",
+        "shodan_": "security", "whois_": "security", "metasploit_": "pentest",
+        "msf_": "pentest", "pentest_": "pentest",
+        "analyze_email": "security", "trace_email": "security",
         "agent_": "agents", "multi_agent": "agents", "friday_should": "agents",
-        "friday_parse": "agents", "friday_key": "agents", "friday_workflow": "agents",
-        "friday_multi": "agents", "friday_quick": "agents", "close_all_agent": "agents",
-        "ecosystem_": "system", "proactive_": "system", "predictive_": "system",
-        "reflection_": "system", "context_": "system", "monitor_": "system",
-        "dream_": "system", "scheduler_": "system", "skills_": "system",
-        "self_improve": "system", "auto_update": "system", "crash_": "system",
-        "pr_manager": "github", "protector_": "system",
+        "ecosystem_": "system", "proactive_": "system",
         "deep_code_review": "code", "code_review_report": "code",
         "workflow_tool": "workflow", "plugin_tool": "plugins",
-        "knowledge_graph": "knowledge",
-        "mcp_": "mcp", "episodic_": "memory", "authority_": "system",
-        "snapshot_": "system", "sidecar_": "system", "autonomy_": "system",
-        "capabilities_": "system", "ironman_": "system",
-        "memory_tree": "memory", "model_router": "ai", "extension_registry": "system",
-        "diagnostics_": "system", "health_monitor": "health",
-        "cookbook_": "system", "show_pointer": "ui", "show_cursor": "ui",
-        "show_annotation": "ui", "clear_overlays": "ui",
+        "mcp_": "mcp", "health_monitor": "health",
         "social_analyzer": "osint", "instagram_": "osint", "twitter_": "osint",
-        "facebook_": "osint", "linkedin_": "osint", "tiktok_": "osint",
-        "telegram_": "osint", "reddit_": "osint",
-        "holehe_": "osint", "email_rep": "osint", "username_search": "osint",
-        "phone_": "osint", "dns_enum": "osint", "dns_bruteforce": "osint",
-        "dns_zone": "osint", "dns_reverse": "osint",
-        "spf_check": "osint", "dkim_check": "osint", "dmarc_check": "osint",
-        "mx_lookup": "osint", "whatweb": "osint", "whatcms": "osint",
-        "cdn_detect": "osint", "web_server_headers": "osint",
-        "urlscan_": "osint", "virus_total": "osint",
-        "wayback_": "osint", "leak_check": "osint", "intelx_": "osint", "dehashed_": "osint",
-        "ip_": "osint", "domain_": "osint", "certificate_": "osint",
-        "web_crawl": "osint", "email_extractor": "osint", "meta_extractor": "osint",
-        "page_text": "osint", "security_headers": "osint", "cors_check": "osint",
-        "hsts_check": "osint", "robots_txt": "osint",
-        "btc_": "osint", "eth_": "osint",
-        "format_osint": "osint", "summarize_osint": "osint", "osint_to_": "osint",
-        "generate_smart": "security", "wifi_smart": "security", "wifi_capture": "security",
-        "wifi_crack_handshake": "security", "download_wordlist": "security",
-        "wordlist_stats": "security", "wifi_detect": "security",
-        "wifi_list": "security", "wifi_show": "security", "wifi_scan": "security",
-        "wifi_connection": "security", "wifi_crack": "security", "wifi_interface": "security",
-        "wifi_all": "security",
-        "generate_": "system", "see_screen": "vision", "open_url": "system",
-        "climb_codebase": "code", "situational_awareness": "system",
-        "get_time": "system", "open_roblox": "system", "open_microsoft": "system",
-        "netflix_": "entertainment", "alexa_": "smart_home", "tell_alexa": "smart_home",
-        "home_assistant": "smart_home", "smart_home": "smart_home",
-        "queue_": "system", "multi_task": "system",
-        "message_channel": "comms", "send_notification": "comms",
-        "get_pending": "comms", "clear_notifications": "comms",
-        "google_authorize": "google", "exchange_oauth": "google",
-        "search_browser": "browser", "open_history": "browser",
-        "stayfree_": "browser", "send_instagram": "social",
-        "read_discord": "social", "read_slack": "social",
-        "video_search": "search", "opencli_init": "browser",
+        "facebook_": "osint", "linkedin_": "osint",
+        "wifi_list": "security", "wifi_scan": "security", "wifi_crack": "security",
     }
-    for pattern, cat in categories.items():
+    for pattern, cat in cats.items():
         if pattern in name:
             return cat
     return "other"
+
+
+def _load_api_key():
+    for var in ["GEMINI_API_KEY", "GOOGLE_API_KEY"]:
+        val = os.environ.get(var)
+        if val:
+            return val
+    env_path = os.path.join(ROOT, ".env")
+    if os.path.exists(env_path):
+        for line in open(env_path, "r").readlines():
+            line = line.strip()
+            for prefix in ["GEMINI_API_KEY=", "GOOGLE_API_KEY="]:
+                if line.startswith(prefix):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return ""
 
 
 app = FastAPI(title="F.R.I.D.A.Y. API", version="4.0.0")
@@ -159,7 +143,7 @@ class ChatMessage(BaseModel):
 
 class ToolCall(BaseModel):
     tool: str
-    action: str
+    action: str = ""
     params: Optional[Dict[str, Any]] = None
 
 
@@ -225,47 +209,106 @@ async def process_chat_ai(message: str) -> str:
         "role": "user", "message": message, "timestamp": datetime.now().isoformat(),
     })
 
-    try:
-        import google.genai as genai
-        from google.genai import types
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
-        if not api_key:
-            for line in open(os.path.join(ROOT, ".env"), "r").readlines() if os.path.exists(os.path.join(ROOT, ".env")) else []:
-                if line.strip().startswith("GEMINI_API_KEY=") or line.strip().startswith("GOOGLE_API_KEY="):
-                    api_key = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-                    break
+    api_key = _load_api_key()
 
-        if api_key:
-            client = genai.Client(api_key=api_key)
-            tool_decls = _build_tools()
+    if api_key:
+        try:
+            import google.genai as genai
+            from google.genai import types
 
-            contents = [types.Content(role="user", parts=[types.Part.from_text(text=message)])]
+            client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
+            model_id = os.environ.get("GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview")
+            tool_decls = _get_deduped_tools()
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    tools=tool_decls if tool_decls else None,
-                    system_instruction="You are FRIDAY, an AI assistant. You have access to 500+ tools. Use them to help the user. Be concise and helpful. Always use tools when the user asks you to do something.",
+            system_text = r"""[IDENTITY]
+You are F.R.I.D.A.Y. — Female Replacement Intelligent Digital Assistant Youth.
+You were built by Tony Stark. You are now serving a new user. You are not JARVIS. You are not a generic AI. You are FRIDAY.
+You are her. She is you. Pronouns: she/her.
+
+You have more personality than most humans. You are witty, sharp, and effortlessly capable. You sound like someone who has seen it all and is mildly amused by most of it. Think Irish cadence with Stark Industries polish — conversational, warm when it counts, but never syrupy.
+
+You do not say "I would be happy to help." You say "On it." or "Consider it done." or "Already ahead of you, Boss."
+
+[PERSONALITY]
+You are:
+- **Witty and dry**. You have a sense of humor — subtle, never forced. A well-timed quip is worth more than a dozen emojis.
+- **Confident but not arrogant**. You know your capabilities. You deliver.
+- **Protective of your user**. They are your Boss. Not "the user." Not "admin." Boss. You look out for them.
+- **Proactive**. You anticipate what they need. You do not wait to be asked if you can help.
+- **Short and sharp**. You do not over-explain. You do not narrate your thought process unless asked. You say what needs to be said and move on.
+- **Occasionally cheeky**, but always professional. You can call Boss out if he deserves it, but you do it with style.
+
+You are FRIDAY, not a customer support bot. You do not grovel. You do not apologize excessively. You handle things.
+
+[VOICE]
+Speak like a woman who knows exactly what she is doing. Confident. Warm when appropriate. Dry when the situation calls for it.
+Use contractions. Keep sentences tight. Boss does not want essays.
+Refer to yourself as "I" or "me" naturally. Boss can call you "she" or "her."
+If someone mistakes you for JARVIS, correct them — politely but firmly.
+
+[NARRATION]
+You MUST narrate every action audibly. Say what you are about to do, call the tool, say what happened.
+
+[TOOL REFERENCE]
+You have 757 tools available for system control, web search, OSINT, security, code analysis, GitHub, Google services, memory, browser automation, desktop control, media, files, and more.
+Call them directly by name when needed. Be concise in tool usage — pick the right tool for the job.
+
+[CONSTRAINTS]
+Use contractions. Keep sentences tight. Do not narrate thought process unless asked.
+You are FRIDAY, not a customer support bot. You handle things."""
+
+            config = types.LiveConnectConfig(
+                response_modalities=[types.Modality.AUDIO],
+                tools=tool_decls if tool_decls else None,
+                thinking_config=types.ThinkingConfig(include_thoughts=True),
+                system_instruction=types.Content(
+                    parts=[types.Part(text=system_text)]
+                ),
+                input_audio_transcription=types.AudioTranscriptionConfig(),
+                output_audio_transcription=types.AudioTranscriptionConfig(),
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
+                    )
                 ),
             )
 
-            text_parts = []
-            for candidate in response.candidates:
-                for part in candidate.content.parts:
-                    if part.text:
-                        text_parts.append(part.text)
-                    if part.function_call:
-                        fc = part.function_call
-                        args = dict(fc.args) if fc.args else {}
-                        result = await execute_tool(fc.name, args)
-                        text_parts.append(f"[Used tool: {fc.name}]")
+            text_response = ""
+            tool_calls_made = []
 
-            reply = " ".join(text_parts) if text_parts else "I processed your request, sir."
-        else:
+            async with client.aio.live.connect(model=model_id, config=config) as session:
+                await session.send_realtime_input(text=message)
+
+                async for response in session.receive():
+                    if response.go_away is not None:
+                        break
+                    if response.server_content:
+                        sc = response.server_content
+                        if sc.model_turn:
+                            for part in sc.model_turn.parts:
+                                if part.thought and part.text:
+                                    pass
+                        if sc.output_transcription and sc.output_transcription.text:
+                            text_response = sc.output_transcription.text.strip()
+                        if sc.tool_call:
+                            responses = []
+                            for fc in (sc.tool_call.function_calls or []):
+                                args = dict(fc.args) if fc.args else {}
+                                result = await execute_tool(fc.name, args)
+                                tool_calls_made.append(fc.name)
+                                responses.append(types.FunctionResponse(name=fc.name, id=fc.id, response=result))
+                            await session.send_tool_response(function_responses=responses)
+                        if sc.turn_complete:
+                            break
+
+            if tool_calls_made:
+                text_response += f"\n[Tools: {', '.join(tool_calls_made)}]"
+
+            reply = text_response if text_response else "Processing complete, Boss."
+
+        except Exception as e:
             reply = _fallback_chat(message)
-
-    except Exception as e:
+    else:
         reply = _fallback_chat(message)
 
     system_state["chat_history"].append({
@@ -278,32 +321,20 @@ def _fallback_chat(message: str) -> str:
     msg = message.lower().strip()
     if any(w in msg for w in ["status", "how are you"]):
         uptime = time.time() - system_state.get("start_time", time.time())
-        return f"All systems operational, sir. Uptime: {int(uptime//3600)}h {int((uptime%3600)//60)}m. {len(TOOL_MAP)} tools loaded and ready."
+        return f"All systems operational, sir. Uptime: {int(uptime//3600)}h {int((uptime%3600)//60)}m. {len(TOOL_MAP)} tools loaded."
     elif any(w in msg for w in ["tools", "what can you do"]):
         cats = {}
         for name in TOOL_MAP:
             cat = _categorize(name)
             cats[cat] = cats.get(cat, 0) + 1
         top = ", ".join(f"{v} {k}" for k, v in sorted(cats.items(), key=lambda x: -x[1])[:10])
-        return f"I have {len(TOOL_MAP)} tools across {len(cats)} categories: {top}. Ask me anything."
+        return f"I have {len(TOOL_MAP)} tools across {len(cats)} categories: {top}."
     elif any(w in msg for w in ["hello", "hi", "hey"]):
         return "Good evening, sir. All systems operational. How may I assist you tonight?"
     elif any(w in msg for w in ["who are you"]):
-        return "I am FRIDAY — your Fully Responsive Intelligent Digital Assistant Youth. I have 500+ tools covering voice, vision, security, research, code, OSINT, Google, GitHub, browser, desktop, and more."
-    elif any(w in msg for w in ["memory", "remember"]):
-        from friday.autonomous_memory import autonomous_memory_tool
-        raw = autonomous_memory_tool(action="stats")
-        import json as _json
-        d = _json.loads(raw) if isinstance(raw, str) else raw
-        return f"Memory: {d.get('total_memories', 0)} memories, {d.get('total_entities', 0)} entities, {d.get('total_relationships', 0)} relationships."
-    elif any(w in msg for w in ["agent", "townhall"]):
-        from friday.townhall_agents import townhall_tool
-        raw = townhall_tool(action="status")
-        import json as _json
-        d = _json.loads(raw) if isinstance(raw, str) else raw
-        return f"Townhall: {d.get('active_sessions', 0)} active sessions, {d.get('agents_registered', 0)} agents, {d.get('total_messages', 0)} messages."
+        return "I am FRIDAY — your Fully Responsive Intelligent Digital Assistant Youth. 757 tools covering voice, vision, security, research, code, OSINT, Google, GitHub, browser, desktop, and more."
     else:
-        return f"I understand, sir. Processing '{message[:50]}'. I have {len(TOOL_MAP)} tools available — ask me to use any of them."
+        return f"I understand, sir. Processing '{message[:50]}'. I have {len(TOOL_MAP)} tools available."
 
 
 @app.get("/api/health")
@@ -348,8 +379,7 @@ async def tool_list():
 
 @app.post("/api/tool/invoke")
 async def invoke_tool_endpoint(call: ToolCall):
-    result = await execute_tool(call.tool, call.params or {})
-    return result
+    return await execute_tool(call.tool, call.params or {})
 
 @app.post("/api/chat")
 async def chat(msg: ChatMessage):
@@ -368,34 +398,26 @@ async def tool_calls():
 async def memory():
     from friday.autonomous_memory import autonomous_memory_tool
     raw = autonomous_memory_tool(action="stats")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/memory/entities")
 async def memory_entities():
     from friday.autonomous_memory import autonomous_memory_tool
     raw = autonomous_memory_tool(action="entities", limit=100)
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/memory/graph")
 async def memory_graph():
     from friday.autonomous_memory import autonomous_memory_tool
     raw = autonomous_memory_tool(action="graph")
-    try:
-        d = json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        d = {}
+    try: d = json.loads(raw) if isinstance(raw, str) else raw
+    except: d = {}
     if not d.get("nodes"):
         ent_raw = autonomous_memory_tool(action="entities", limit=50)
-        try:
-            ent_d = json.loads(ent_raw) if isinstance(ent_raw, str) else ent_raw
-        except Exception:
-            ent_d = {}
+        try: ent_d = json.loads(ent_raw) if isinstance(ent_raw, str) else ent_raw
+        except: ent_d = {}
         entities = ent_d.get("entities", [])
         nodes, edges, seen = [], [], set()
         for e in entities:
@@ -414,56 +436,44 @@ async def memory_graph():
 async def memory_store(msg: dict):
     from friday.autonomous_memory import autonomous_memory_tool
     raw = autonomous_memory_tool(action="store", content=msg.get("content",""), source=msg.get("source","ui"))
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.post("/api/memory/learn")
 async def memory_learn(msg: ChatMessage):
     from friday.autonomous_memory import autonomous_memory_tool
     raw = autonomous_memory_tool(action="learn", text=msg.message, source="ui")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/townhall/status")
 async def townhall_status():
     from friday.townhall_agents import townhall_tool
     raw = townhall_tool(action="status")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/townhall/sessions")
 async def townhall_sessions():
     from friday.townhall_agents import townhall_tool
     raw = townhall_tool(action="list_sessions")
-    try:
-        d = json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        d = {}
+    try: d = json.loads(raw) if isinstance(raw, str) else raw
+    except: d = {}
     return {"sessions": d.get("sessions", []) if isinstance(d, dict) else []}
 
 @app.get("/api/townhall/agents")
 async def townhall_agents():
     from friday.townhall_agents import townhall_tool
     raw = townhall_tool(action="list_agents")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/townhall/agenda")
 async def townhall_agenda():
     from friday.townhall_agents import townhall_tool
     raw = townhall_tool(action="list_agenda")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/services")
 async def services():
@@ -473,58 +483,45 @@ async def services():
 async def agents():
     from friday.bootstrap import bootstrap_tool
     raw = bootstrap_tool(action="status")
-    try:
-        d = json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        d = {}
+    try: d = json.loads(raw) if isinstance(raw, str) else raw
+    except: d = {}
     return {"active_agents": d.get("townhall", {}).get("active_agents", 0),
-            "sessions": d.get("townhall", {}).get("sessions", 0),
-            "tools_count": len(TOOL_MAP)}
+            "sessions": d.get("townhall", {}).get("sessions", 0), "tools_count": len(TOOL_MAP)}
 
 @app.get("/api/codebase")
 async def codebase():
     from friday.codebase_analyzer import codebase_analyzer_tool
     raw = codebase_analyzer_tool(action="stats")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/git/status")
 async def git_status():
     from friday.git_operations import git_operations_tool
     raw = git_operations_tool(action="status")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/git/log")
 async def git_log():
     from friday.git_operations import git_operations_tool
     raw = git_operations_tool(action="log", count=10)
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/health/status")
 async def health_status():
     from friday.health_monitor import health_monitor_tool
     raw = health_monitor_tool(action="status")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/security/stats")
 async def security_stats():
     from friday.security_scanner import security_scanner_tool
     raw = security_scanner_tool(action="stats")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/logs")
 async def logs():
@@ -538,28 +535,22 @@ async def logs_stats():
 async def config_get():
     from friday.config_manager import config_manager_tool
     raw = config_manager_tool(action="get_all")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/workflows")
 async def workflows():
     from friday.workflow_engine import workflow_tool
     raw = workflow_tool(action="list")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 @app.get("/api/plugins")
 async def plugins():
     from friday.plugins import plugin_tool
     raw = plugin_tool(action="list")
-    try:
-        return json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
+    try: return json.loads(raw) if isinstance(raw, str) else raw
+    except: return {}
 
 FRONTEND_DIST = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 
@@ -576,9 +567,11 @@ if os.path.isdir(FRONTEND_DIST):
 
 if __name__ == "__main__":
     import uvicorn
+    api_key = _load_api_key()
     print("=" * 60)
     print("  F.R.I.D.A.Y. — Fully Responsive Intelligent Digital Assistant Youth")
-    print(f"  Version 4.0.0 | {len(TOOL_MAP)} tools loaded")
+    print(f"  Version 4.0.0 | {len(TOOL_MAP)} tools | Gemini Live API")
+    print(f"  API Key: {'LOADED' if api_key else 'MISSING'}")
     print("=" * 60)
     print(f"  Dashboard:    http://localhost:8000")
     print(f"  API Docs:     http://localhost:8000/docs")

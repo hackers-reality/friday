@@ -4014,6 +4014,230 @@ async def audio_worker(recorder, session, audio_ready, porcupine, winsound, inte
         await asyncio.sleep(0)
 
 
+async def _fallback_text_mode(chat):
+    """Fallback when Live API quota is exhausted. Uses NVIDIA NIM with full tool definitions."""
+    console.print("[yellow]Gemini Live API quota exhausted. Falling back to NIM/Zen text mode.[/]")
+    console.print("[dim]Same system prompt, same tools. Type 'exit' to quit.[/]")
+
+    from friday.nim_client import NIM_API_BASE, ZEN_API_BASE
+    import httpx, json
+
+    nim_key = os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or ""
+    zen_key = os.getenv("ZEN_API_KEY") or os.getenv("OPENCODE_API_KEY") or ""
+
+    openai_tools = _build_openai_tools()
+    history: list[dict] = []
+
+    nim_models = [
+        os.getenv("NVIDIA_NIM_MODEL", "deepseek-ai/deepseek-v4-flash"),
+        "moonshotai/kimi-k2.6",
+        "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+        "deepseek-ai/deepseek-v4-pro",
+        "deepseek-ai/deepseek-v4-flash",
+        "meta/llama-4-maverick-17b-128e-instruct",
+        "mistralai/mistral-large-3-675b-instruct-2512",
+        "qwen/qwen3.5-122b-a10b",
+        "meta/llama-3.3-70b-instruct",
+    ]
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as http:
+
+        async def _call_model(messages: list[dict]) -> tuple[str, list[dict]]:
+            tools_payload = {"tools": openai_tools} if openai_tools else {}
+
+            # Try NIM with configured models
+            if nim_key:
+                for model in nim_models:
+                    try:
+                        resp = await http.post(
+                            f"{NIM_API_BASE}/chat/completions",
+                            headers={"Authorization": f"Bearer {nim_key}", "Content-Type": "application/json"},
+                            json={
+                                "model": model,
+                                "messages": messages,
+                                "max_tokens": 8192,
+                                "temperature": 0.7,
+                                **tools_payload,
+                            },
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            msg = data["choices"][0]["message"]
+                            return msg.get("content", ""), msg.get("tool_calls", [])
+                        if resp.status_code == 429:
+                            continue
+                        if resp.status_code == 404:
+                            continue
+                    except Exception:
+                        continue
+
+            # Fallback to Zen
+            if zen_key:
+                try:
+                    resp = await http.post(
+                        f"{ZEN_API_BASE}/chat/completions",
+                        headers={"Authorization": f"Bearer {zen_key}", "Content-Type": "application/json"},
+                        json={
+                            "model": "mimo-v2.5-free",
+                            "messages": messages,
+                            "max_tokens": 8192,
+                            "temperature": 0.7,
+                            **tools_payload,
+                        },
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        msg = data["choices"][0]["message"]
+                        return msg.get("content", ""), msg.get("tool_calls", [])
+                except Exception:
+                    pass
+
+            return "I'm having trouble connecting, Boss.", []
+
+        while True:
+            user_input = await _voice_or_keyboard_input(chat)
+            if user_input is None:
+                break
+
+            chat.add_user_message(user_input)
+            messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}, *history,
+                        {"role": "user", "content": user_input}]
+
+            try:
+                reply, tool_calls = await _call_model(messages)
+
+                if tool_calls:
+                    for tc in tool_calls:
+                        func_name = tc["function"]["name"]
+                        try:
+                            args = json.loads(tc["function"]["arguments"])
+                        except Exception:
+                            args = {}
+                        chat.add_tool_call(func_name, args)
+                        result = await _invoke_tool(func_name, args, session=None)
+                        result_str = json.dumps(result)[:500] if isinstance(result, dict) else str(result)[:500]
+                        chat.add_tool_result(func_name, result_str)
+                        messages.append({"role": "assistant", "content": None, "tool_calls": [tc]})
+                        messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result_str})
+                    reply2, _ = await _call_model(messages)
+                    if reply2:
+                        reply = reply2
+
+                if reply:
+                    chat.add_friday_message(reply)
+                    history.append({"role": "assistant", "content": reply})
+                    await _fallback_tts(reply)
+                else:
+                    chat.add_friday_message("On it, Boss.")
+                    history.append({"role": "assistant", "content": "On it, Boss."})
+            except Exception as e:
+                chat.add_error(str(e))
+
+    console.print("[bold cyan]Text session ended. Goodbye, Boss.[]")
+
+
+async def _voice_or_keyboard_input(chat) -> str | None:
+    """Get input from keyboard or microphone."""
+    import sys
+    print("\n[Boss] ", end="", flush=True)
+    line = await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
+    text = line.strip()
+    if text.lower() in ("exit", "quit", "bye"):
+        return None
+    if text.startswith("!v"):
+        return await _record_and_transcribe()
+    return text
+
+
+async def _record_and_transcribe() -> str:
+    """Record from mic and transcribe with Groq."""
+    import tempfile, os
+    try:
+        from friday.tools.voice_tools import record_audio, transcribe_audio_groq
+        r = await record_audio(duration=5.0)
+        path = r.get("path", "")
+        if not path:
+            return "voice input failed"
+        t = await transcribe_audio_groq(path)
+        text = t.get("text", "")
+        os.unlink(path)
+        return text or "voice input failed"
+    except Exception:
+        return "voice input failed"
+
+
+async def _fallback_tts(text: str):
+    """Speak response using Sarvam or Edge TTS."""
+    sarvam_key = os.getenv("SARVAM_API_KEY", "")
+    if sarvam_key:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as c:
+                resp = await c.post(
+                    "https://api.sarvam.ai/text-to-speech",
+                    headers={"API-Subscription-Key": sarvam_key, "Content-Type": "application/json"},
+                    json={"input": text, "voice": "priya", "model": "bulbul:v3", "target_language_code": "en-IN"},
+                )
+                if resp.status_code == 200:
+                    return
+        except Exception:
+            pass
+    # Fallback to Edge TTS
+    try:
+        from friday.tools.voice_tools import speak_text
+        await speak_text(text, engine="edge", voice="en-US-AriaNeural")
+    except Exception:
+        pass
+
+
+def _build_openai_tools() -> list[dict]:
+    """Build OpenAI-format tool definitions from TOOL_MAP."""
+    tools = []
+    visited = set()
+    for name, func in list(TOOL_MAP.items())[:500]:
+        if name in visited:
+            continue
+        visited.add(name)
+        doc = (func.__doc__ or "")[:300]
+        sig = ""
+        import inspect
+        try:
+            sig = str(inspect.signature(func))
+        except Exception:
+            sig = "(*args, **kwargs)"
+        props = {}
+        required = []
+        for part in sig.strip("()").split(","):
+            part = part.strip()
+            if not part or part == "*":
+                continue
+            if "=" in part:
+                pname = part.split("=")[0].strip()
+                ptype = "string"
+            elif part.startswith("**"):
+                continue
+            elif part.startswith("*"):
+                continue
+            else:
+                pname = part.split(":")[0].strip() if ":" in part else part.strip()
+                ptype = "string"
+                required.append(pname)
+            props[pname] = {"type": ptype, "description": ""}
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": doc[:200],
+                "parameters": {
+                    "type": "object",
+                    "properties": props,
+                    "required": required,
+                },
+            },
+        })
+    return tools
+
+
 # MAIN ENGINE
 async def friday_live_engine():
     global _event_loop
@@ -4645,7 +4869,8 @@ async def friday_live_engine():
                 if reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
                     await asyncio.sleep(3 * reconnect_attempts)
                 else:
-                    console.print("[bold red]Max reconnects reached.[/]")
+                    console.print("[bold red]Max reconnects reached. Falling back to text mode...[/]")
+                    await _fallback_text_mode(chat)
     finally:
         try:
             porcupine.delete()

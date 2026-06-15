@@ -47,6 +47,12 @@ function App() {
     const utt = new SpeechSynthesisUtterance(text);
     utt.rate = 0.95;
     utt.pitch = 0.9;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) ||
+                     voices.find(v => v.name.includes('Samantha')) ||
+                     voices.find(v => v.name.includes('Daniel')) ||
+                     voices.find(v => v.lang.startsWith('en'));
+    if (preferred) utt.voice = preferred;
     utt.onstart = () => setIsSpeaking(true);
     utt.onend = () => setIsSpeaking(false);
     window.speechSynthesis.speak(utt);
@@ -82,22 +88,16 @@ function App() {
     const mem = system.memory_percent;
     const disk = system.disk_percent;
 
-    if (cpu > 90 && (!last.cpuAlert || Date.now() - last.cpuAlert > 60000)) {
-      const msg = `Warning, sir. CPU usage is at ${cpu.toFixed(1)} percent. I recommend checking running processes.`;
-      setChatHistory(prev => [...prev, { role: 'assistant', text: `[ALERT] ${msg}`, time: new Date().toISOString() }]);
-      speak(msg);
+    if (cpu > 95 && (!last.cpuAlert || Date.now() - last.cpuAlert > 300000)) {
+      speak(`Warning. CPU at ${cpu.toFixed(0)} percent.`);
       last.cpuAlert = Date.now();
     }
-    if (mem > 90 && (!last.memAlert || Date.now() - last.memAlert > 60000)) {
-      const msg = `Warning, sir. Memory usage is at ${mem.toFixed(1)} percent. I recommend clearing unnecessary processes.`;
-      setChatHistory(prev => [...prev, { role: 'assistant', text: `[ALERT] ${msg}`, time: new Date().toISOString() }]);
-      speak(msg);
+    if (mem > 95 && (!last.memAlert || Date.now() - last.memAlert > 300000)) {
+      speak(`Warning. Memory at ${mem.toFixed(0)} percent.`);
       last.memAlert = Date.now();
     }
-    if (disk > 95 && (!last.diskAlert || Date.now() - last.diskAlert > 120000)) {
-      const msg = `Critical, sir. Disk usage is at ${disk.toFixed(1)} percent. Immediate cleanup required.`;
-      setChatHistory(prev => [...prev, { role: 'assistant', text: `[ALERT] ${msg}`, time: new Date().toISOString() }]);
-      speak(msg);
+    if (disk > 98 && (!last.diskAlert || Date.now() - last.diskAlert > 600000)) {
+      speak(`Critical. Disk at ${disk.toFixed(0)} percent.`);
       last.diskAlert = Date.now();
     }
   }, [system, healthStatus, speak]);
@@ -112,9 +112,8 @@ function App() {
 
         if (healthRes?.alerts?.length > 0) {
           const alert = healthRes.alerts[0];
-          const msg = `I detected a health alert: ${alert.message || alert}`;
-          if (!systemStateRef.current.lastHealthAlert || Date.now() - systemStateRef.current.lastHealthAlert > 120000) {
-            setChatHistory(prev => [...prev, { role: 'assistant', text: `[PROACTIVE] ${msg}`, time: new Date().toISOString() }]);
+          const msg = `Health alert: ${alert.message || alert}`;
+          if (!systemStateRef.current.lastHealthAlert || Date.now() - systemStateRef.current.lastHealthAlert > 600000) {
             speak(msg);
             systemStateRef.current.lastHealthAlert = Date.now();
           }
@@ -126,9 +125,6 @@ function App() {
 
         const gitRes = await fetch(`${API}/api/git/status`).then(r => r.json()).catch(() => null);
         if (gitRes?.dirty_files > 10 && !systemStateRef.current.gitWarned) {
-          const msg = `Sir, you have ${gitRes.dirty_files} uncommitted changes. I recommend reviewing and committing them.`;
-          setChatHistory(prev => [...prev, { role: 'assistant', text: `[PROACTIVE] ${msg}`, time: new Date().toISOString() }]);
-          speak(msg);
           systemStateRef.current.gitWarned = true;
         }
       } catch (e) {}
