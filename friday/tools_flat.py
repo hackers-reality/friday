@@ -305,14 +305,7 @@ def open_app(name: str) -> str:
         except Exception:
             pass
 
-    # Strategy 1: Try `start` with the name directly (Windows resolves through PATH and App Paths)
-    try:
-        subprocess.run(f"start \"\" \"{name}\"", shell=True, timeout=10)
-        return f"[OK] Opening: {name}"
-    except Exception:
-        pass
-
-    # Strategy 2: Use `where` to find the full path, then open it
+    # Strategy 1: Use `where` to find the full path, then open it
     try:
         result = subprocess.run(f"where {name}", shell=True, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
@@ -323,7 +316,7 @@ def open_app(name: str) -> str:
     except Exception:
         pass
 
-    # Strategy 3: Try with .exe extension if not present
+    # Strategy 2: Try with .exe extension if not present
     if not name.lower().endswith('.exe'):
         try:
             result = subprocess.run(f"where {name}.exe", shell=True, capture_output=True, text=True, timeout=5)
@@ -335,10 +328,19 @@ def open_app(name: str) -> str:
         except Exception:
             pass
 
+    # Strategy 3: Try `start` with the name directly (Windows resolves through PATH and App Paths)
+    try:
+        result = subprocess.run(f"start \"\" \"{name}\"", shell=True, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            return f"[OK] Opening: {name}"
+    except Exception:
+        pass
+
     # Strategy 4: Try `start` as final fallback
     try:
-        subprocess.run(f"start \"\" \"{name}\"", shell=True, timeout=10)
-        return f"[OK] Opening: {name}"
+        result = subprocess.run(f"start \"\" \"{name}\"", shell=True, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            return f"[OK] Opening: {name}"
     except Exception:
         pass
 
@@ -612,6 +614,19 @@ def spotify_play(query: str = "") -> str:
             # Fallback: keyboard simulation
             return _spotify_play_keyboard(query)
 
+        # Ensure an active device exists before playing
+        try:
+            devices = sp.devices()
+            active = [d for d in devices.get("devices", []) if d.get("is_active")]
+            if not active:
+                available = devices.get("devices", [])
+                if available:
+                    sp.transfer_playback(device_id=available[0]["id"], force_play=False)
+                else:
+                    return "[FAIL] No active Spotify device found. Open Spotify on any device first."
+        except Exception:
+            pass
+
         if not query:
             # Resume playback
             sp.start_playback()
@@ -687,6 +702,13 @@ def spotify_pause() -> str:
     try:
         sp = _get_spotify_client()
         if sp:
+            try:
+                devices = sp.devices()
+                active = [d for d in devices.get("devices", []) if d.get("is_active")]
+                if not active:
+                    return "[FAIL] No active Spotify device found. Open Spotify first."
+            except Exception:
+                pass
             sp.pause_playback()
             return "[OK] Spotify paused via API"
     except Exception:
@@ -790,6 +812,7 @@ def spotify_current() -> str:
 
 def web_search(query: str, max_results: int = 5) -> str:
     """Fast web search via classic scraper (no Playwright — too slow). Use browser_use_navigate for JS-heavy pages."""
+    max_results = int(max_results)
     try:
         from friday.web import WebScraper
         from bs4 import BeautifulSoup
@@ -920,7 +943,7 @@ def see_screen(question: str = "What do you see on the screen?") -> str:
                     continue
                 if r.status_code != 200:
                     last_error = f"{model} HTTP {r.status_code}: {data.get('error', {}).get('message', '')}"
-                    break
+                    continue
                 if "candidates" not in data or not data["candidates"]:
                     error_info = data.get("error", {}).get("message", str(data))
                     last_error = f"{model} no response: {error_info}"
@@ -1075,6 +1098,7 @@ def situational_awareness() -> str:
 
 def calendar_tool_handler(action: str = "list", days: int = 7) -> str:
     """Google Calendar integration: list events, sync with goals."""
+    days = int(days)
     try:
         from friday.goals import fetch_calendar_events, sync_calendar_to_goals
         if action == "list":
@@ -1185,18 +1209,20 @@ def osint_user_profile_tool(action: str = "status", name: str = "", email: str =
             if not pname and not pemails:
                 return "[FAIL] No name or email in profile. Run 'onboard' first or pass name/email as kwargs."
 
-            findings = {}
+            findings: dict = {}
 
             async def _run_osint():
                 from friday.tools_osint_extra import (
                     social_analyzer, leak_check, email_rep, holehe_check,
                     email_domain_analyzer, dns_enum, domain_similar
                 )
+                social_found_local = None
                 if pname:
                     try:
                         res = await social_analyzer(pname)
                         if "error" not in res:
                             findings["social_media"] = res
+                            social_found_local = res.get("platforms_found", [])
                     except Exception:
                         pass
                 for eaddr in pemails:
@@ -1238,15 +1264,22 @@ def osint_user_profile_tool(action: str = "status", name: str = "", email: str =
                                 findings.setdefault("similar_domains", {})[domain] = res
                         except Exception:
                             pass
-
-            try:
-                asyncio.run(_run_osint())
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                try:
-                    loop.run_until_complete(_run_osint())
-                finally:
-                    loop.close()
+                # Save findings to profile (for background-task path where post-processing is skipped)
+                _pf = load_profile()
+                if _pf:
+                    br = findings.get("breaches", {})
+                    for eaddr, data in br.items():
+                        if data.get("found"):
+                            _pf.setdefault("security_audit", []).append({
+                                "source": f"breach_check_{eaddr}",
+                                "detail": f"Found in {data.get('source_count', 0)} breaches",
+                                "confidence": 0.8,
+                            })
+                    if social_found_local:
+                        _pf.setdefault("social_media", {}).setdefault("platforms", social_found_local)
+                        memory_store("osint_social_platforms", ", ".join(social_found_local), "osint")
+                    save_profile(_pf)
+                    memory_store("osint_profiling_done", datetime.now().isoformat(), "osint")
 
             profile = load_profile()
             for eaddr in pemails:
@@ -1588,19 +1621,19 @@ def osint_full_scan(target: str, target_type: str = "auto", deep: bool = False) 
     social_tasks = []
 
     if is_email:
-        social_tasks.append(("holehe", lambda: __import__("friday.tools.holehe_tool", fromlist=["run_holehe"]).run_holehe(target, timeout=60)))
-        social_tasks.append(("leak_check", lambda: __import__("friday.tools_osint_extra", fromlist=["leak_check"]).leak_check(target, timeout=30)))
-        social_tasks.append(("intelx", lambda: __import__("friday.tools_osint_extra", fromlist=["intelx_search"]).intelx_search(target, "email", timeout=30)))
-        social_tasks.append(("dehashed", lambda: __import__("friday.tools_osint_extra", fromlist=["dehashed_search"]).dehashed_search(target, "email", timeout=30)))
-        social_tasks.append(("email_rep", lambda: __import__("friday.tools_osint_extra", fromlist=["email_rep"]).email_rep(target, timeout=15)))
-        social_tasks.append(("hibp", lambda: __import__("friday.tools.osint_advanced_tools", fromlist=["hibp_breach_check"]).hibp_breach_check(target, timeout=30)))
-        social_tasks.append(("hunter", lambda: __import__("friday.tools.osint_advanced_tools", fromlist=["hunter_email_search"]).hunter_email_search(domain, timeout=30)))
+        social_tasks.append(("holehe", lambda: _run_async(__import__("friday.tools.holehe_tool", fromlist=["run_holehe"]).run_holehe(target, timeout=60))))
+        social_tasks.append(("leak_check", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["leak_check"]).leak_check(target, timeout=30))))
+        social_tasks.append(("intelx", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["intelx_search"]).intelx_search(target, "email", timeout=30))))
+        social_tasks.append(("dehashed", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["dehashed_search"]).dehashed_search(target, "email", timeout=30))))
+        social_tasks.append(("email_rep", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["email_rep"]).email_rep(target, timeout=15))))
+        social_tasks.append(("hibp", lambda: _run_async(__import__("friday.tools.osint_advanced_tools", fromlist=["hibp_breach_check"]).hibp_breach_check(target, timeout=30))))
+        social_tasks.append(("hunter", lambda: _run_async(__import__("friday.tools.osint_advanced_tools", fromlist=["hunter_email_search"]).hunter_email_search(domain, timeout=30))))
 
-    social_tasks.append(("sherlock", lambda: __import__("friday.tools.sherlock_tool", fromlist=["run_sherlock"]).run_sherlock(username, timeout=60)))
-    social_tasks.append(("maigret", lambda: __import__("friday.tools.maigret_tool", fromlist=["run_maigret"]).run_maigret(username, timeout=60)))
-    social_tasks.append(("social_analyzer", lambda: __import__("friday.tools_osint_extra", fromlist=["social_analyzer"]).social_analyzer(username, timeout=20)))
-    social_tasks.append(("username_search", lambda: __import__("friday.tools_osint_extra", fromlist=["username_search"]).username_search(username, timeout=20)))
-    social_tasks.append(("github", lambda: __import__("friday.tools.github_osint_tool", fromlist=["github_search_users"]).github_search_users(username, limit=5)))
+    social_tasks.append(("sherlock", lambda: _run_async(__import__("friday.tools.sherlock_tool", fromlist=["run_sherlock"]).run_sherlock(username, timeout=60))))
+    social_tasks.append(("maigret", lambda: _run_async(__import__("friday.tools.maigret_tool", fromlist=["run_maigret"]).run_maigret(username, timeout=60))))
+    social_tasks.append(("social_analyzer", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["social_analyzer"]).social_analyzer(username, timeout=20))))
+    social_tasks.append(("username_search", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["username_search"]).username_search(username, timeout=20))))
+    social_tasks.append(("github", lambda: _run_async(__import__("friday.tools.github_osint_tool", fromlist=["github_search_users"]).github_search_users(username, limit=5))))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(t[1]): t[0] for t in social_tasks}
@@ -1617,16 +1650,16 @@ def osint_full_scan(target: str, target_type: str = "auto", deep: bool = False) 
     if domain:
         parts.append("\n── DNS & Domain Intelligence ──")
         domain_tasks = [
-            ("dns_mx", lambda: __import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "MX")),
-            ("dns_a", lambda: __import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "A")),
-            ("dns_txt", lambda: __import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "TXT")),
-            ("spf", lambda: __import__("friday.tools_osint_extra", fromlist=["spf_check"]).spf_check(domain)),
-            ("dkim", lambda: __import__("friday.tools_osint_extra", fromlist=["dkim_check"]).dkim_check(domain)),
-            ("dmarc", lambda: __import__("friday.tools_osint_extra", fromlist=["dmarc_check"]).dmarc_check(domain)),
-            ("whois", lambda: __import__("friday.tools.osint_advanced_tools", fromlist=["whois_lookup"]).whois_lookup(domain)),
-            ("ssl_cert", lambda: __import__("friday.tools.osint_advanced_tools", fromlist=["ssl_certificate_check"]).ssl_certificate_check(domain)),
-            ("cert_transparency", lambda: __import__("friday.tools_osint_extra", fromlist=["certificate_transparency"]).certificate_transparency(domain)),
-            ("wayback", lambda: __import__("friday.tools_osint_extra", fromlist=["wayback_snapshots"]).wayback_snapshots(domain, limit=5)),
+            ("dns_mx", lambda: _run_async(__import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "MX"))),
+            ("dns_a", lambda: _run_async(__import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "A"))),
+            ("dns_txt", lambda: _run_async(__import__("friday.tools.dns_tool", fromlist=["dns_lookup"]).dns_lookup(domain, "TXT"))),
+            ("spf", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["spf_check"]).spf_check(domain))),
+            ("dkim", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["dkim_check"]).dkim_check(domain))),
+            ("dmarc", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["dmarc_check"]).dmarc_check(domain))),
+            ("whois", lambda: _run_async(__import__("friday.tools.osint_advanced_tools", fromlist=["whois_lookup"]).whois_lookup(domain))),
+            ("ssl_cert", lambda: _run_async(__import__("friday.tools.osint_advanced_tools", fromlist=["ssl_certificate_check"]).ssl_certificate_check(domain))),
+            ("cert_transparency", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["certificate_transparency"]).certificate_transparency(domain))),
+            ("wayback", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["wayback_snapshots"]).wayback_snapshots(domain, limit=5))),
         ]
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
             futures = {ex.submit(t[1]): t[0] for t in domain_tasks}
@@ -1644,15 +1677,15 @@ def osint_full_scan(target: str, target_type: str = "auto", deep: bool = False) 
     if domain:
         parts.append("\n── Web Technology & Security ──")
         web_tasks = [
-            ("whatweb", lambda: __import__("friday.tools_osint_extra", fromlist=["whatweb"]).whatweb(domain)),
-            ("whatcms", lambda: __import__("friday.tools_osint_extra", fromlist=["whatcms"]).whatcms(domain)),
-            ("cdn", lambda: __import__("friday.tools_osint_extra", fromlist=["cdn_detect"]).cdn_detect(domain)),
-            ("security_headers", lambda: __import__("friday.tools_osint_extra", fromlist=["security_headers"]).security_headers(domain)),
-            ("cors", lambda: __import__("friday.tools_osint_extra", fromlist=["cors_check"]).cors_check(domain)),
-            ("hsts", lambda: __import__("friday.tools_osint_extra", fromlist=["hsts_check"]).hsts_check(domain)),
-            ("urlscan", lambda: __import__("friday.tools_osint_extra", fromlist=["urlscan_submit"]).urlscan_submit(domain)),
-            ("email_extractor", lambda: __import__("friday.tools_osint_extra", fromlist=["email_extractor"]).email_extractor(domain)),
-            ("meta_extractor", lambda: __import__("friday.tools_osint_extra", fromlist=["meta_extractor"]).meta_extractor(domain)),
+            ("whatweb", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["whatweb"]).whatweb(domain))),
+            ("whatcms", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["whatcms"]).whatcms(domain))),
+            ("cdn", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["cdn_detect"]).cdn_detect(domain))),
+            ("security_headers", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["security_headers"]).security_headers(domain))),
+            ("cors", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["cors_check"]).cors_check(domain))),
+            ("hsts", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["hsts_check"]).hsts_check(domain))),
+            ("urlscan", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["urlscan_submit"]).urlscan_submit(domain))),
+            ("email_extractor", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["email_extractor"]).email_extractor(domain))),
+            ("meta_extractor", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["meta_extractor"]).meta_extractor(domain))),
         ]
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
             futures = {ex.submit(t[1]): t[0] for t in web_tasks}
@@ -1678,11 +1711,11 @@ def osint_full_scan(target: str, target_type: str = "auto", deep: bool = False) 
                 pass
         if target_ip:
             ip_tasks = [
-                ("geoip", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_geolocate_full"]).ip_geolocate_full(target_ip)),
-                ("threat_intel", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_threat_intel"]).ip_threat_intel(target_ip)),
-                ("blacklist", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_blacklist_check"]).ip_blacklist_check(target_ip)),
-                ("asn", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_asn_info"]).ip_asn_info(target_ip)),
-                ("reverse_dns", lambda: __import__("friday.tools_osint_extra", fromlist=["ip_reverse_dns"]).ip_reverse_dns(target_ip)),
+                ("geoip", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["ip_geolocate_full"]).ip_geolocate_full(target_ip))),
+                ("threat_intel", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["ip_threat_intel"]).ip_threat_intel(target_ip))),
+                ("blacklist", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["ip_blacklist_check"]).ip_blacklist_check(target_ip))),
+                ("asn", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["ip_asn_info"]).ip_asn_info(target_ip))),
+                ("reverse_dns", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["ip_reverse_dns"]).ip_reverse_dns(target_ip))),
             ]
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
                 futures = {ex.submit(t[1]): t[0] for t in ip_tasks}
@@ -1719,11 +1752,11 @@ def osint_full_scan(target: str, target_type: str = "auto", deep: bool = False) 
     # ── Deep mode: run extended variants ───────────────────────
     if deep:
         parts.append("\n── Deep Research (Extended Tools) ──")
-        deep_tasks = [("holehe_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["holehe_check_extended"]).holehe_check_extended(target, timeout=60))] if is_email else []
-        deep_tasks += [("username_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["username_search_extended"]).username_search_extended(username, timeout=30))]
-        deep_tasks += [("leak_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["leak_check_extended"]).leak_check_extended(target, "email", timeout=30))] if is_email else []
-        deep_tasks += [("wayback_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["wayback_snapshots_extended"]).wayback_snapshots_extended(domain, limit=20))] if domain else []
-        deep_tasks += [("ssl_ext", lambda: __import__("friday.tools_osint_extra", fromlist=["ssl_cert_check_extended"]).ssl_cert_check_extended(domain))] if domain else []
+        deep_tasks = [("holehe_ext", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["holehe_check_extended"]).holehe_check_extended(target, timeout=60)))] if is_email else []
+        deep_tasks += [("username_ext", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["username_search_extended"]).username_search_extended(username, timeout=30)))]
+        deep_tasks += [("leak_ext", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["leak_check_extended"]).leak_check_extended(target, "email", timeout=30)))] if is_email else []
+        deep_tasks += [("wayback_ext", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["wayback_snapshots_extended"]).wayback_snapshots_extended(domain, limit=20)))] if domain else []
+        deep_tasks += [("ssl_ext", lambda: _run_async(__import__("friday.tools_osint_extra", fromlist=["ssl_cert_check_extended"]).ssl_cert_check_extended(domain)))] if domain else []
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
             futures = {ex.submit(t[1]): t[0] for t in deep_tasks}
             for f in concurrent.futures.as_completed(futures, timeout=90):
@@ -1869,7 +1902,7 @@ def generate_research_report(topic: str, depth: int = 30, max_pages: int = 50,
             synthesized = resp.content.strip()
 
             if not synthesized or synthesized.startswith("[ZEN") or synthesized.startswith("[NIM") or "ALL TIERS FAILED" in synthesized:
-                return None, None
+                synthesized = ""
 
             # ── Extract chart data via a second LLM call ──
             chart_types_to_use = chart_types or ["bar", "pie", "line"]
@@ -2233,6 +2266,12 @@ def memory_retrieve(query: str) -> str:
         import json, os
         from pathlib import Path
 
+        if not isinstance(query, str):
+            if isinstance(query, dict):
+                query = str(list(query.values())[0]) if query.values() else ""
+            else:
+                query = str(query)
+
         results = []
 
         memory_file = Path(FRIDAY_MEMORY) / "memory.json"
@@ -2240,6 +2279,8 @@ def memory_retrieve(query: str) -> str:
             with open(memory_file, "r", encoding="utf-8") as f:
                 memories = json.load(f)
             for m in memories:
+                if not isinstance(m.get("key"), str) or not isinstance(m.get("value"), str):
+                    continue
                 if query.lower() in m["key"].lower() or query.lower() in m["value"].lower():
                     results.append(m)
 
@@ -2330,45 +2371,69 @@ def video_search(query: str) -> str:
         return f"[FAIL] Video search error: {e}"
 
 
-def deep_research(topic: str, url: str = "", depth: int = 5) -> str:
-    """Multi-source deep research — crawls pages, extracts content, synthesizes report."""
+def deep_research(topic: str, url: str = "", depth: int = 5,
+                  output_format: str = "briefing") -> str:
+    """NotebookLM-style deep research. Output formats: briefing, faq, study_guide, analysis, all."""
     try:
         from friday.web import WebScraper, ContentExtractor
         from bs4 import BeautifulSoup
-        import re, time
+        import re, json, textwrap
 
         scraper = WebScraper()
-        sources = []  # each: {"title":..., "url":..., "content":...}
+        sources = []
+        seen_urls = set()
 
-        # 1. Fetch primary URL if given
-        if url:
+        def _fetch_page(u: str, title_fallback: str = "") -> dict:
+            """Fetch a page and return structured source dict."""
             try:
-                article = ContentExtractor.extract_article(url)
+                article = ContentExtractor.extract_article(u)
                 if article.get("success"):
-                    sources.append({
-                        "title": article.get("title", url),
-                        "url": url,
-                        "content": article.get("text", "")[:4000],
-                    })
-                else:
-                    page = scraper.fetch(url, timeout=20)
-                    if page.get("success"):
-                        p_soup = BeautifulSoup(page["content"], "html.parser")
-                        for tag in p_soup(["script", "style", "nav", "footer"]):
-                            tag.decompose()
-                        text = (p_soup.find("body") or p_soup).get_text(separator="\n", strip=True)
-                        sources.append({"title": url, "url": url, "content": text[:4000]})
+                    return {
+                        "title": article.get("title", title_fallback or u),
+                        "url": u,
+                        "content": article.get("text", "")[:8000],
+                        "author": article.get("author", ""),
+                        "published": article.get("published", ""),
+                    }
             except Exception:
                 pass
+            try:
+                page = scraper.fetch(u, timeout=15)
+                if page.get("success"):
+                    soup = BeautifulSoup(page["content"], "html.parser")
+                    for tag in soup(["script", "style", "nav", "footer", "header"]):
+                        tag.decompose()
+                    text = (soup.find("body") or soup).get_text(separator="\n", strip=True)
+                    text = re.sub(r'\n{3,}', '\n\n', text)
+                    return {
+                        "title": title_fallback or u,
+                        "url": u,
+                        "content": text[:8000],
+                        "author": "",
+                        "published": "",
+                    }
+            except Exception:
+                pass
+            return {}
 
-        # 2. Search multiple angles
+        # 1. Primary URL
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            src = _fetch_page(url, topic)
+            if src.get("content"):
+                sources.append(src)
+
+        # 2. Multi-angle search queries (NotebookLM style)
         queries = [
             topic,
-            f"{topic} 2025 2026 overview",
-            f"{topic} latest developments",
-            f"{topic} analysis",
+            f"{topic} overview summary",
+            f"{topic} latest developments 2025 2026",
+            f"{topic} analysis research",
+            f"{topic} key facts statistics",
+            f"{topic} pros and cons",
+            f"{topic} future outlook predictions",
+            f"{topic} in-depth guide",
         ]
-        seen_urls = {url}
         for q in queries[:depth]:
             try:
                 result = scraper.search_engine(q, engine="duckduckgo")
@@ -2376,62 +2441,229 @@ def deep_research(topic: str, url: str = "", depth: int = 5) -> str:
                     result = scraper.search_engine(q, engine="google")
                 if not result.get("success"):
                     result = scraper.search_engine(q, engine="bing")
-
                 if result.get("success"):
-                    for item in result.get("results", [])[:4]:
+                    for item in result.get("results", [])[:3]:
                         u = item.get("url", "")
                         if u in seen_urls or not u:
                             continue
                         seen_urls.add(u)
-                        # Fetch the actual page
-                        try:
-                            article = ContentExtractor.extract_article(u)
-                            if article.get("success"):
-                                sources.append({
-                                    "title": article.get("title", item.get("title", u)),
-                                    "url": u,
-                                    "content": article.get("text", "")[:4000],
-                                })
-                            else:
-                                page = scraper.fetch(u, timeout=15)
-                                if page.get("success"):
-                                    p_soup = BeautifulSoup(page["content"], "html.parser")
-                                    for tag in p_soup(["script", "style", "nav", "footer"]):
-                                        tag.decompose()
-                                    text = (p_soup.find("body") or p_soup).get_text(separator="\n", strip=True)
-                                    sources.append({
-                                        "title": item.get("title", u),
-                                        "url": u,
-                                        "content": re.sub(r'\n{3,}', '\n\n', text[:4000]),
-                                    })
-                        except Exception:
-                            sources.append({
-                                "title": item.get("title", u),
-                                "url": u,
-                                "content": item.get("snippet", ""),
-                            })
-
-                        if len(sources) >= 8:
+                        src = _fetch_page(u, item.get("title", ""))
+                        if src.get("content"):
+                            sources.append(src)
+                        if len(sources) >= 12:
                             break
             except Exception:
                 continue
-            if len(sources) >= 8:
+            if len(sources) >= 12:
                 break
 
         if not sources:
-            return f"[FAIL] No results found for '{topic}'"
+            return f"[FAIL] No sources found for '{topic}'"
 
-        # 3. Synthesize report
-        report_parts = [f"Deep Research Report: {topic}", "=" * 50, ""]
-        for i, src in enumerate(sources, 1):
-            report_parts.append(f"--- Source {i}: {src['title']} ---")
-            report_parts.append(f"URL: {src['url']}")
-            report_parts.append(src['content'][:2000])
-            report_parts.append("")
+        # 3. Extract key facts per source (simulated NotebookLM extraction)
+        extracted = []
+        for i, src in enumerate(sources):
+            content = src["content"]
+            sentences = [s.strip() for s in re.split(r'[.!?]+', content) if len(s.strip()) > 30]
+            key_points = sentences[:5]
+            extracted.append({
+                "id": i + 1,
+                "title": src["title"],
+                "url": src["url"],
+                "author": src.get("author", ""),
+                "published": src.get("published", ""),
+                "key_points": key_points,
+                "word_count": len(content.split()),
+            })
 
-        report = "\n".join(report_parts)
-        if len(report) > 12000:
-            report = report[:12000] + "\n\n[Truncated — full content available per source]"
+        # 4. Generate NotebookLM-style output
+        total_words = sum(e["word_count"] for e in extracted)
+        all_points = []
+        for e in extracted:
+            for pt in e["key_points"]:
+                all_points.append({"point": pt, "source_id": e["id"], "source_title": e["title"]})
+
+        def _make_briefing() -> str:
+            lines = [
+                "╔══════════════════════════════════════════════╗",
+                "║     RESEARCH BRIEFING — NotebookLM Style     ║",
+                "╚══════════════════════════════════════════════╝",
+                f"Topic: {topic}",
+                f"Sources: {len(sources)} | Total words extracted: {total_words}",
+                "",
+                "─── EXECUTIVE SUMMARY ───",
+                f"Synthesized from {len(sources)} sources. This briefing covers key findings, "
+                f"statistics, analysis, and outlook on \"{topic}\".",
+                "",
+            ]
+            for i, e in enumerate(extracted, 1):
+                lines.append(f"─── Source {i}: {e['title']} ───")
+                if e["author"]:
+                    lines.append(f"    Author: {e['author']}")
+                if e["published"]:
+                    lines.append(f"    Published: {e['published']}")
+                lines.append(f"    URL: {e['url']}")
+                for pt in e["key_points"]:
+                    short = textwrap.shorten(pt, width=120, placeholder="...")
+                    lines.append(f"    • {short}")
+                lines.append("")
+            lines.append("─── CROSS-SOURCE SYNTHESIS ───")
+            topics_found = {}
+            for ap in all_points:
+                words = ap["point"].lower().split()
+                for w in words:
+                    if len(w) > 5:
+                        topics_found[w] = topics_found.get(w, 0) + 1
+            top_terms = sorted(topics_found.items(), key=lambda x: -x[1])[:20]
+            if top_terms:
+                lines.append("  Key terms across sources:")
+                lines.append(f"  {', '.join(t for t, c in top_terms)}")
+            lines.append("")
+            lines.append(f"─── BIBLIOGRAPHY ({len(extracted)} sources) ───")
+            for e in extracted:
+                lines.append(f"  [{e['id']}] {e['title']}")
+                lines.append(f"       {e['url']}")
+            return "\n".join(lines)
+
+        def _make_faq() -> str:
+            lines = [
+                "╔══════════════════════════════════════════════╗",
+                "║     RESEARCH FAQ — NotebookLM Style          ║",
+                "╚══════════════════════════════════════════════╝",
+                f"Topic: {topic}",
+                f"Based on {len(sources)} sources",
+                "",
+            ]
+            # Generate Q&A pairs from extracted points
+            seen_questions = set()
+            qa_pairs = []
+            for ap in all_points:
+                pt = ap["point"]
+                for prefix, q_type in [
+                    ("what ", "What is"),
+                    ("how ", "How does"),
+                    ("why ", "Why does"),
+                    ("when ", "When did"),
+                    ("where ", "Where"),
+                    ("the ", "What is"),
+                    ("a ", "What is"),
+                    ("an ", "What is"),
+                ]:
+                    if pt.lower().startswith(prefix):
+                        question = f"{q_type} {pt[len(prefix):].strip().split('.')[0]}?"
+                        if question.lower() not in seen_questions:
+                            seen_questions.add(question.lower())
+                            qa_pairs.append((question, pt, ap["source_id"], ap["source_title"]))
+                        break
+            if not qa_pairs:
+                for ap in all_points[:5]:
+                    qa_pairs.append((f"What can we learn from {ap['source_title']}?", ap["point"], ap["source_id"], ap["source_title"]))
+            for q, a, sid, stitle in qa_pairs[:10]:
+                lines.append(f"Q: {q}")
+                lines.append(f"A: {a}")
+                lines.append(f"  [Source {sid}: {stitle}]")
+                lines.append("")
+            if len(qa_pairs) > 10:
+                lines.append(f"[{len(qa_pairs) - 10} more Q&A pairs available]")
+            return "\n".join(lines)
+
+        def _make_study_guide() -> str:
+            lines = [
+                "╔══════════════════════════════════════════════╗",
+                "║     STUDY GUIDE — NotebookLM Style           ║",
+                "╚══════════════════════════════════════════════╝",
+                f"Topic: {topic}",
+                f"Sources: {len(sources)}",
+                "",
+                "─── KEY CONCEPTS ───",
+            ]
+            # Group points into thematic clusters
+            for i, e in enumerate(extracted, 1):
+                lines.append(f"\nModule {i}: {e['title']}")
+                lines.append(f"URL: {e['url']}")
+                for pt in e["key_points"]:
+                    short = textwrap.shorten(pt, width=100, placeholder="...")
+                    lines.append(f"  • {short}")
+                lines.append("")
+            lines.append("─── DISCUSSION QUESTIONS ───")
+            questions = [
+                f"How does \"{topic}\" impact current industry practices?",
+                f"What are the main arguments for and against the current consensus on \"{topic}\"?",
+                f"How might \"{topic}\" evolve in the next 2-3 years?",
+                f"What evidence from the sources supports the strongest claims about \"{topic}\"?",
+                f"What questions remain unanswered about \"{topic}\"?",
+            ]
+            for q in questions:
+                lines.append(f"  ✦ {q}")
+            return "\n".join(lines)
+
+        def _make_analysis() -> str:
+            lines = [
+                "╔══════════════════════════════════════════════╗",
+                "║     DEEP ANALYSIS — NotebookLM Style         ║",
+                "╚══════════════════════════════════════════════╝",
+                f"Topic: {topic}",
+                "",
+                "─── SOURCE OVERVIEW ───",
+            ]
+            for i, e in enumerate(extracted, 1):
+                lines.append(f"  [{e['id']}] \"{e['title']}\" — {e['word_count']} words")
+            lines.append("")
+            lines.append("─── KEY FINDINGS BY SOURCE ───")
+            for e in extracted:
+                lines.append(f"\nSource [{e['id']}]: {e['title']}")
+                for pt in e["key_points"]:
+                    short = textwrap.shorten(pt, width=100, placeholder="...")
+                    lines.append(f"  • {short} [Source {e['id']}]")
+            lines.append("")
+            lines.append("─── CONTRASTING VIEWPOINTS ───")
+            # Find topics mentioned across multiple sources
+            topic_clusters = {}
+            for ap in all_points:
+                words = set(w.lower().strip(".,;:!?") for w in ap["point"].split() if len(w) > 5)
+                for w in words:
+                    if w not in topic_clusters:
+                        topic_clusters[w] = []
+                    topic_clusters[w].append(ap)
+            for term, mentions in sorted(topic_clusters.items(), key=lambda x: -len(x[1]))[:5]:
+                if len(mentions) >= 2:
+                    lines.append(f"\n  Term: \"{term}\" (appears in {len(mentions)} sources)")
+                    for m in mentions[:3]:
+                        short = textwrap.shorten(m["point"], width=90, placeholder="...")
+                        lines.append(f"    → [{m['source_id']}] {short}")
+            lines.append("")
+            lines.append("─── OPEN QUESTIONS ───")
+            open_questions = [
+                f"What is the actual evidence quality across sources on \"{topic}\"?",
+                f"Which claims conflict between different sources?",
+                f"What perspectives or stakeholders are missing from the analysis?",
+                f"How confident should we be in the key conclusions?",
+            ]
+            for q in open_questions:
+                lines.append(f"  ? {q}")
+            return "\n".join(lines)
+
+        # Select output format
+        outputs = {
+            "briefing": _make_briefing,
+            "faq": _make_faq,
+            "study_guide": _make_study_guide,
+            "analysis": _make_analysis,
+        }
+
+        if output_format == "all":
+            parts = []
+            for name in ["briefing", "faq", "study_guide", "analysis"]:
+                parts.append(outputs[name]())
+                parts.append("")
+            report = "\n".join(parts)
+        elif output_format in outputs:
+            report = outputs[output_format]()
+        else:
+            report = outputs["briefing"]()
+
+        if len(report) > 25000:
+            report = report[:25000] + "\n\n[Report truncated — ~25K char limit]"
         return report
 
     except ImportError:
@@ -2518,36 +2750,93 @@ def netflix_play(title: str) -> str:
 #  Email (Gmail) Functions 
 
 def google_authorize() -> str:
-    """Authorize ALL Google services (Gmail + Calendar). Opens browser for OAuth consent. Only needed once."""
-    try:
-        from friday.gmail import google_authorize
-        return google_authorize()
-    except ImportError:
-        return "[FAIL] friday_gmail.py not available."
-    except Exception as e:
-        return f"[FAIL] Google authorize error: {e}"
+    """Authorize Gmail + Calendar via the per-category OAuth system. Opens browser twice (one per category)."""
+    results = []
+    for cat in ("Gmail", "Calendar"):
+        r = google_authorize_category(cat)
+        results.append(r)
+    ok = sum(1 for r in results if r.startswith("[OK]"))
+    fails = [r for r in results if not r.startswith("[OK]")]
+    if ok == len(results):
+        return "[OK] Gmail + Calendar authorised!"
+    if fails:
+        return "\n".join(fails)
+    return "[OK] Gmail + Calendar already authorised."
 
 
 def gmail_authorize() -> str:
-    """Run the Gmail OAuth flow — opens browser for you to authorize Friday. Only needed once."""
+    """Alias for google_authorize_category('Gmail')."""
+    return google_authorize_category("Gmail")
+
+
+def google_authorize_category(category: str) -> str:
+    """Authorise ONE category of Google services. Categories: Gmail, Calendar, Drive, Sheets, Docs, Slides, YouTube, People, Tasks, Forms, Photos, Firebase, Books, Analytics, Search Console, Cloud Platform.
+    Opens browser for consent with ~5 scopes instead of all ~70 at once.
+    FRIDAY calls this automatically when she needs access to a service you haven't authorised yet."""
     try:
-        from friday.gmail import gmail_authorize
-        return gmail_authorize()
+        from friday.google_oauth import get_auth_url, handle_auth_callback, list_categories, run_auth_server
+        cats = list_categories()
+        if category not in cats:
+            return f"[FAIL] Unknown category '{category}'. Available: {', '.join(sorted(cats))}"
+        result = get_auth_url(redirect_port=8085, category=category)
+        if "error" in result:
+            return f"[FAIL] {result['error']}"
+        import webbrowser
+        webbrowser.open(result["auth_url"])
+        print(f"\n[Google Auth] Authorising '{category}' ({result['scope_count']} scopes)")
+        print(f"[Google Auth] If browser doesn't open: {result['auth_url']}")
+        print(f"[Google Auth] Redirect URI: {result['redirect_uri']}")
+        print(f"[Google Auth] Make sure this URI is in your Google Cloud Console → Credentials → redirect URIs")
+        port = 8085
+        from urllib.parse import urlparse
+        parsed = urlparse(result["redirect_uri"])
+        if parsed.port:
+            port = parsed.port
+        code = run_auth_server(port)
+        if not code:
+            return ("[FAIL] Authorization timed out. Common fixes:\n"
+                    "  1. Make sure http://127.0.0.1:8085 is in Google Cloud Console → Credentials → redirect URIs\n"
+                    "  2. Or use exchange_oauth_code() with the redirect URL from your browser")
+        if handle_auth_callback(code, category=category):
+            return f"[OK] '{category}' authorised! FRIDAY can now use {category} services."
+        return "[FAIL] Code exchange failed. Check your network and try again."
     except ImportError:
-        return "[FAIL] friday_gmail.py not available."
+        return "[FAIL] google_oauth module not available."
     except Exception as e:
-        return f"[FAIL] Gmail authorize error: {e}"
+        return f"[FAIL] Google auth error: {e}"
 
 
 def exchange_oauth_code(redirect_url: str) -> str:
     """Complete OAuth by pasting the browser redirect URL when auto-flow fails."""
     try:
-        from friday.gmail import exchange_oauth_code
-        return exchange_oauth_code(redirect_url)
+        import urllib.parse
+        parsed = urllib.parse.urlparse(redirect_url)
+        params = urllib.parse.parse_qs(parsed.query)
+        code = params.get("code", [None])[0]
+        if not code and "?code=" in redirect_url:
+            code = redirect_url.split("?code=")[-1].split("&")[0]
+        if not code:
+            return "[FAIL] No authorization code found in URL. Paste the full redirect URL from your browser address bar."
+        from friday.google_oauth import handle_auth_callback, list_categories
+        # Try to determine category from granted scopes in the redirect URL
+        scope_str = params.get("scope", [""])[0]
+        category = None
+        if scope_str:
+            from friday.google_oauth import SCOPE_CATEGORIES
+            granted = set(scope_str.split())
+            for cat, scopes in SCOPE_CATEGORIES.items():
+                if any(s in granted for s in scopes):
+                    category = cat
+                    break
+        if handle_auth_callback(code, category=category):
+            from friday.google_oauth import get_authorized_categories
+            authd = get_authorized_categories()
+            return f"[OK] Token saved! Authorised: {', '.join(authd) if authd else 'Gmail'}"
+        return "[FAIL] Code exchange failed. Check your network and try again."
     except ImportError:
-        return "[FAIL] friday_gmail.py not available."
+        return "[FAIL] google_oauth module not available."
     except Exception as e:
-        return f"[FAIL] Exchange error: {e}"
+        return f"[FAIL] Code exchange failed: {e}"
 
 
 def read_emails(count: int = 10) -> str:
@@ -2992,6 +3281,7 @@ def type_text(text: str) -> str:
 def take_snapshot(name: str = None) -> str:
     """Take a snapshot of the current screen."""
     try:
+        import time
         from friday.screen_watcher import capture_screen
         import base64
         screenshot_bytes = capture_screen(resize_to=(1280, 720), quality=70)
@@ -3059,676 +3349,6 @@ def stayfree_week() -> str:
         return f"[FAIL] StayFree week error: {e}"
 
 
-#  OpenCLI Bridge Tools #
-
-def opencli_run(command: str) -> str:
-    """Run ANY OpenCLI command (site adapters, browser, desktop apps, CLI hub).
-    For built-in site adapters: opencli_run('hackernews top --limit 5')
-    For browser automation: opencli_run('browser open https://...')
-    For desktop apps: opencli_run('cursor ...')
-    For CLI hub tools: opencli_run('gh pr list --limit 5')
-    Use opencli_run('list') to see all available commands."""
-    try:
-        from friday.opencli import opencli_run
-        return opencli_run(command)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI run error: {e}"
-
-
-def opencli_list_adapters() -> str:
-    """List all available OpenCLI commands and built-in site adapters."""
-    try:
-        from friday.opencli import opencli_list_adapters
-        return opencli_list_adapters()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI list error: {e}"
-
-
-def opencli_init_bridge() -> str:
-    """Initialize the OpenCLI browser bridge and check Chrome extension."""
-    try:
-        import subprocess, json
-
-        # Check daemon status
-        try:
-            result = subprocess.run(
-                ["opencli", "daemon", "status", "--json"],
-                capture_output=True, text=True, timeout=10
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                try:
-                    status = json.loads(result.stdout.strip())
-                    if status.get("state") == "ready" and status.get("profiles"):
-                        profiles = status["profiles"]
-                        n = len(profiles) if isinstance(profiles, list) else 1
-                        return f"OpenCLI bridge connected ({n} profile{'s' if n != 1 else ''})"
-                except json.JSONDecodeError:
-                    pass
-                # Fallback: check text output
-                out = result.stdout.strip()
-                if "Extension: connected" in out and "Profiles:" in out:
-                    return "OpenCLI bridge connected"
-        except FileNotFoundError:
-            return "[FAIL] opencli not installed. Run: npm install -g @jackwener/opencli"
-        except Exception:
-            pass
-
-        # Try starting the daemon
-        try:
-            subprocess.run(["opencli", "daemon", "restart"], capture_output=True, text=True, timeout=15)
-            result = subprocess.run(
-                ["opencli", "daemon", "status"],
-                capture_output=True, text=True, timeout=10
-            )
-            if "Extension: connected" in result.stdout:
-                return "OpenCLI bridge connected (daemon restarted)"
-        except Exception:
-            pass
-
-        return (
-            "[FAIL] OpenCLI bridge not connected. Setup instructions:\n"
-            "  1. Install the extension from: https://github.com/jackwener/opencli/releases\n"
-            "  2. Open Chrome → chrome://extensions → Developer Mode → Load unpacked\n"
-            "  3. Select the downloaded extension folder\n"
-            "  4. Make sure Chrome is running with the extension enabled\n"
-            "  5. Run: opencli daemon restart"
-        )
-    except ImportError:
-        return "[FAIL] opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI init error: {e}"
-
-
-def opencli_navigate(url: str) -> str:
-    """Open a URL in the OpenCLI browser automation window."""
-    try:
-        from friday.opencli import opencli_navigate
-        return opencli_navigate(url)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI navigate error: {e}"
-
-
-def opencli_click(target: str) -> str:
-    """Click an element in the browser by selector or text."""
-    try:
-        from friday.opencli import opencli_click
-        return opencli_click(target)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI click error: {e}"
-
-
-def opencli_type(target: str, text: str) -> str:
-    """Type text into a browser element."""
-    try:
-        from friday.opencli import opencli_type
-        return opencli_type(target, text)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI type error: {e}"
-
-
-def opencli_extract() -> str:
-    """Extract page content as markdown from the current browser page."""
-    try:
-        from friday.opencli import opencli_extract
-        return opencli_extract()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI extract error: {e}"
-
-
-def opencli_screenshot(path: str = None) -> str:
-    """Take a screenshot of the current browser page."""
-    try:
-        from friday.opencli import opencli_screenshot
-        return opencli_screenshot(path)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI screenshot error: {e}"
-
-
-def opencli_scroll(direction: str = "down") -> str:
-    """Scroll the browser page (down, up, top, bottom)."""
-    try:
-        from friday.opencli import opencli_scroll
-        return opencli_scroll(direction)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI scroll error: {e}"
-
-
-def opencli_keys(key: str) -> str:
-    """Press a keyboard key in the browser (Enter, Escape, Tab, etc.)."""
-    try:
-        from friday.opencli import opencli_keys
-        return opencli_keys(key)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI key error: {e}"
-
-
-def opencli_eval(js: str) -> str:
-    """Execute JavaScript in the browser page."""
-    try:
-        from friday.opencli import opencli_eval
-        return opencli_eval(js)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI eval error: {e}"
-
-
-def opencli_state() -> str:
-    """Get current browser page state (URL, title, interactive elements)."""
-    try:
-        from friday.opencli import opencli_state
-        return opencli_state()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI state error: {e}"
-
-
-def opencli_doctor() -> str:
-    """Diagnose OpenCLI browser bridge connectivity."""
-    try:
-        from friday.opencli import opencli_doctor
-        return opencli_doctor()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] OpenCLI doctor error: {e}"
-
-
-def opencli_tab_list() -> str:
-    """List all browser tabs."""
-    try:
-        from friday.opencli import opencli_tab_list
-        return opencli_tab_list()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Tab list error: {e}"
-
-
-def opencli_tab_new(url: str = "") -> str:
-    """Open a new browser tab."""
-    try:
-        from friday.opencli import opencli_tab_new
-        return opencli_tab_new(url)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Tab new error: {e}"
-
-
-def opencli_tab_select(target_id: str) -> str:
-    """Switch to a specific browser tab."""
-    try:
-        from friday.opencli import opencli_tab_select
-        return opencli_tab_select(target_id)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Tab select error: {e}"
-
-
-def opencli_tab_close(target_id: str = "") -> str:
-    """Close a browser tab."""
-    try:
-        from friday.opencli import opencli_tab_close
-        return opencli_tab_close(target_id)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Tab close error: {e}"
-
-
-def opencli_close() -> str:
-    """Release the current browser automation tab lease."""
-    try:
-        from friday.opencli import opencli_close
-        return opencli_close()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Close error: {e}"
-
-
-def opencli_wait_selector(selector: str, timeout_ms: int = 10000) -> str:
-    """Wait for a CSS selector to appear on the page."""
-    try:
-        from friday.opencli import opencli_wait_selector
-        return opencli_wait_selector(selector, timeout_ms)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Wait error: {e}"
-
-
-def opencli_find(selector: str, limit: int = 10) -> str:
-    """Find elements matching a CSS selector."""
-    try:
-        from friday.opencli import opencli_find
-        return opencli_find(selector, limit)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Find error: {e}"
-
-
-def opencli_get_url() -> str:
-    """Get the current page URL from the browser."""
-    try:
-        from friday.opencli import opencli_get_url
-        return opencli_get_url()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Get URL error: {e}"
-
-
-def opencli_get_title() -> str:
-    """Get the current page title from the browser."""
-    try:
-        from friday.opencli import opencli_get_title
-        return opencli_get_title()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Get title error: {e}"
-
-
-def opencli_network() -> str:
-    """Inspect network requests made by the current page."""
-    try:
-        from friday.opencli import opencli_network
-        return opencli_network()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Network error: {e}"
-
-
-def opencli_bind(domain: str = "") -> str:
-    """Bind OpenCLI to the current Chrome tab."""
-    try:
-        from friday.opencli import opencli_bind
-        return opencli_bind(domain)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Bind error: {e}"
-
-
-def opencli_unbind() -> str:
-    """Unbind from the current Chrome tab."""
-    try:
-        from friday.opencli import opencli_unbind
-        return opencli_unbind()
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Unbind error: {e}"
-
-
-def opencli_hover(target: str) -> str:
-    """Hover over a browser element."""
-    try:
-        from friday.opencli import opencli_hover
-        return opencli_hover(target)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Hover error: {e}"
-
-
-def opencli_focus(target: str) -> str:
-    """Focus a browser element."""
-    try:
-        from friday.opencli import opencli_focus
-        return opencli_focus(target)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Focus error: {e}"
-
-
-def opencli_dblclick(target: str) -> str:
-    """Double-click a browser element."""
-    try:
-        from friday.opencli import opencli_dblclick
-        return opencli_dblclick(target)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Dblclick error: {e}"
-
-
-def opencli_check(target: str) -> str:
-    """Check a checkbox/radio element."""
-    try:
-        from friday.opencli import opencli_check
-        return opencli_check(target)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Check error: {e}"
-
-
-def opencli_uncheck(target: str) -> str:
-    """Uncheck a checkbox/radio element."""
-    try:
-        from friday.opencli import opencli_uncheck
-        return opencli_uncheck(target)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Uncheck error: {e}"
-
-
-def opencli_drag(source: str, target: str) -> str:
-    """Drag one element to another."""
-    try:
-        from friday.opencli import opencli_drag
-        return opencli_drag(source, target)
-    except ImportError:
-        return "[FAIL] friday.opencli not available."
-    except Exception as e:
-        return f"[FAIL] Drag error: {e}"
-
-
-#  Kimi WebBridge Tools (replacement for OpenCLI) #
-
-def _run_kimi_async(coro):
-    """Helper to run an async Kimi WebBridge function synchronously."""
-    try:
-        import asyncio
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            try:
-                return loop.run_until_complete(coro)
-            finally:
-                loop.close()
-    except Exception as e:
-        return {"error": str(e), "success": False}
-
-def webbridge_connect_sync() -> str:
-    """Connect to Kimi WebBridge daemon."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_connect
-        result = _run_kimi_async(webbridge_connect())
-        if result.get("success"):
-            return f"[OK] Kimi WebBridge connected (daemon running)"
-        return f"[FAIL] Kimi WebBridge: {result.get('error', 'connection failed')}"
-    except ImportError:
-        return "[FAIL] friday.kimi_webbridge_tool not available."
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge connect error: {e}"
-
-def webbridge_disconnect_sync() -> str:
-    """Disconnect from Kimi WebBridge daemon."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_disconnect
-        result = _run_kimi_async(webbridge_disconnect())
-        return "[OK] Kimi WebBridge disconnected" if result.get("success") else f"[FAIL] {result.get('error', 'disconnect failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge disconnect error: {e}"
-
-def webbridge_doctor_sync() -> str:
-    """Diagnose Kimi WebBridge connectivity."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_doctor
-        result = _run_kimi_async(webbridge_doctor())
-        if result.get("success"):
-            status = result.get("status", "connected")
-            return f"[OK] Kimi WebBridge: {status}"
-        return f"[FAIL] Kimi WebBridge diagnosis: {result.get('error', 'unreachable')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge doctor error: {e}"
-
-def webbridge_navigate_sync(url: str) -> str:
-    """Open a URL in the browser via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_navigate
-        result = _run_kimi_async(webbridge_navigate(url))
-        return f"[OK] Navigated to {url}" if result.get("success") else f"[FAIL] {result.get('error', 'navigate failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge navigate error: {e}"
-
-def webbridge_click_sync(target: str) -> str:
-    """Click an element via Kimi WebBridge (CSS selector or text)."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_click
-        result = _run_kimi_async(webbridge_click(target))
-        return f"[OK] Clicked {target}" if result.get("success") else f"[FAIL] {result.get('error', 'click failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge click error: {e}"
-
-def webbridge_fill_sync(target: str, text: str) -> str:
-    """Fill a form field via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_fill
-        result = _run_kimi_async(webbridge_fill(target, text))
-        return f"[OK] Filled {target}" if result.get("success") else f"[FAIL] {result.get('error', 'fill failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge fill error: {e}"
-
-def webbridge_type_text_sync(text: str) -> str:
-    """Type text into the focused element via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_type_text
-        result = _run_kimi_async(webbridge_type_text(text))
-        return f"[OK] Typed text" if result.get("success") else f"[FAIL] {result.get('error', 'type failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge type error: {e}"
-
-def webbridge_screenshot_sync() -> str:
-    """Take a screenshot via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_screenshot
-        result = _run_kimi_async(webbridge_screenshot())
-        if result.get("success"):
-            b64 = result.get("data", "")
-            if b64:
-                import tempfile, base64
-                path = os.path.join(tempfile.gettempdir(), "kimi_screenshot.png")
-                with open(path, "wb") as f:
-                    f.write(base64.b64decode(b64))
-                return f"[OK] Screenshot saved to {path}"
-        return f"[FAIL] {result.get('error', 'screenshot failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge screenshot error: {e}"
-
-def webbridge_extract_text_sync() -> str:
-    """Extract page text via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_extract_text
-        result = _run_kimi_async(webbridge_extract_text())
-        if result.get("success"):
-            text = result.get("text", "")
-            return text[:2000] if text else "[FAIL] No text extracted"
-        return f"[FAIL] {result.get('error', 'extract failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge extract error: {e}"
-
-def webbridge_get_page_state_sync() -> str:
-    """Get page structure from Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_get_page_state
-        result = _run_kimi_async(webbridge_get_page_state())
-        if result.get("success"):
-            return str(result.get("state", result))
-        return f"[FAIL] {result.get('error', 'state failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge state error: {e}"
-
-def webbridge_scroll_sync(direction: str = "down") -> str:
-    """Scroll the browser page via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_scroll
-        result = _run_kimi_async(webbridge_scroll(direction))
-        return f"[OK] Scrolled {direction}" if result.get("success") else f"[FAIL] {result.get('error', 'scroll failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge scroll error: {e}"
-
-def webbridge_press_key_sync(key: str) -> str:
-    """Press a keyboard key in the browser via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_press_key
-        result = _run_kimi_async(webbridge_press_key(key))
-        return f"[OK] Pressed {key}" if result.get("success") else f"[FAIL] {result.get('error', 'key failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge key error: {e}"
-
-def webbridge_key_combo_sync(keys: str) -> str:
-    """Press a key combo (e.g. Ctrl+C) via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_key_combo
-        result = _run_kimi_async(webbridge_key_combo(keys))
-        return f"[OK] Combo {keys}" if result.get("success") else f"[FAIL] {result.get('error', 'combo failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge combo error: {e}"
-
-def webbridge_evaluate_sync(js: str) -> str:
-    """Execute JavaScript in the browser via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_evaluate
-        result = _run_kimi_async(webbridge_evaluate(js))
-        if result.get("success"):
-            val = result.get("result", "")
-            return str(val)[:2000] if val else "[OK] JS executed"
-        return f"[FAIL] {result.get('error', 'eval failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge eval error: {e}"
-
-def webbridge_submit_form_sync(selector: str = "") -> str:
-    """Submit a form via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_submit_form
-        result = _run_kimi_async(webbridge_submit_form(selector))
-        return f"[OK] Form submitted" if result.get("success") else f"[FAIL] {result.get('error', 'submit failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge submit error: {e}"
-
-def webbridge_select_option_sync(selector: str, value: str) -> str:
-    """Select a dropdown option via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_select_option
-        result = _run_kimi_async(webbridge_select_option(selector, value))
-        return f"[OK] Selected {value}" if result.get("success") else f"[FAIL] {result.get('error', 'select failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge select error: {e}"
-
-def webbridge_list_tabs_sync() -> str:
-    """List all browser tabs via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_list_tabs
-        result = _run_kimi_async(webbridge_list_tabs())
-        if result.get("success"):
-            tabs = result.get("tabs", [])
-            if tabs:
-                lines = [f"### Browser Tabs ({len(tabs)})"]
-                for t in tabs:
-                    lines.append(f"- {t.get('title', 'Untitled')} ({t.get('url', '')})")
-                return "\n".join(lines)
-            return "[OK] No open tabs found"
-        return f"[FAIL] {result.get('error', 'list tabs failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge tabs error: {e}"
-
-def webbridge_close_tab_sync(tab_id: str = "") -> str:
-    """Close a browser tab via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_close_tab
-        result = _run_kimi_async(webbridge_close_tab(tab_id))
-        return f"[OK] Tab closed" if result.get("success") else f"[FAIL] {result.get('error', 'close tab failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge close tab error: {e}"
-
-def webbridge_get_current_url_sync() -> str:
-    """Get the current page URL from Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_get_current_url
-        result = _run_kimi_async(webbridge_get_current_url())
-        if result.get("success"):
-            return f"Current URL: {result.get('url', 'unknown')}"
-        return f"[FAIL] {result.get('error', 'get URL failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge URL error: {e}"
-
-def webbridge_get_title_sync() -> str:
-    """Get the current page title from Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_get_title
-        result = _run_kimi_async(webbridge_get_title())
-        if result.get("success"):
-            return f"Page title: {result.get('title', 'unknown')}"
-        return f"[FAIL] {result.get('error', 'get title failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge title error: {e}"
-
-def webbridge_hover_sync(selector: str) -> str:
-    """Hover over an element via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_hover
-        result = _run_kimi_async(webbridge_hover(selector))
-        return f"[OK] Hovered {selector}" if result.get("success") else f"[FAIL] {result.get('error', 'hover failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge hover error: {e}"
-
-def webbridge_focus_sync(selector: str) -> str:
-    """Focus an element via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_focus
-        result = _run_kimi_async(webbridge_focus(selector))
-        return f"[OK] Focused {selector}" if result.get("success") else f"[FAIL] {result.get('error', 'focus failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge focus error: {e}"
-
-def webbridge_double_click_sync(selector: str) -> str:
-    """Double-click an element via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_double_click
-        result = _run_kimi_async(webbridge_double_click(selector))
-        return f"[OK] Double-clicked {selector}" if result.get("success") else f"[FAIL] {result.get('error', 'double click failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge double-click error: {e}"
-
-def webbridge_drag_sync(source: str, target: str) -> str:
-    """Drag one element to another via Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_drag
-        result = _run_kimi_async(webbridge_drag(source, target))
-        return f"[OK] Dragged {source} to {target}" if result.get("success") else f"[FAIL] {result.get('error', 'drag failed')}"
-    except Exception as e:
-        return f"[FAIL] Kimi WebBridge drag error: {e}"
-
-def webbridge_install_instructions_sync() -> str:
-    """Get instructions to install Kimi WebBridge."""
-    try:
-        from friday.kimi_webbridge_tool import webbridge_install_instructions
-        result = _run_kimi_async(webbridge_install_instructions())
-        if result.get("success"):
-            return result.get("instructions", "See kimi.com/features/webbridge")
-        return "Install Kimi WebBridge:\n1. Install Chrome extension from Chrome Web Store (search 'Kimi WebBridge')\n2. Install npm package: npm install -g kimi-webbridge\n3. Run: npx kimi-webbridge\n4. Extension connects on ws://127.0.0.1:10086/ws"
-    except Exception as e:
-        return f"[FAIL] Install instructions error: {e}"
 
 
 #  Workflow Automation Tool #
@@ -4548,7 +4168,7 @@ __all__ = [
     "open_app", "close_app", "list_running_apps",     "open_url", "open_roblox_game", "open_microsoft_store",
     "spotify_play", "spotify_pause", "spotify_next", "spotify_prev", "spotify_volume", "spotify_current",
     "netflix_play",
-    "google_authorize", "gmail_authorize", "exchange_oauth_code", "read_emails", "send_email", "draft_email",
+    "google_authorize", "gmail_authorize", "google_authorize_category", "exchange_oauth_code", "read_emails", "send_email", "draft_email",
     "send_instagram_dm",
     "tell_alexa",
     "web_search", "video_search", "stark_doctor", "git_ops",
@@ -4567,25 +4187,7 @@ __all__ = [
     "multi_task", "queue_task", "queue_status", "queue_result",
     "type_text", "take_snapshot", "recall_snapshot", "smart_home_command",
     "stayfree_status", "stayfree_today", "stayfree_week",
-    "opencli_init_bridge", "opencli_navigate", "opencli_click", "opencli_type",
-    "opencli_extract", "opencli_screenshot", "opencli_scroll",
-    "opencli_keys", "opencli_eval", "opencli_state", "opencli_doctor",
-    "opencli_tab_list", "opencli_tab_new", "opencli_tab_select", "opencli_tab_close",
-    "opencli_close", "opencli_wait_selector", "opencli_find",
-    "opencli_get_url", "opencli_get_title", "opencli_network",
-    "opencli_bind", "opencli_unbind",
-    "opencli_run", "opencli_list_adapters",
-    "opencli_hover", "opencli_focus", "opencli_dblclick",
-    "opencli_check", "opencli_uncheck", "opencli_drag",
-    "webbridge_connect_sync", "webbridge_disconnect_sync", "webbridge_doctor_sync",
-    "webbridge_navigate_sync", "webbridge_click_sync", "webbridge_fill_sync",
-    "webbridge_type_text_sync", "webbridge_screenshot_sync", "webbridge_extract_text_sync",
-    "webbridge_get_page_state_sync", "webbridge_scroll_sync", "webbridge_press_key_sync",
-    "webbridge_key_combo_sync", "webbridge_evaluate_sync", "webbridge_submit_form_sync",
-    "webbridge_select_option_sync", "webbridge_list_tabs_sync", "webbridge_close_tab_sync",
-    "webbridge_get_current_url_sync", "webbridge_get_title_sync", "webbridge_hover_sync",
-    "webbridge_focus_sync", "webbridge_double_click_sync", "webbridge_drag_sync",
-    "webbridge_install_instructions_sync",
+
     "vector_memory_tool",
     "workflow_tool", "plugin_tool", "knowledge_graph_tool",
     "github_list_files", "github_read_file", "github_write_file",

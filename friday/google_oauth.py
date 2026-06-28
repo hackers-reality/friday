@@ -1,9 +1,11 @@
 """
 Unified Google OAuth 2.0 module for FRIDAY.
-Single consent grants access to ALL configured Google APIs at once.
+Supports per-category authorization so users grant scopes in small batches (~5 per category)
+instead of all ~70 at once (which causes Google consent screen errors).
 """
 from __future__ import annotations
 
+import http.server
 import json
 import os
 import time
@@ -15,8 +17,15 @@ from urllib.parse import urlencode
 
 try:
     import requests
+    from requests.exceptions import SSLError
+    try:
+        from requests.packages.urllib3.exceptions import InsecureRequestWarning
+        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    except Exception:
+        pass
 except ImportError:
     requests = None
+    SSLError = Exception
 
 from friday._paths import FRIDAY_MEMORY
 
@@ -28,127 +37,169 @@ except Exception:
     import logging
     logger = logging.getLogger(__name__)
 
+try:
+    from friday._paths import PROJECT_ROOT as _ROOT
+except Exception:
+    _ROOT = Path.cwd()
+
+
+def _read_client_creds() -> dict:
+    """Read client_id + client_secret from credentials.json fallback."""
+    for path in (Path(_ROOT) / "credentials.json", Path.cwd() / "credentials.json"):
+        if path.exists():
+            try:
+                with open(path) as f:
+                    cfg = json.load(f)
+                info = cfg.get("web", cfg.get("installed", {}))
+                cid = info.get("client_id", "")
+                cs = info.get("client_secret", "")
+                return {"client_id": cid, "client_secret": cs}
+            except Exception:
+                pass
+    return {"client_id": "", "client_secret": ""}
+
 
 # ── All Google API scopes that FRIDAY can use ──
 
 # Umbrella scope — covers ALL Google Cloud Platform APIs (60+)
-# BigQuery, Vision, Natural Language, Translation, TTS, STT,
-# Dialogflow, Vertex AI, Cloud Functions, Cloud Run, Cloud Storage,
-# Cloud Scheduler, Cloud Tasks, Cloud Monitoring, Cloud Logging,
-# Secret Manager, Cloud KMS, IAM, Cloud DNS, Cloud CDN, etc.
 SCOPE_CLOUD_PLATFORM = "https://www.googleapis.com/auth/cloud-platform"
 
-# Consumer API scopes (NOT covered by cloud-platform)
-SCOPES = [
-    # ── YouTube (5 scopes) ──
-    "https://www.googleapis.com/auth/youtube",                            # Full YouTube Data API
-    "https://www.googleapis.com/auth/youtube.force-ssl",                  # YouTube Data API v3
-    "https://www.googleapis.com/auth/youtube.readonly",                   # Read-only YouTube
-    "https://www.googleapis.com/auth/youtube.upload",                     # Upload videos
-    "https://www.googleapis.com/auth/youtubepartner-channel-audit",       # YouTube partner audit
-    "https://www.googleapis.com/auth/yt-analytics.readonly",              # YouTube Analytics
-    "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",     # Monetization data
+# Organised into categories of ~5 scopes each so users can authorise one at a time.
+# Each batch includes openid+userinfo+profile automatically.
+SCOPE_CATEGORIES: dict[str, list[str]] = {
+    "Gmail": [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/gmail.labels",
+    ],
+    "Gmail Extended": [
+        "https://www.googleapis.com/auth/gmail.insert",
+        "https://www.googleapis.com/auth/gmail.metadata",
+        "https://www.googleapis.com/auth/gmail.settings.basic",
+        "https://www.googleapis.com/auth/gmail.settings.sharing",
+    ],
+    "Calendar": [
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events.readonly",
+        "https://www.googleapis.com/auth/calendar.freebusy",
+    ],
+    "Calendar Admin": [
+        "https://www.googleapis.com/auth/calendar.settings.readonly",
+        "https://www.googleapis.com/auth/calendar.addons.execute",
+        "https://www.googleapis.com/auth/calendar.acls",
+        "https://www.googleapis.com/auth/calendar.acls.readonly",
+    ],
+    "Drive": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/drive.appdata",
+    ],
+    "Drive Extended": [
+        "https://www.googleapis.com/auth/drive.scripts",
+        "https://www.googleapis.com/auth/drive.photos.readonly",
+        "https://www.googleapis.com/auth/drive.activity",
+        "https://www.googleapis.com/auth/drive.activity.readonly",
+        "https://www.googleapis.com/auth/drive.metadata",
+    ],
+    "Drive Admin": [
+        "https://www.googleapis.com/auth/drive.install",
+        "https://www.googleapis.com/auth/drive.meet.readonly",
+    ],
+    "Sheets": [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/spreadsheets.readonly",
+    ],
+    "Docs": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/documents.readonly",
+    ],
+    "Slides": [
+        "https://www.googleapis.com/auth/presentations",
+        "https://www.googleapis.com/auth/presentations.readonly",
+    ],
+    "YouTube": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtubepartner-channel-audit",
+    ],
+    "YouTube Analytics": [
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+    ],
+    "People": [
+        "https://www.googleapis.com/auth/contacts",
+        "https://www.googleapis.com/auth/contacts.readonly",
+        "https://www.googleapis.com/auth/contacts.other.readonly",
+    ],
+    "Tasks": [
+        "https://www.googleapis.com/auth/tasks",
+        "https://www.googleapis.com/auth/tasks.readonly",
+    ],
+    "Forms": [
+        "https://www.googleapis.com/auth/forms",
+        "https://www.googleapis.com/auth/forms.body",
+        "https://www.googleapis.com/auth/forms.responses.readonly",
+        "https://www.googleapis.com/auth/forms.body.readonly",
+    ],
+    "Photos": [
+        "https://www.googleapis.com/auth/photoslibrary",
+        "https://www.googleapis.com/auth/photoslibrary.readonly",
+        "https://www.googleapis.com/auth/photoslibrary.sharing",
+        "https://www.googleapis.com/auth/photoslibrary.appendonly",
+    ],
+    "Firebase": [
+        "https://www.googleapis.com/auth/firebase",
+        "https://www.googleapis.com/auth/firebase.readonly",
+        "https://www.googleapis.com/auth/firebase.database",
+    ],
+    "Books": [
+        "https://www.googleapis.com/auth/books",
+    ],
+    "Analytics": [
+        "https://www.googleapis.com/auth/analytics.readonly",
+        "https://www.googleapis.com/auth/analytics",
+    ],
+    "Search Console": [
+        "https://www.googleapis.com/auth/webmasters.readonly",
+    ],
+    "Cloud Platform": [
+        SCOPE_CLOUD_PLATFORM,
+    ],
+}
 
-    # ── Gmail (8 scopes) ──
-    "https://www.googleapis.com/auth/gmail.readonly",                     # Read emails
-    "https://www.googleapis.com/auth/gmail.send",                         # Send emails
-    "https://www.googleapis.com/auth/gmail.modify",                       # Read/send/trash
-    "https://www.googleapis.com/auth/gmail.compose",                      # Draft/compose
-    "https://www.googleapis.com/auth/gmail.insert",                       # Import messages
-    "https://www.googleapis.com/auth/gmail.labels",                       # Manage labels
-    "https://www.googleapis.com/auth/gmail.metadata",                     # Read metadata only
-    "https://www.googleapis.com/auth/gmail.settings.basic",               # Settings
-    "https://www.googleapis.com/auth/gmail.settings.sharing",             # Settings sharing
-
-    # ── Google Drive (12 scopes) ──
-    "https://www.googleapis.com/auth/drive",                              # Full Drive access
-    "https://www.googleapis.com/auth/drive.file",                         # Per-file access
-    "https://www.googleapis.com/auth/drive.readonly",                     # Drive read-only
-    "https://www.googleapis.com/auth/drive.metadata.readonly",            # Drive metadata only
-    "https://www.googleapis.com/auth/drive.appdata",                      # App data folder
-    "https://www.googleapis.com/auth/drive.scripts",                      # Apps Script
-    "https://www.googleapis.com/auth/drive.photos.readonly",              # Drive photos
-    "https://www.googleapis.com/auth/drive.activity",                     # Drive activity
-    "https://www.googleapis.com/auth/drive.activity.readonly",            # Drive activity read-only
-    "https://www.googleapis.com/auth/drive.metadata",                     # Drive metadata
-    "https://www.googleapis.com/auth/drive.install",                      # Drive Apps Script install
-    "https://www.googleapis.com/auth/drive.meet.readonly",                # Meet recordings in Drive
-
-    # ── Google Sheets (2 scopes) ──
-    "https://www.googleapis.com/auth/spreadsheets",                       # Full Sheets
-    "https://www.googleapis.com/auth/spreadsheets.readonly",              # Sheets read-only
-
-    # ── Google Docs (2 scopes) ──
-    "https://www.googleapis.com/auth/documents",                          # Full Docs
-    "https://www.googleapis.com/auth/documents.readonly",                 # Docs read-only
-
-    # ── Google Slides (2 scopes) ──
-    "https://www.googleapis.com/auth/presentations",                      # Full Slides
-    "https://www.googleapis.com/auth/presentations.readonly",             # Slides read-only
-
-    # ── Google Calendar (9 scopes) ──
-    "https://www.googleapis.com/auth/calendar",                           # Full Calendar
-    "https://www.googleapis.com/auth/calendar.readonly",                  # Calendar read-only
-    "https://www.googleapis.com/auth/calendar.events",                    # Events management
-    "https://www.googleapis.com/auth/calendar.events.readonly",           # Events read-only
-    "https://www.googleapis.com/auth/calendar.settings.readonly",         # Calendar settings
-    "https://www.googleapis.com/auth/calendar.addons.execute",            # Calendar add-ons
-    "https://www.googleapis.com/auth/calendar.acls",                      # Calendar ACLs
-    "https://www.googleapis.com/auth/calendar.acls.readonly",             # Calendar ACLs read-only
-    "https://www.googleapis.com/auth/calendar.freebusy",                  # Free/busy info
-
-    # ── Google People / Contacts (3 scopes) ──
-    "https://www.googleapis.com/auth/contacts",                           # Full contacts
-    "https://www.googleapis.com/auth/contacts.readonly",                  # Contacts read-only
-    "https://www.googleapis.com/auth/contacts.other.readonly",            # Other contacts
-
-    # ── Google Tasks (2 scopes) ──
-    "https://www.googleapis.com/auth/tasks",                              # Full Tasks
-    "https://www.googleapis.com/auth/tasks.readonly",                     # Tasks read-only
-
-
-    # ── Google Forms (4 scopes) ──
-    "https://www.googleapis.com/auth/forms",                              # Full Forms
-    "https://www.googleapis.com/auth/forms.responses.readonly",           # Form responses
-    "https://www.googleapis.com/auth/forms.body",                         # Form body edit
-    "https://www.googleapis.com/auth/forms.body.readonly",                # Form body read
-
-    # ── Google Photos (4 scopes) ──
-    "https://www.googleapis.com/auth/photoslibrary",                      # Photos library
-    "https://www.googleapis.com/auth/photoslibrary.sharing",              # Photos sharing
-    "https://www.googleapis.com/auth/photoslibrary.readonly",             # Photos read-only
-    "https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata",      # App data
-    "https://www.googleapis.com/auth/photoslibrary.appendonly",           # Photos upload only
-
-    # ── Firebase (3 scopes) ──
-    "https://www.googleapis.com/auth/firebase",                           # Firebase services
-    "https://www.googleapis.com/auth/firebase.readonly",                  # Firebase read-only
-    "https://www.googleapis.com/auth/firebase.database",                  # Firebase Realtime DB
-
-    # ── Google Books (2 scopes) ──
-    "https://www.googleapis.com/auth/books",                              # Full Books
-
-    # ── Google Analytics (2 scopes) ──
-    "https://www.googleapis.com/auth/analytics.readonly",                 # Analytics read-only
-    "https://www.googleapis.com/auth/analytics",                          # Full Analytics
-
-    # ── Google Search Console (1 scope) ──
-    "https://www.googleapis.com/auth/webmasters.readonly",                # Search Console
-
-    # ── Google Cloud Natural Language (1 scope, free tier through cloud-platform) ──
-    "https://www.googleapis.com/auth/cloud-language",                     # Natural Language API
-
-    # ── Google Cloud Pub/Sub (1 scope, free tier) ──
-    "https://www.googleapis.com/auth/pubsub",                             # Pub/Sub
-
-    # ── OpenID / Identity (3 scopes) ──
-    "openid",                                                             # OpenID Connect
-    "https://www.googleapis.com/auth/userinfo.email",                     # User email
-    "https://www.googleapis.com/auth/userinfo.profile",                   # User profile
+# Identity scopes — always included with every batch
+_IDENTITY_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
 ]
 
-# Combined scopes string
-SCOPE_STRING = " ".join([SCOPE_CLOUD_PLATFORM] + SCOPES)
+# All scopes combined (backward compat — for gmail.py)
+ALL_SCOPES: list[str] = [SCOPE_CLOUD_PLATFORM]
+for _scopes in SCOPE_CATEGORIES.values():
+    ALL_SCOPES.extend(_scopes)
+
+def get_scope_string(category: str | None = None) -> str:
+    """Build scope string for a category (or all if None)."""
+    if category is None:
+        return " ".join(ALL_SCOPES)
+    scopes = list(_IDENTITY_SCOPES)
+    cat_scopes = SCOPE_CATEGORIES.get(category, [])
+    scopes.extend(cat_scopes)
+    return " ".join(scopes)
+
+def list_categories() -> dict[str, int]:
+    """Return {category_name: scope_count} for all categories."""
+    return {name: len(scopes) for name, scopes in SCOPE_CATEGORIES.items()}
+
 
 # Stored credentials path
 _CREDENTIALS_PATH = Path(FRIDAY_MEMORY) / "google_credentials.json"
@@ -162,17 +213,12 @@ _code_verifier: str | None = None
 
 
 def _generate_code_verifier() -> str:
-    """Generate a PKCE code verifier (43-128 chars)."""
-    import base64
-    import hashlib
-    import secrets
+    import base64, hashlib, secrets
     return base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
 
 
 def _generate_code_challenge(verifier: str) -> str:
-    """Generate S256 PKCE code challenge from verifier."""
-    import base64
-    import hashlib
+    import base64, hashlib
     return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
 
 
@@ -198,28 +244,72 @@ def credentials_exist() -> bool:
     return _CREDENTIALS_PATH.exists()
 
 
+# ── Authorized categories tracking ──
+
+def get_authorized_categories() -> list[str]:
+    """Return list of category names that have been authorised."""
+    creds = _load_credentials()
+    if not creds:
+        return []
+    return creds.get("authorized_categories", [])
+
+
+def is_category_authorized(category: str) -> bool:
+    """Check if a specific category has been authorised."""
+    return category in get_authorized_categories()
+
+
+def get_unauthorized_categories() -> list[str]:
+    """Return list of categories not yet authorised."""
+    authd = set(get_authorized_categories())
+    return [c for c in SCOPE_CATEGORIES if c not in authd]
+
+
+def _add_authorized_category(category: str):
+    """Mark a category as authorised in stored credentials."""
+    creds = _load_credentials() or {}
+    authd = set(creds.get("authorized_categories", []))
+    authd.add(category)
+    creds["authorized_categories"] = sorted(authd)
+    _save_credentials(creds)
+
+
 # ── Auth URL generation ──
 
-def get_auth_url(redirect_port: int = 8085) -> dict:
+def get_auth_url(redirect_port: int = 8085, category: str | None = None) -> dict:
     """
-    Generate the OAuth 2.0 authorization URL with all scopes.
-    Returns dict with auth_url and the state for CSRF protection.
+    Generate the OAuth 2.0 authorization URL.
+    If category is given, only request scopes for that category + identity scopes.
+    If category is None, request ALL scopes (original behaviour — may cause consent screen errors).
+    
+    IMPORTANT: Google Cloud Console redirect URIs must match.
+    Add these to your GCP project:
+      http://127.0.0.1:8085
+      http://localhost:8085
+      http://localhost
     """
     global _code_verifier
 
-    client_id = os.getenv("GOOGLE_CLIENT_ID", os.getenv("YOUTUBE_CLIENT_ID", ""))
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     if not client_id:
-        return {"error": "GOOGLE_CLIENT_ID (or YOUTUBE_CLIENT_ID) not set in .env"}
+        client_id = os.getenv("YOUTUBE_CLIENT_ID", "")
+    if not client_id:
+        client_id = _read_client_creds().get("client_id", "")
+    if not client_id:
+        return {"error": "GOOGLE_CLIENT_ID not set in .env or credentials.json"}
 
     _code_verifier = _generate_code_verifier()
     code_challenge = _generate_code_challenge(_code_verifier)
     redirect_uri = f"http://127.0.0.1:{redirect_port}"
 
+    scope_str = get_scope_string(category)
+    scope_count = len(scope_str.split())
+
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": SCOPE_STRING,
+        "scope": scope_str,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
         "access_type": "offline",
@@ -227,20 +317,36 @@ def get_auth_url(redirect_port: int = 8085) -> dict:
     }
 
     auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
-    return {"auth_url": auth_url, "redirect_uri": redirect_uri, "scopes": len([SCOPE_CLOUD_PLATFORM] + SCOPES)}
+    return {
+        "auth_url": auth_url,
+        "redirect_uri": redirect_uri,
+        "scope_count": scope_count,
+        "category": category or "ALL",
+    }
 
 
-def handle_auth_callback(auth_code: str) -> bool:
+def handle_auth_callback(auth_code: str, category: str | None = None) -> bool:
     """
     Exchange authorization code for tokens.
+    If category is provided, marks that category as authorised.
     Returns True on success.
     """
     global _code_verifier
 
-    client_id = os.getenv("GOOGLE_CLIENT_ID", os.getenv("YOUTUBE_CLIENT_ID", ""))
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", os.getenv("YOUTUBE_CLIENT_SECRET", ""))
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    if not client_id:
+        client_id = os.getenv("YOUTUBE_CLIENT_ID", "")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    if not client_secret:
+        client_secret = os.getenv("YOUTUBE_CLIENT_SECRET", "")
     if not client_id or not client_secret:
-        logger.warning("GOOGLE_CLIENT_ID/SECRET not configured")
+        creds = _read_client_creds()
+        if not client_id:
+            client_id = creds.get("client_id", "")
+        if not client_secret:
+            client_secret = creds.get("client_secret", "")
+    if not client_id or not client_secret:
+        logger.warning("GOOGLE_CLIENT_ID/SECRET not configured in .env or credentials.json")
         return False
 
     if requests is None:
@@ -248,25 +354,67 @@ def handle_auth_callback(auth_code: str) -> bool:
         return False
 
     try:
-        r = requests.post("https://oauth2.googleapis.com/token", data={
+        token_url = "https://oauth2.googleapis.com/token"
+        payload = {
             "client_id": client_id,
             "client_secret": client_secret,
             "code": auth_code,
             "code_verifier": _code_verifier or "",
             "grant_type": "authorization_code",
             "redirect_uri": "http://127.0.0.1:8085",
-        }, timeout=15)
-        r.raise_for_status()
+        }
+        try:
+            r = requests.post(token_url, data=payload, timeout=15)
+            r.raise_for_status()
+        except SSLError:
+            import ssl
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            r = requests.post(token_url, data=payload, timeout=15, verify=False)
+            r.raise_for_status()
         data = r.json()
 
+        existing = _load_credentials() or {}
+        merged_scopes = existing.get("scope", "")
+        new_scope = data.get("scope", "")
+        if merged_scopes and new_scope and new_scope not in merged_scopes:
+            merged_scopes = " ".join(set(merged_scopes.split() + new_scope.split()))
+        elif new_scope:
+            merged_scopes = new_scope
+
+        expires_at = (datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
         creds = {
-            "access_token": data.get("access_token", ""),
-            "refresh_token": data.get("refresh_token", ""),
-            "expires_at": (datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))).isoformat(),
-            "scope": data.get("scope", ""),
+            "access_token": data.get("access_token", existing.get("access_token", "")),
+            "refresh_token": data.get("refresh_token", existing.get("refresh_token", "")),
+            "expires_at": expires_at,
+            "scope": merged_scopes,
             "token_type": data.get("token_type", "Bearer"),
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": existing.get("created_at", datetime.utcnow().isoformat()),
+            "authorized_categories": existing.get("authorized_categories", []),
         }
+        if category:
+            authd = set(creds["authorized_categories"])
+            authd.add(category)
+            creds["authorized_categories"] = sorted(authd)
+
+        # Also store Google-compatible keys so gmail.py can read via Credentials.from_authorized_user_file
+        try:
+            from friday._paths import CREDENTIALS_JSON
+            with open(CREDENTIALS_JSON) as cf:
+                cdata = json.load(cf)
+            info = cdata.get("web", cdata.get("installed", {}))
+            cid = info.get("client_id", client_id)
+            cs = info.get("client_secret", client_secret)
+        except Exception:
+            cid, cs = client_id, client_secret
+        creds["token"] = creds["access_token"]
+        creds["token_uri"] = "https://oauth2.googleapis.com/token"
+        creds["client_id"] = cid
+        creds["client_secret"] = cs
+        creds["scopes"] = merged_scopes.split()
+        creds["expiry"] = expires_at
+
         _save_credentials(creds)
         logger.info("Google OAuth 2.0 tokens saved successfully")
         return True
@@ -287,7 +435,6 @@ def get_access_token() -> Optional[str]:
     refresh = creds.get("refresh_token")
     expiry_str = creds.get("expires_at", "")
 
-    # Check expiry
     if expiry_str:
         try:
             exp_dt = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
@@ -302,9 +449,14 @@ def get_access_token() -> Optional[str]:
 
 
 def _refresh_token(refresh_token: str) -> Optional[str]:
-    """Use refresh token to get a new access token."""
     client_id = os.getenv("GOOGLE_CLIENT_ID", os.getenv("YOUTUBE_CLIENT_ID", ""))
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET", os.getenv("YOUTUBE_CLIENT_SECRET", ""))
+    if not client_id or not client_secret:
+        creds_cfg = _read_client_creds()
+        if not client_id:
+            client_id = creds_cfg.get("client_id", "")
+        if not client_secret:
+            client_secret = creds_cfg.get("client_secret", "")
     if not client_id or not client_secret or requests is None:
         return None
 
@@ -319,11 +471,18 @@ def _refresh_token(refresh_token: str) -> Optional[str]:
         data = r.json()
         new_token = data.get("access_token")
         if new_token:
+            expires_at = (datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
             creds = _load_credentials() or {}
             creds["access_token"] = new_token
-            creds["expires_at"] = (datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
+            creds["expires_at"] = expires_at
             if data.get("refresh_token"):
                 creds["refresh_token"] = data["refresh_token"]
+            # Keep Google-compatible keys in sync so gmail.py can read them
+            creds["token"] = new_token
+            creds["expiry"] = expires_at
+            creds["token_uri"] = "https://oauth2.googleapis.com/token"
+            creds["client_id"] = creds.get("client_id", client_id)
+            creds["client_secret"] = creds.get("client_secret", client_secret)
             _save_credentials(creds)
         return new_token
     except Exception as exc:
@@ -335,19 +494,13 @@ def _refresh_token(refresh_token: str) -> Optional[str]:
 
 def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
              json_body: Optional[dict] = None, timeout: int = 15) -> Optional[dict]:
-    """
-    Make an authenticated request to any Google API.
-    Uses the stored OAuth token (auto-refreshes if needed).
-    Returns parsed JSON response or None on failure.
-    """
+    """Make an authenticated request to any Google API."""
     token = get_access_token()
     if not token:
         logger.warning("No OAuth token available for %s", url)
         return None
-
     if requests is None:
         return None
-
     headers = {"Authorization": f"Bearer {token}"}
     try:
         if method == "GET":
@@ -368,15 +521,17 @@ def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
 
 
 def get_token_info() -> dict:
-    """Return info about the stored credentials (no secrets)."""
+    """Return info about stored credentials (no secrets)."""
     creds = _load_credentials()
     if not creds:
         return {"authenticated": False}
     scopes = creds.get("scope", "").split()
+    authd = creds.get("authorized_categories", [])
     return {
         "authenticated": True,
         "scope_count": len(scopes),
         "scopes": scopes,
+        "authorized_categories": authd,
         "has_refresh_token": bool(creds.get("refresh_token")),
         "expires_at": creds.get("expires_at", ""),
         "created_at": creds.get("created_at", ""),
@@ -399,10 +554,7 @@ def revoke():
 
 
 def enable_api(api_name: str) -> dict:
-    """Enable a GCP API via Service Usage REST API.
-    Requires cloud-platform scope in OAuth token.
-    Example: enable_api('drive.googleapis.com')
-    """
+    """Enable a GCP API via Service Usage REST API."""
     creds = _load_credentials()
     if not creds:
         return {"error": "Not authenticated"}
@@ -430,3 +582,58 @@ def enable_all_apis(api_list: list[str]) -> list[dict]:
     for api in api_list:
         results.append(enable_api(api))
     return results
+
+
+# ── Local HTTP server to catch OAuth redirect ──
+
+_auth_code_storage: list[str] = []
+_server_done = threading.Event()
+
+
+class _RedirectHandler(http.server.BaseHTTPRequestHandler):
+    """Minimal HTTP server that captures the OAuth redirect."""
+    def do_GET(self):
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        code = qs.get("code", [None])[0]
+        if code:
+            _auth_code_storage.append(code)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<html><body><h1>Authorised!</h1><p>You can close this tab.</p></body></html>")
+            _server_done.set()
+        else:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(b"<html><body><h1>Missing code</h1></body></html>")
+    def log_message(self, *a, **k):
+        pass
+
+
+def run_auth_server(redirect_port: int = 8085) -> str | None:
+    """Start local HTTP server on port, return auth code or None on timeout."""
+    _auth_code_storage.clear()
+    _server_done.clear()
+    try:
+        server = http.server.HTTPServer(("127.0.0.1", redirect_port), _RedirectHandler)
+    except OSError:
+        alt_ports = [8080, 8085, 9090, 8000]
+        for p in alt_ports:
+            if p == redirect_port:
+                continue
+            try:
+                server = http.server.HTTPServer(("127.0.0.1", p), _RedirectHandler)
+                redirect_port = p
+                break
+            except OSError:
+                continue
+        else:
+            return None
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    ok = _server_done.wait(timeout=120)
+    server.shutdown()
+    if ok and _auth_code_storage:
+        return _auth_code_storage[0]
+    return None

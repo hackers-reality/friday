@@ -15,10 +15,11 @@ load_dotenv()
 from friday._paths import PROJECT_ROOT as _ROOT
 
 # Unified scopes — single source from google_oauth.py
-from friday.google_oauth import SCOPE_CLOUD_PLATFORM, SCOPES as _OAUTH_SCOPES
-_SCOPES = [SCOPE_CLOUD_PLATFORM] + _OAUTH_SCOPES
+from friday._paths import FRIDAY_MEMORY
+from friday.google_oauth import ALL_SCOPES
+_SCOPES = ALL_SCOPES
 
-_TOKEN_PATH = os.path.join(_ROOT, ".gmail_token.json")
+_TOKEN_PATH = os.path.join(FRIDAY_MEMORY, "google_credentials.json")
 
 # ─── Manual code exchange (bypasses google_auth_oauthlib SSL issues) ─────
 
@@ -116,12 +117,65 @@ def _get_credentials(auto_auth: bool = True) -> Any | None:
         
         creds = None
         if os.path.exists(_TOKEN_PATH):
-            creds = Credentials.from_authorized_user_file(_TOKEN_PATH, _SCOPES)
+            try:
+                creds = Credentials.from_authorized_user_file(_TOKEN_PATH, _SCOPES)
+            except Exception:
+                pass
+            if not creds or not creds.valid:
+                # Maybe written by google_oauth.py in custom format — convert
+                try:
+                    with open(_TOKEN_PATH) as f:
+                        data = json.load(f)
+                    if "access_token" in data:
+                        client_id = ""
+                        client_secret = ""
+                        try:
+                            creds_json = os.path.join(_ROOT, "credentials.json")
+                            with open(creds_json) as cf:
+                                cdata = json.load(cf)
+                            info = cdata.get("web", cdata.get("installed", {}))
+                            client_id = info.get("client_id", "")
+                            client_secret = info.get("client_secret", "")
+                        except Exception:
+                            pass
+                        from datetime import datetime
+                        expiry = None
+                        expires_at = data.get("expires_at")
+                        if expires_at:
+                            try:
+                                expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                            except Exception:
+                                pass
+                        creds = Credentials(
+                            token=data["access_token"],
+                            refresh_token=data.get("refresh_token"),
+                            token_uri="https://oauth2.googleapis.com/token",
+                            client_id=client_id,
+                            client_secret=client_secret,
+                            scopes=data.get("scope", " ").split(),
+                            expiry=expiry,
+                        )
+                except Exception:
+                    creds = None
         
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 from google.auth.transport.requests import Request
                 creds.refresh(Request())
+                # Persist refreshed token back to disk, preserving google_oauth custom keys
+                try:
+                    with open(_TOKEN_PATH) as f:
+                        existing = json.load(f)
+                except Exception:
+                    existing = {}
+                existing["access_token"] = creds.token
+                existing["token"] = creds.token
+                if creds.expiry:
+                    expiry_str = creds.expiry.isoformat()
+                    existing["expires_at"] = expiry_str
+                    existing["expiry"] = expiry_str
+                with open(_TOKEN_PATH, "w") as f:
+                    json.dump(existing, f, indent=2)
             elif auto_auth:
                 creds_path = os.path.join(_ROOT, "credentials.json")
                 if not os.path.exists(creds_path):
@@ -146,7 +200,7 @@ def _get_credentials(auto_auth: bool = True) -> Any | None:
 
 
 def _get_gmail_service(auto_auth: bool = True):
-    """Get authenticated Gmail service (uses unified .gmail_token.json).
+    """Get authenticated Gmail service (uses unified google_credentials.json).
     If auto_auth=False, skips OAuth flow if no cached token exists.
     """
     try:
@@ -178,10 +232,19 @@ def _read_redirect_uri_from_config(creds_path: str) -> str:
 
 
 def _start_local_server_on(uri: str) -> tuple[http.server.HTTPServer, int]:
-    """Start an HTTP server on the host+port parsed from redirect URI."""
+    """Start an HTTP server on the host+port parsed from redirect URI.
+    If the URI has no port (e.g. http://localhost), tries 8080 first,
+    then falls back to 8085 if 8080 is busy."""
     parsed = urllib.parse.urlparse(uri)
     host = parsed.hostname or "localhost"
     port = parsed.port or 8080
+    if not parsed.port:
+        for try_port in (8080, 8085):
+            try:
+                server = http.server.HTTPServer((host, try_port), _OAuthHandler)
+                return server, try_port
+            except OSError:
+                continue
     server = http.server.HTTPServer((host, port), _OAuthHandler)
     return server, port
 
@@ -252,7 +315,10 @@ def gmail_authorize() -> str:
 
         if not _OAuthHandler.server_done.wait(timeout=120):
             server.shutdown()
-            return "[FAIL] Authorization timed out after 120 seconds. Try exchange_oauth_code() with the redirect URL from your browser."
+            return ("[FAIL] Authorization timed out. Common fixes:\n"
+                    "  1. Make sure http://localhost:8080 is in your Google Cloud Console → Credentials → redirect URIs\n"
+                    "  2. Try google_authorize_category('Gmail') instead (fewer scopes)\n"
+                    "  3. Or use exchange_oauth_code() with the redirect URL from your browser")
 
         server.shutdown()
         code = _OAuthHandler.auth_code[0]
@@ -264,8 +330,26 @@ def gmail_authorize() -> str:
             creds = flow.credentials
 
         if creds:
+            # Merge with existing creds so google_oauth custom keys survive
+            try:
+                with open(_TOKEN_PATH) as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+            existing.update({
+                "token": creds.token,
+                "access_token": creds.token,
+                "refresh_token": creds.refresh_token,
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": flow.client_config.get("client_id", ""),
+                "client_secret": flow.client_config.get("client_secret", ""),
+                "scopes": list(creds.scopes),
+                "scope": " ".join(creds.scopes),
+                "expiry": creds.expiry.isoformat() if creds.expiry else "",
+                "expires_at": creds.expiry.isoformat() if creds.expiry else "",
+            })
             with open(_TOKEN_PATH, "w") as f:
-                f.write(creds.to_json())
+                json.dump(existing, f, indent=2)
             return f"[OK] Token saved! Gmail and Calendar are now ready."
 
         return "[FAIL] Authorization failed. Try exchange_oauth_code() with the redirect URL from your browser."
@@ -295,21 +379,32 @@ def exchange_oauth_code(redirect_url: str) -> str:
         flow.redirect_uri = redirect_uri
         creds = _exchange_code_manual(code, flow)
 
+        # Merge with existing creds so google_oauth custom keys survive
+        current_scopes = list(creds.scopes)
+        try:
+            with open(_TOKEN_PATH) as f:
+                existing = json.load(f)
+        except Exception:
+            existing = {}
+        existing.update({
+            "token": creds.token,
+            "access_token": creds.token,
+            "refresh_token": creds.refresh_token,
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": flow.client_config.get("client_id", ""),
+            "client_secret": flow.client_config.get("client_secret", ""),
+            "scopes": current_scopes,
+            "scope": " ".join(current_scopes),
+            "expiry": creds.expiry.isoformat() if creds.expiry else "",
+            "expires_at": creds.expiry.isoformat() if creds.expiry else "",
+        })
         with open(_TOKEN_PATH, "w") as f:
-            f.write(creds.to_json())
+            json.dump(existing, f, indent=2)
 
         # Sync to google_oauth credential store
         try:
             from friday.google_oauth import _save_credentials
-            from datetime import datetime, timedelta
-            _save_credentials({
-                "access_token": creds.token,
-                "refresh_token": creds.refresh_token,
-                "expires_at": (datetime.utcnow() + timedelta(seconds=3600)).isoformat() if creds.expiry is None else creds.expiry.isoformat(),
-                "scope": " ".join(creds.scopes),
-                "token_type": "Bearer",
-                "created_at": datetime.utcnow().isoformat(),
-            })
+            _save_credentials(existing)
         except Exception:
             pass
 

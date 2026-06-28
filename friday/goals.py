@@ -227,7 +227,7 @@ def list_goals(status_filter: Optional[str] = None) -> str:
 
 def get_calendar_service(auto_auth: bool = True):
     """Get authenticated Google Calendar service.
-    Uses unified .gmail_token.json (Gmail + Calendar) first, falls back to calendar_token.json.
+    Uses unified FRIDAY_MEMORY/google_credentials.json (Gmail + Calendar) first, falls back to calendar_token.json.
     If auto_auth=False, skips OAuth flow and returns error if no cached token exists.
     """
     try:
@@ -241,9 +241,9 @@ def get_calendar_service(auto_auth: bool = True):
         ]
         creds = None
         credentials_path = os.path.join(_ROOT, "credentials.json")
+        unified_path = os.path.join(_MEMORY_DIR, "google_credentials.json")
         
-        # 1. Try unified .gmail_token.json first (has Gmail + Calendar scopes)
-        unified_path = os.path.join(_ROOT, ".gmail_token.json")
+        # 1. Try unified google_credentials.json first
         if os.path.exists(unified_path):
             try:
                 creds = Credentials.from_authorized_user_file(unified_path, SCOPES + [
@@ -253,6 +253,43 @@ def get_calendar_service(auto_auth: bool = True):
                 ])
             except Exception:
                 pass
+            if not creds or not creds.valid:
+                # Fallback: convert from google_oauth custom format
+                try:
+                    with open(unified_path) as f:
+                        data = json.load(f)
+                    if "access_token" in data:
+                        cid = data.get("client_id", "")
+                        cs = data.get("client_secret", "")
+                        if not cid or not cs:
+                            try:
+                                with open(credentials_path) as cf:
+                                    cdata = json.load(cf)
+                                info = cdata.get("web", cdata.get("installed", {}))
+                                cid = info.get("client_id", cid)
+                                cs = info.get("client_secret", cs)
+                            except Exception:
+                                pass
+                        from google.oauth2.credentials import Credentials as GCreds
+                        expiry = None
+                        exp_str = data.get("expires_at") or data.get("expiry", "")
+                        if exp_str:
+                            try:
+                                from datetime import datetime
+                                expiry = datetime.fromisoformat(exp_str.replace("Z", "+00:00"))
+                            except Exception:
+                                pass
+                        creds = GCreds(
+                            token=data.get("access_token", ""),
+                            refresh_token=data.get("refresh_token"),
+                            token_uri="https://oauth2.googleapis.com/token",
+                            client_id=cid,
+                            client_secret=cs,
+                            scopes=data.get("scope", " ").split(),
+                            expiry=expiry,
+                        )
+                except Exception:
+                    pass
         
         # 2. Fall back to old calendar_token.json
         if not creds or not creds.valid:
@@ -265,6 +302,20 @@ def get_calendar_service(auto_auth: bool = True):
             if creds and creds.expired and creds.refresh_token:
                 from google.auth.transport.requests import Request
                 creds.refresh(Request())
+                # Persist refreshed token back to unified path
+                try:
+                    with open(unified_path) as f:
+                        existing = json.load(f)
+                except Exception:
+                    existing = {}
+                existing["access_token"] = creds.token
+                existing["token"] = creds.token
+                if creds.expiry:
+                    expiry_str = creds.expiry.isoformat()
+                    existing["expires_at"] = expiry_str
+                    existing["expiry"] = expiry_str
+                with open(unified_path, "w") as f:
+                    json.dump(existing, f, indent=2)
             else:
                 if not auto_auth:
                     return None, "Calendar not authorized. Run google_authorize first."
@@ -273,8 +324,19 @@ def get_calendar_service(auto_auth: bool = True):
                 flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
                 creds = flow.run_local_server(port=0)
             
-            with open(os.path.join(_MEMORY_DIR, "calendar_token.json"), "w") as f:
-                f.write(creds.to_json())
+            with open(unified_path, "w") as f:
+                json.dump({
+                    "token": creds.token,
+                    "access_token": creds.token,
+                    "refresh_token": creds.refresh_token,
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "client_id": flow.client_config.get("client_id", ""),
+                    "client_secret": flow.client_config.get("client_secret", ""),
+                    "scopes": list(creds.scopes),
+                    "scope": " ".join(creds.scopes),
+                    "expiry": creds.expiry.isoformat() if creds.expiry else "",
+                    "expires_at": creds.expiry.isoformat() if creds.expiry else "",
+                }, f, indent=2)
         
         service = build("calendar", "v3", credentials=creds)
         return service, None
