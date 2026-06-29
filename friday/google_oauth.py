@@ -73,8 +73,6 @@ SCOPE_CATEGORIES: dict[str, list[str]] = {
         "https://www.googleapis.com/auth/gmail.modify",
         "https://www.googleapis.com/auth/gmail.compose",
         "https://www.googleapis.com/auth/gmail.labels",
-    ],
-    "Gmail Extended": [
         "https://www.googleapis.com/auth/gmail.insert",
         "https://www.googleapis.com/auth/gmail.metadata",
         "https://www.googleapis.com/auth/gmail.settings.basic",
@@ -86,8 +84,6 @@ SCOPE_CATEGORIES: dict[str, list[str]] = {
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/calendar.events.readonly",
         "https://www.googleapis.com/auth/calendar.freebusy",
-    ],
-    "Calendar Admin": [
         "https://www.googleapis.com/auth/calendar.settings.readonly",
         "https://www.googleapis.com/auth/calendar.addons.execute",
         "https://www.googleapis.com/auth/calendar.acls",
@@ -99,38 +95,36 @@ SCOPE_CATEGORIES: dict[str, list[str]] = {
         "https://www.googleapis.com/auth/drive.readonly",
         "https://www.googleapis.com/auth/drive.metadata.readonly",
         "https://www.googleapis.com/auth/drive.appdata",
-    ],
-    "Drive Extended": [
         "https://www.googleapis.com/auth/drive.scripts",
         "https://www.googleapis.com/auth/drive.photos.readonly",
         "https://www.googleapis.com/auth/drive.activity",
         "https://www.googleapis.com/auth/drive.activity.readonly",
         "https://www.googleapis.com/auth/drive.metadata",
-    ],
-    "Drive Admin": [
         "https://www.googleapis.com/auth/drive.install",
         "https://www.googleapis.com/auth/drive.meet.readonly",
     ],
     "Sheets": [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/drive.file",
     ],
     "Docs": [
         "https://www.googleapis.com/auth/documents",
         "https://www.googleapis.com/auth/documents.readonly",
+        "https://www.googleapis.com/auth/drive.file",
     ],
     "Slides": [
         "https://www.googleapis.com/auth/presentations",
         "https://www.googleapis.com/auth/presentations.readonly",
+        "https://www.googleapis.com/auth/drive.file",
     ],
     "YouTube": [
         "https://www.googleapis.com/auth/youtube",
         "https://www.googleapis.com/auth/youtube.force-ssl",
         "https://www.googleapis.com/auth/youtube.readonly",
         "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtubepartner",
         "https://www.googleapis.com/auth/youtubepartner-channel-audit",
-    ],
-    "YouTube Analytics": [
         "https://www.googleapis.com/auth/yt-analytics.readonly",
         "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
     ],
@@ -138,6 +132,13 @@ SCOPE_CATEGORIES: dict[str, list[str]] = {
         "https://www.googleapis.com/auth/contacts",
         "https://www.googleapis.com/auth/contacts.readonly",
         "https://www.googleapis.com/auth/contacts.other.readonly",
+        "https://www.googleapis.com/auth/directory.readonly",
+        "https://www.googleapis.com/auth/user.addresses.read",
+        "https://www.googleapis.com/auth/user.birthday.read",
+        "https://www.googleapis.com/auth/user.emails.read",
+        "https://www.googleapis.com/auth/user.gender.read",
+        "https://www.googleapis.com/auth/user.organization.read",
+        "https://www.googleapis.com/auth/user.phonenumbers.readonly",
     ],
     "Tasks": [
         "https://www.googleapis.com/auth/tasks",
@@ -146,19 +147,23 @@ SCOPE_CATEGORIES: dict[str, list[str]] = {
     "Forms": [
         "https://www.googleapis.com/auth/forms",
         "https://www.googleapis.com/auth/forms.body",
-        "https://www.googleapis.com/auth/forms.responses.readonly",
         "https://www.googleapis.com/auth/forms.body.readonly",
+        "https://www.googleapis.com/auth/forms.responses.readonly",
     ],
     "Photos": [
         "https://www.googleapis.com/auth/photoslibrary",
         "https://www.googleapis.com/auth/photoslibrary.readonly",
         "https://www.googleapis.com/auth/photoslibrary.sharing",
         "https://www.googleapis.com/auth/photoslibrary.appendonly",
+        "https://www.googleapis.com/auth/photoslibrary.edit.appcreateddata",
     ],
     "Firebase": [
         "https://www.googleapis.com/auth/firebase",
         "https://www.googleapis.com/auth/firebase.readonly",
         "https://www.googleapis.com/auth/firebase.database",
+        "https://www.googleapis.com/auth/firebase.messaging",
+        "https://www.googleapis.com/auth/firebase.remoteconfig",
+        "https://www.googleapis.com/auth/cloud-platform",
     ],
     "Books": [
         "https://www.googleapis.com/auth/books",
@@ -166,12 +171,76 @@ SCOPE_CATEGORIES: dict[str, list[str]] = {
     "Analytics": [
         "https://www.googleapis.com/auth/analytics.readonly",
         "https://www.googleapis.com/auth/analytics",
+        "https://www.googleapis.com/auth/analytics.edit",
+        "https://www.googleapis.com/auth/analytics.manage.users",
+        "https://www.googleapis.com/auth/analytics.manage.users.readonly",
+        "https://www.googleapis.com/auth/analytics.provision",
     ],
     "Search Console": [
         "https://www.googleapis.com/auth/webmasters.readonly",
     ],
+    "Translation": [
+        "https://www.googleapis.com/auth/cloud-translation",
+        "https://www.googleapis.com/auth/cloud-platform",
+    ],
+    "Natural Language": [
+        "https://www.googleapis.com/auth/cloud-language",
+        "https://www.googleapis.com/auth/cloud-platform",
+    ],
+    "BigQuery": [
+        "https://www.googleapis.com/auth/bigquery",
+        "https://www.googleapis.com/auth/bigquery.readonly",
+        "https://www.googleapis.com/auth/bigquery.insertdata",
+        "https://www.googleapis.com/auth/cloud-platform",
+    ],
+    "Cloud Storage": [
+        "https://www.googleapis.com/auth/devstorage.full_control",
+        "https://www.googleapis.com/auth/devstorage.read_only",
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/cloud-platform",
+    ],
     "Cloud Platform": [
         SCOPE_CLOUD_PLATFORM,
+        "https://www.googleapis.com/auth/cloud-platform.read-only",
+        "https://www.googleapis.com/auth/cloud-platform.userinfo.email",
+        "https://www.googleapis.com/auth/iam",
+        "https://www.googleapis.com/auth/compute",
+        "https://www.googleapis.com/auth/sqlservice.admin",
+        "https://www.googleapis.com/auth/appengine.admin",
+    ],
+    "Maps": [
+        "https://www.googleapis.com/auth/maps",
+        "https://www.googleapis.com/auth/places",
+        "https://www.googleapis.com/auth/maps.addressvalidation",
+        "https://www.googleapis.com/auth/maps.directions",
+        "https://www.googleapis.com/auth/maps.distancematrix",
+        "https://www.googleapis.com/auth/maps.elevation",
+        "https://www.googleapis.com/auth/maps.geocoding",
+        "https://www.googleapis.com/auth/maps.places",
+        "https://www.googleapis.com/auth/maps.staticmap",
+        "https://www.googleapis.com/auth/maps.timezone",
+    ],
+    "Classroom": [
+        "https://www.googleapis.com/auth/classroom.courses.readonly",
+        "https://www.googleapis.com/auth/classroom.courses",
+        "https://www.googleapis.com/auth/classroom.coursework.readonly",
+        "https://www.googleapis.com/auth/classroom.coursework.me",
+        "https://www.googleapis.com/auth/classroom.coursework.students",
+        "https://www.googleapis.com/auth/classroom.announcements.readonly",
+        "https://www.googleapis.com/auth/classroom.announcements",
+        "https://www.googleapis.com/auth/classroom.rosters.readonly",
+        "https://www.googleapis.com/auth/classroom.rosters",
+        "https://www.googleapis.com/auth/classroom.profile.emails",
+        "https://www.googleapis.com/auth/classroom.profile.photos",
+    ],
+    "Gmail Readonly": [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.metadata",
+    ],
+    "Drive Readonly": [
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/drive.activity.readonly",
     ],
 }
 
@@ -314,6 +383,7 @@ def get_auth_url(redirect_port: int = 8085, category: str | None = None) -> dict
         "code_challenge_method": "S256",
         "access_type": "offline",
         "prompt": "consent",
+        "include_granted_scopes": "true",
     }
 
     auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
@@ -323,6 +393,58 @@ def get_auth_url(redirect_port: int = 8085, category: str | None = None) -> dict
         "scope_count": scope_count,
         "category": category or "ALL",
     }
+
+
+def save_token_data(token_data: dict, category: str | None = None) -> bool:
+    """Save pre-exchanged token data to credentials file. Used by settings dashboard."""
+    try:
+        existing = _load_credentials() or {}
+        merged_scopes = existing.get("scope", "")
+        new_scope = token_data.get("scope", "")
+        if merged_scopes and new_scope and new_scope not in merged_scopes:
+            merged_scopes = " ".join(set(merged_scopes.split() + new_scope.split()))
+        elif new_scope:
+            merged_scopes = new_scope
+
+        expires_at = (datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 3600))).isoformat()
+        creds = {
+            "access_token": token_data.get("access_token", existing.get("access_token", "")),
+            "refresh_token": token_data.get("refresh_token", existing.get("refresh_token", "")),
+            "expires_at": expires_at,
+            "scope": merged_scopes,
+            "token_type": token_data.get("token_type", "Bearer"),
+            "created_at": existing.get("created_at", datetime.utcnow().isoformat()),
+            "authorized_categories": existing.get("authorized_categories", []),
+        }
+        if category:
+            authd = set(creds["authorized_categories"])
+            authd.add(category)
+            creds["authorized_categories"] = sorted(authd)
+
+        # Also store Google-compatible keys
+        try:
+            from friday._paths import CREDENTIALS_JSON
+            with open(CREDENTIALS_JSON) as cf:
+                cdata = json.load(cf)
+            info = cdata.get("web", cdata.get("installed", {}))
+            cid = info.get("client_id", os.getenv("GOOGLE_CLIENT_ID", ""))
+            cs = info.get("client_secret", os.getenv("GOOGLE_CLIENT_SECRET", ""))
+        except Exception:
+            cid = os.getenv("GOOGLE_CLIENT_ID", "")
+            cs = os.getenv("GOOGLE_CLIENT_SECRET", "")
+        creds["token"] = creds["access_token"]
+        creds["token_uri"] = "https://oauth2.googleapis.com/token"
+        creds["client_id"] = cid
+        creds["client_secret"] = cs
+        creds["scopes"] = merged_scopes.split()
+        creds["expiry"] = expires_at
+
+        _save_credentials(creds)
+        logger.info("Google OAuth 2.0 tokens saved successfully (from dashboard)")
+        return True
+    except Exception as exc:
+        logger.warning("save_token_data failed: %s", exc)
+        return False
 
 
 def handle_auth_callback(auth_code: str, category: str | None = None) -> bool:
@@ -494,7 +616,9 @@ def _refresh_token(refresh_token: str) -> Optional[str]:
 
 def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
              json_body: Optional[dict] = None, timeout: int = 15) -> Optional[dict]:
-    """Make an authenticated request to any Google API."""
+    """Make an authenticated request to any Google API.
+    Returns parsed JSON on success, None on failure (logs warnings).
+    """
     token = get_access_token()
     if not token:
         logger.warning("No OAuth token available for %s", url)
@@ -515,6 +639,16 @@ def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
             return None
         r.raise_for_status()
         return r.json()
+    except requests.HTTPError as exc:
+        body = getattr(exc.response, "text", "")
+        status = getattr(exc.response, "status_code", 0)
+        reason = ""
+        if "insufficientPermissions" in body or "insufficient authentication scopes" in body.lower():
+            reason = "Token scopes don't include this API. Re-run google_authorize_category() for the relevant category."
+        elif status == 403:
+            reason = "Access forbidden. Check API is enabled in Google Cloud Console."
+        logger.warning("Google API call failed: %s %s -> %s | %s", method, url, exc, reason)
+        return None
     except Exception as exc:
         logger.warning("Google API call failed: %s %s -> %s", method, url, exc)
         return None

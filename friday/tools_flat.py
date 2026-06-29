@@ -2770,7 +2770,7 @@ def gmail_authorize() -> str:
 
 
 def google_authorize_category(category: str) -> str:
-    """Authorise ONE category of Google services. Categories: Gmail, Calendar, Drive, Sheets, Docs, Slides, YouTube, People, Tasks, Forms, Photos, Firebase, Books, Analytics, Search Console, Cloud Platform.
+    """Authorise ONE category of Google services. Categories: Gmail, Calendar, Drive, Sheets, Docs, Slides, YouTube, People, Tasks, Forms, Photos, Firebase, Books, Analytics, Search Console, Cloud Platform, Translation, Natural Language, BigQuery, Cloud Storage, Maps, Classroom, Gmail Readonly, Drive Readonly.
     Opens browser for consent with ~5 scopes instead of all ~70 at once.
     FRIDAY calls this automatically when she needs access to a service you haven't authorised yet."""
     try:

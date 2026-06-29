@@ -20,25 +20,32 @@ from friday.townhall_engine import (
     AGENT_PROFILES, STATUS_COLORS, STATUS_DOTS,
     TOWNHALL_STATE_PATH, TOWNHALL_CHATS_PATH,
 )
+from friday.settings_dashboard import register_settings_routes
 
 app = FastAPI(title="FRIDAY Townhall")
+register_settings_routes(app)
 
 _agents: dict[str, AgentNode] = {}
 _channels: dict[str, ChatChannel] = {}
 _dream_engine: DreamEngine | None = None
 _ws_connections: list[WebSocket] = []
+_loop: asyncio.AbstractEventLoop | None = None
 
 
-def _on_agent_chat(agent_name: str, text: str, channel: str = "main"):
-    """Callback from DreamEngine when an agent speaks. Appends to channel and broadcasts."""
-    ch = _channels.get(channel)
+def _on_agent_chat(msg: str):
+    """Callback from DreamEngine when an agent speaks. Receives a single formatted string."""
+    import re
+    m = re.match(r'\[bold[^\]]*\]([^[/]+)\[/bold[^\]]*\]:\s*(.*)', msg)
+    agent_name = m.group(1).strip() if m else "System"
+    text = m.group(2).strip() if m else msg
+    ch = _channels.get("main")
     if ch:
         ch.messages.append({
             "speaker": agent_name,
             "text": text,
             "ts": datetime.datetime.now().isoformat(),
         })
-    _broadcast("chat", {"agent": agent_name, "text": text, "channel": channel})
+    _broadcast("chat", {"agent": agent_name, "text": text, "channel": "main"})
 
 
 def _init():
@@ -134,7 +141,7 @@ def _serialize():
             "current_task": _clean(a.current_task or ""),
             "personality": _clean(a.personality[:100] if a.personality else ""),
             "friendship": dict(sorted(
-                {rn: rd["friendship"] for rn, rd in a.relationships.items()},
+                {rn: rd["friendship"] for rn, rd in a.relationships.items()}.items(),
                 key=lambda x: x[1], reverse=True
             )),
         }
@@ -573,6 +580,12 @@ animate();
 """
 
 
+@app.on_event("startup")
+def _store_loop():
+    global _loop
+    _loop = asyncio.get_running_loop()
+
+
 @app.get("/")
 async def root():
     return HTMLResponse(HTML_PAGE)
@@ -610,7 +623,10 @@ def _broadcast(msg_type, data):
     msg = json.dumps({"type": msg_type, **data})
     for ws in _ws_connections[:]:
         try:
-            asyncio.create_task(ws.send_text(msg))
+            if _loop is not None and _loop.is_running():
+                asyncio.run_coroutine_threadsafe(ws.send_text(msg), _loop)
+            else:
+                asyncio.create_task(ws.send_text(msg))
         except Exception:
             pass
 
