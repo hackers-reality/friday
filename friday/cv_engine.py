@@ -23,6 +23,29 @@ import urllib.request
 import urllib.error
 import shutil
 
+import contextlib
+
+@contextlib.contextmanager
+def _suppress_opencv_stderr():
+    """Temporarily redirect stderr to nul to suppress OpenCV DShow noise."""
+    import sys
+    old_stderr = sys.stderr
+    try:
+        with open(os.devnull, 'w') as null:
+            sys.stderr = null
+            yield
+    finally:
+        sys.stderr = old_stderr
+
+try:
+    import cv2
+    try:
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+    except Exception:
+        pass
+except Exception:
+    pass
+
 from friday._paths import FRIDAY_MEMORY
 from friday.vision_pipeline import VisionPipeline, reset_motion_detection
 
@@ -335,7 +358,7 @@ def _analyze_scene(frame) -> Dict[str, Any]:
 def _ask_nim_vl(question: str, frame_b64: str) -> str:
     """Ask a custom question about a camera frame using NVIDIA NIM vision-language model.
 
-    Uses nemotron-nano-12b-v2-vl (primary) → llama-3.2-11b-vision-instruct (fallback).
+    Uses phi-4-multimodal-instruct (primary) → llama-3.2-11b-vision-instruct → nemotron-nano-12b-v2-vl.
     """
     from openai import OpenAI
     api_key = os.environ.get("NVIDIA_VISION_API_KEY") or os.environ.get("NVIDIA_NIM_API_KEY") or os.environ.get("NVIDIA_API_KEY") or os.environ.get("NIM_API_KEY")
@@ -348,8 +371,6 @@ def _ask_nim_vl(question: str, frame_b64: str) -> str:
     for model in (
         "nvidia/nemotron-nano-12b-v2-vl",
         "meta/llama-3.2-11b-vision-instruct",
-        "microsoft/phi-4-multimodal-instruct",
-        "meta/llama-3.2-90b-vision-instruct",
     ):
         try:
             response = client.chat.completions.create(
@@ -901,19 +922,20 @@ def hide_feed() -> str:
 # ─── Camera Management ──────────────────────────────────────
 
 def list_available_cameras() -> str:
-    """Scan indices 0-9 and return which cameras are accessible."""
+    """Scan indices 0-3 and return which cameras are accessible."""
     import cv2
     available = []
-    for i in range(10):
-        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(i)
-        if cap.isOpened():
-            available.append(str(i))
-            cap.release()
+    with _suppress_opencv_stderr():
+        for i in range(4):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                available.append(str(i))
+                cap.release()
     if available:
         return f"[OK] Camera indices found: {', '.join(available)}"
-    return "[FAIL] No cameras detected on indices 0-9"
+    return "[FAIL] No cameras detected on indices 0-3"
 
 
 def switch_camera(index: int) -> str:
@@ -985,16 +1007,16 @@ def ask_camera_smart(question: str, label_hint: str = "") -> str:
 def _camera_cycle_worker(interval: float):
     """Background thread that rotates through all available cameras."""
     global _cycling_active
-    cameras = [str(i) for i in range(10)]
     available = []
     import cv2
-    for i in range(10):
-        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(i)
-        if cap.isOpened():
-            available.append(i)
-            cap.release()
+    with _suppress_opencv_stderr():
+        for i in range(4):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                available.append(i)
+                cap.release()
     if not available:
         _cycling_active = False
         return
@@ -1003,13 +1025,12 @@ def _camera_cycle_worker(interval: float):
         for idx in available:
             if _cycling_stop_event.is_set():
                 break
-            # Switch camera
-            # First, open this camera briefly to get a frame
-            cap_temp = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-            if not cap_temp.isOpened():
-                cap_temp = cv2.VideoCapture(idx)
-            if not cap_temp.isOpened():
-                continue
+            with _suppress_opencv_stderr():
+                cap_temp = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                if not cap_temp.isOpened():
+                    cap_temp = cv2.VideoCapture(idx)
+                if not cap_temp.isOpened():
+                    continue
 
             ok, frame = cap_temp.read()
             if not ok or frame is None:
@@ -1058,7 +1079,7 @@ def _camera_cycle_worker(interval: float):
                                 "timestamp": datetime.now().isoformat(),
                             }
 
-            print(f"[CV] Cycle: camera {idx}, scene: {desc[:60] if desc else 'empty'}...")
+
 
             # Wait for interval (poll stop_event)
             _cycling_stop_event.wait(timeout=interval)

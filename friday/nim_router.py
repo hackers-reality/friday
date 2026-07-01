@@ -15,29 +15,29 @@ _DEFAULT_MODEL_MAP: dict[str, list[str]] = {
     "code_gen": [
         "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
+        "minimaxai/minimax-m2.7",
     ],
     "image_analysis": [
+        "microsoft/Florence-2-large",
         "meta/llama-3.2-11b-vision-instruct",
+        "nvidia/nemotron-nano-12b-v2-vl",
     ],
     "research": [
-        "opencode/mimo-v2.5-free",
-        "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
+        "deepseek-ai/deepseek-v4-flash",
     ],
     "summarization": [
-        "opencode/mimo-v2.5-free",
-        "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
+        "minimaxai/minimax-m2.7",
     ],
     "reasoning": [
-        "opencode/mimo-v2.5-free",
         "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
     ],
     "general": [
-        "opencode/mimo-v2.5-free",
-        "deepseek-ai/deepseek-v4-flash",
         "meta/llama-3.3-70b-instruct",
+        "deepseek-ai/deepseek-v4-flash",
+        "minimaxai/minimax-m2.7",
     ],
 }
 

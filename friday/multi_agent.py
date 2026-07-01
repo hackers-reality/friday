@@ -38,7 +38,7 @@ AGENT_ROLES = {
     },
     "automator": {
         "description": "Specialist in browser automation and web tasks",
-        "capabilities": ["opencli_navigate", "opencli_click", "opencli_type", "opencli_extract", "opencli_screenshot"],
+        "capabilities": ["browser_navigate", "browser_extract_content", "browser_search", "run_browser_task"],
     },
     "planner": {
         "description": "Specialist in scheduling, calendar, and goals",

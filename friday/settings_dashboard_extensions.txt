@@ -1,0 +1,830 @@
+These three blocks get APPENDED to the existing DASHBOARD_HTML string.
+
+=== CSS ===
+/* Place before </style> (line 1056) */
+
+.sort-bar{display:none;align-items:center;gap:10px;padding:6px 0 12px;flex-wrap:wrap}.sort-bar.visible{display:flex}.sort-label{font-size:11px;color:var(--text-muted);white-space:nowrap;font-weight:500}.sort-select{padding:5px 10px;font-size:12px;font-family:var(--font);background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;cursor:pointer;transition:border-color 0.2s}.sort-select:focus{border-color:var(--primary)}.sort-select option{background:#0f1528;color:var(--text)}.sort-order-btn{background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer;padding:5px 10px;font-size:14px;transition:all 0.2s;display:flex;align-items:center}.sort-order-btn:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-active)}.action-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.bulk-bar{position:fixed;bottom:0;left:var(--panel-w);right:0;background:rgba(8,12,20,0.95);border-top:1px solid var(--border-active);backdrop-filter:blur(16px);padding:10px 24px;display:none;align-items:center;justify-content:space-between;z-index:100;transition:left 0.3s ease}.main-content.expanded .bulk-bar{left:0}.bulk-bar.visible{display:flex}.bulk-info{font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px}.bulk-info strong{color:var(--primary)}.bulk-actions{display:flex;gap:6px}.export-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:1000;justify-content:center;align-items:center;padding:20px}.export-modal.open{display:flex}.export-panel{background:#0f1528;border:1px solid var(--border-active);border-radius:16px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.6);animation:fadeInUp 0.25s cubic-bezier(0.4,0,0.2,1);padding:24px}.export-panel h3{font-size:16px;font-weight:600;margin-bottom:4px}.export-panel p{font-size:12px;color:var(--text-dim);margin-bottom:16px}.export-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}.export-opt{padding:16px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface);cursor:pointer;text-align:center;transition:all 0.2s}.export-opt:hover{background:var(--surface-hover);border-color:var(--border-active)}.export-opt.selected{background:var(--primary-dim);border-color:var(--primary)}.export-opt-icon{font-size:28px;margin-bottom:6px}.export-opt-label{font-size:13px;font-weight:600}.export-opt-desc{font-size:11px;color:var(--text-dim);margin-top:2px}.export-actions{display:flex;gap:8px;justify-content:flex-end}.collapsible-group{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;background:var(--surface)}.collapsible-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;transition:background 0.2s;user-select:none}.collapsible-header:hover{background:var(--surface-hover)}.collapsible-header .ch-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}.collapsible-header .ch-icon{font-size:12px;color:var(--text-muted);transition:transform 0.25s ease}.collapsible-header .ch-icon.open{transform:rotate(180deg)}.collapsible-body{padding:0 16px 12px;font-size:12px;color:var(--text-dim);line-height:1.6}.collapsible-body.hidden{display:none}.keyboard-hint{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:2000;justify-content:center;align-items:center;padding:20px}.keyboard-hint.open{display:flex}.kbd-panel{background:#0f1528;border:1px solid var(--border-active);border-radius:16px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,0.6);animation:scaleIn 0.2s cubic-bezier(0.4,0,0.2,1);padding:0;overflow:hidden}.kbd-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}.kbd-header h3{font-size:16px;font-weight:600}.kbd-header .kbd-close{background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;padding:4px;border-radius:6px;transition:all 0.2s;line-height:1}.kbd-header .kbd-close:hover{background:var(--surface);color:var(--text)}.kbd-body{padding:16px 20px 20px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.kbd-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;font-size:12px}.kbd-item:hover{background:var(--surface)}.kbd-key{display:inline-flex;align-items:center;justify-content:center;padding:2px 8px;font-size:11px;font-weight:600;font-family:monospace;background:rgba(0,0,0,0.4);border:1px solid var(--border);border-radius:4px;color:var(--text);min-width:24px;box-shadow:0 1px 2px rgba(0,0,0,0.3)}.kbd-desc{color:var(--text-dim);flex:1}.drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:32px 20px;text-align:center;transition:all 0.25s;cursor:pointer;margin-bottom:16px;background:var(--surface)}.drop-zone:hover,.drop-zone.drag-over{border-color:var(--primary);background:var(--primary-dim);border-style:solid}.drop-zone-icon{font-size:36px;color:var(--text-muted);margin-bottom:8px}.drop-zone.drag-over .drop-zone-icon{color:var(--primary)}.drop-zone-text{font-size:13px;color:var(--text-dim)}.drop-zone.drag-over .drop-zone-text{color:var(--text)}.drop-zone-hint{font-size:11px;color:var(--text-muted);margin-top:4px}.progress-ring{display:inline-flex;align-items:center;justify-content:center;position:relative}.progress-ring svg{transform:rotate(-90deg)}.progress-ring .pr-bg{fill:none;stroke:rgba(255,255,255,0.06)}.progress-ring .pr-fg{fill:none;stroke:var(--primary);stroke-linecap:round;transition:stroke-dashoffset 0.5s ease}.progress-ring .pr-label{position:absolute;font-size:9px;font-weight:700;color:var(--text)}.chart-mini{display:flex;align-items:flex-end;gap:3px;height:36px;padding:2px 0}.chart-bar{width:100%;border-radius:2px 2px 0 0;background:var(--primary-dim);transition:height 0.4s ease;position:relative;min-height:2px}.chart-bar:nth-child(2){background:rgba(0,229,255,0.25)}.chart-bar:nth-child(3){background:rgba(0,229,255,0.15)}.chart-bar:nth-child(4){background:rgba(0,229,255,0.1)}.badge-tooltip{position:relative;cursor:help}.badge-tooltip .bt-content{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#0f1528;border:1px solid var(--border-active);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--text);white-space:nowrap;z-index:500;box-shadow:0 8px 24px rgba(0,0,0,0.5);pointer-events:none}.badge-tooltip .bt-content::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--border-active)}.badge-tooltip:hover .bt-content{display:block}.scroll-top{position:fixed;bottom:24px;right:24px;width:40px;height:40px;border-radius:50%;background:var(--primary);color:#0b0e17;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;opacity:0;transform:translateY(16px);pointer-events:none;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);z-index:150;box-shadow:0 4px 16px rgba(0,229,255,0.3)}.scroll-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}.scroll-top:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,229,255,0.4)}.main-content.expanded .scroll-top{right:24px}.theme-toggle{background:var(--surface);border:1px solid var(--border);border-radius:20px;color:var(--text-dim);cursor:pointer;padding:4px 12px;font-size:12px;transition:all 0.2s;display:flex;align-items:center;gap:6px}.theme-toggle:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-active)}.search-highlight{background:rgba(0,229,255,0.25);color:var(--primary);border-radius:2px;padding:0 2px}.confirm-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:3000;justify-content:center;align-items:center;padding:20px}.confirm-overlay.open{display:flex}.confirm-box{background:#0f1528;border:1px solid var(--border-active);border-radius:16px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.6);animation:scaleIn 0.2s cubic-bezier(0.4,0,0.2,1);padding:24px}.confirm-message{font-size:14px;line-height:1.5;margin-bottom:20px;color:var(--text)}.confirm-actions{display:flex;gap:8px;justify-content:flex-end}.conn-bar{position:fixed;bottom:0;left:var(--panel-w);right:0;height:3px;z-index:99;overflow:hidden;transition:left 0.3s ease}.main-content.expanded .conn-bar{left:0}.conn-bar-inner{height:100%;width:0%;background:var(--green);transition:width 1s ease,background 0.3s}.conn-bar-inner.warn{background:var(--yellow)}.conn-bar-inner.err{background:var(--red)}.faq-section{margin-top:32px;padding-top:20px;border-top:1px solid var(--border)}.faq-section h3{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}.faq-item{border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;overflow:hidden;background:var(--surface)}.faq-q{padding:10px 14px;font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background 0.2s;user-select:none;gap:8px}.faq-q:hover{background:var(--surface-hover)}.faq-q .faq-arrow{font-size:10px;color:var(--text-muted);transition:transform 0.25s}.faq-q.open .faq-arrow{transform:rotate(180deg)}.faq-a{padding:0 14px 10px;font-size:12px;color:var(--text-dim);line-height:1.6;display:none}.faq-a.open{display:block}.skeleton{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px}.skeleton-line{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--border) 0%,rgba(255,255,255,0.05) 50%,var(--border) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite}.skeleton-line.w60{width:60%}.skeleton-line.w40{width:40%}.skeleton-line.w80{width:80%}.skeleton-line.h16{height:16px}.skeleton-avatar{width:40px;height:40px;border-radius:10px;background:linear-gradient(90deg,var(--border) 0%,rgba(255,255,255,0.05) 50%,var(--border) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite;flex-shrink:0}.skeleton-row{display:flex;gap:12px;align-items:flex-start}.skeleton-col{flex:1;display:flex;flex-direction:column;gap:6px}.skeleton-btn{width:60px;height:28px;border-radius:6px;background:linear-gradient(90deg,var(--border) 0%,rgba(255,255,255,0.05) 50%,var(--border) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite;flex-shrink:0;margin-left:auto}@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.05)}}@keyframes slideIn{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}@keyframes fadeInUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}@keyframes glow{0%,100%{box-shadow:0 0 4px rgba(0,229,255,0.2)}50%{box-shadow:0 0 16px rgba(0,229,255,0.5)}}@keyframes scaleIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}@keyframes rotate{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.pulse{animation:pulse 1.5s ease-in-out infinite}.glow{animation:glow 2s ease-in-out infinite}.rotate{animation:rotate 1s linear infinite}.fade-in-up{animation:fadeInUp 0.3s ease forwards}.slide-in{animation:slideIn 0.3s ease forwards}.scale-in{animation:scaleIn 0.2s ease forwards}.faq-q .faq-indicator{padding:2px 8px;border-radius:10px;font-size:10px;background:var(--surface);color:var(--text-muted);white-space:nowrap}.filter-chip .fc-badge{font-size:10px;margin-left:4px;opacity:0.7}.import-error{font-size:12px;color:var(--red);padding:8px 12px;background:rgba(255,23,68,0.08);border-radius:6px;margin-top:8px;display:none}.import-success{font-size:12px;color:var(--green);padding:8px 12px;background:rgba(0,230,118,0.08);border-radius:6px;margin-top:8px;display:none}.verify-progress{margin-top:8px;display:none}.verify-progress.visible{display:flex;align-items:center;gap:8px}.verify-progress-text{font-size:11px;color:var(--text-dim)}.kbd-body-extra{padding:12px 20px 20px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);text-align:center}.card.filtered-out{opacity:0;transform:scale(0.95);pointer-events:none;position:absolute;visibility:hidden}.card.filtered-in{animation:fadeInUp 0.3s ease forwards}.card-grid.filtering{position:relative;min-height:200px}.sort-bar .sort-clear{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:11px;padding:4px 8px;border-radius:4px;transition:all 0.2s;text-decoration:underline}.sort-bar .sort-clear:hover{color:var(--text)}.drop-zone .dz-result{margin-top:8px;font-size:12px;display:none}.drop-zone .dz-result.show{display:block}.drop-zone .dz-result .dz-ok{color:var(--green)}.drop-zone .dz-result .dz-err{color:var(--red)}@media(max-width:768px){.bulk-bar{left:0;padding:10px 16px;flex-direction:column;gap:8px}.bulk-actions{flex-wrap:wrap;justify-content:center}.export-options{grid-template-columns:1fr}.kbd-body{grid-template-columns:1fr}.keyboard-hint{padding:12px}.scroll-top{bottom:60px;right:16px}.sort-bar{flex-direction:column;align-items:stretch;gap:6px}.action-row{flex-direction:column;align-items:stretch}.action-row .btn{text-align:center}.confirm-box{margin:12px}}@media(min-width:1400px){.bulk-bar{padding:10px 32px}}
+
+=== HTML ===
+<!-- Place before </body> (line 1139). Also consider placing sort controls, action row, drop zone, FAQ on the keys page (before #kGrid or after) -->
+
+<!-- Sort Controls (for keys page) -->
+<div class="sort-bar" id="sortBar">
+  <span class="sort-label">&#x2195; Sort:</span>
+  <select class="sort-select" id="sortSelect">
+    <option value="default">Default order</option>
+    <option value="name-asc">Name &#x2191;</option>
+    <option value="name-desc">Name &#x2193;</option>
+    <option value="category">Category</option>
+    <option value="status-asc">Status: Connected first</option>
+    <option value="status-desc">Status: Not configured first</option>
+    <option value="pricing-asc">Pricing: Free first</option>
+    <option value="pricing-desc">Pricing: Paid first</option>
+  </select>
+  <button class="sort-order-btn" id="sortOrderBtn" title="Toggle order">&#x2195;</button>
+  <button class="sort-clear" id="sortClear">Reset</button>
+</div>
+
+<!-- Import/Export action row -->
+<div class="action-row">
+  <button class="btn btn-outline btn-sm" id="showSortBtn">&#x2195; Sort</button>
+  <button class="btn btn-outline btn-sm" id="importBtn">&#x1f4c2; Import</button>
+  <button class="btn btn-outline btn-sm" id="exportBtn">&#x1f4e4; Export</button>
+  <button class="btn btn-ghost btn-sm" id="batchVerifyBtn">&#x2705; Verify All</button>
+</div>
+
+<!-- Drag-drop import zone -->
+<div class="drop-zone" id="dropZone">
+  <div class="drop-zone-icon">&#x1f4c4;</div>
+  <div class="drop-zone-text">Drop a <strong>.env</strong> file here to import keys</div>
+  <div class="drop-zone-hint">or click to browse &mdash; parses <code>KEY=value</code> format</div>
+  <div class="dz-result" id="dzResult"></div>
+</div>
+
+<!-- Collapsible FAQ section -->
+<div class="faq-section" id="faqSection">
+  <h3>&#x2753; Help &amp; Tips</h3>
+  <div class="faq-item">
+    <div class="faq-q" data-faq="0">Where can I find API keys?<span class="faq-arrow">&#x25bc;</span></div>
+    <div class="faq-a" data-faq="0">Each service provides keys through its developer portal. Click the <strong>"Get Key"</strong> link on any card to visit the provider's API page and create or retrieve your key.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q" data-faq="1">How do I verify a key works?<span class="faq-arrow">&#x25bc;</span></div>
+    <div class="faq-a" data-faq="1">Enter your key in the input field, click <strong>Save</strong>, then click <strong>Verify</strong>. The system will test the key against the provider's API and show a result badge. You can also use <strong>Verify All</strong> to test multiple saved keys at once.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q" data-faq="2">What does "Not Configured" mean?<span class="faq-arrow">&#x25bc;</span></div>
+    <div class="faq-a" data-faq="2">A key listed as <strong>Not Configured</strong> means no value has been saved yet, or the saved value appears incomplete. Click the input field, paste your full key, and click <strong>Save</strong>.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q" data-faq="3">Can I import multiple keys at once?<span class="faq-arrow">&#x25bc;</span></div>
+    <div class="faq-a" data-faq="3">Yes! Drag and drop a <code>.env</code> file onto the import zone above, or click it to browse. The file should contain lines in <code>KEY_NAME=your_api_key_here</code> format. Matching keys will be auto-filled.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q" data-faq="4">How do I export my configuration?<span class="faq-arrow">&#x25bc;</span></div>
+    <div class="faq-a" data-faq="4">Click the <strong>Export</strong> button above, choose <strong>JSON</strong> or <strong>CSV</strong> format, and a file will be downloaded. Only configured keys are exported. You can also use the bulk bar to export a specific selection.</div>
+  </div>
+  <div class="faq-item">
+    <div class="faq-q" data-faq="5">What keyboard shortcuts are available?<span class="faq-arrow">&#x25bc;</span></div>
+    <div class="faq-a" data-faq="5">Press <kbd>Ctrl+F</kbd> to focus the search bar, <kbd>Escape</kbd> to close any open modal, <kbd>S</kbd> to focus the sort dropdown, <kbd>E</kbd> to open the export dialog, and <kbd>?</kbd> to show all shortcuts.</div>
+  </div>
+</div>
+
+<!-- Bulk action bar (global, fixed bottom) -->
+<div class="bulk-bar" id="bulkBar">
+  <div class="bulk-info"><span id="bulkCount">0</span> key(s) selected</div>
+  <div class="bulk-actions">
+    <button class="btn btn-ghost btn-sm" id="bulkSelectAll">Select All</button>
+    <button class="btn btn-ghost btn-sm" id="bulkDeselectAll">Deselect All</button>
+    <button class="btn btn-outline btn-sm" id="bulkVerifyBtn">&#x2705; Verify</button>
+    <button class="btn btn-outline btn-sm" id="bulkExportBtn">&#x1f4e4; Export</button>
+  </div>
+</div>
+
+<!-- Export modal -->
+<div class="export-modal" id="exportModal">
+  <div class="export-panel">
+    <h3>&#x1f4e4; Export Keys</h3>
+    <p>Choose a format to download your configured API keys.</p>
+    <div class="export-options">
+      <div class="export-opt selected" data-format="json">
+        <div class="export-opt-icon">{ }</div>
+        <div class="export-opt-label">JSON</div>
+        <div class="export-opt-desc">Structured format, easy to re-import</div>
+      </div>
+      <div class="export-opt" data-format="csv">
+        <div class="export-opt-icon">&#x1f4ca;</div>
+        <div class="export-opt-label">CSV</div>
+        <div class="export-opt-desc">Spreadsheet-compatible, readable</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">Exporting <strong id="exportCount">0</strong> configured key(s).</div>
+    <div class="export-actions">
+      <button class="btn btn-ghost btn-sm" id="exportCancel">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="exportConfirm">&#x1f4e5; Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard shortcuts modal -->
+<div class="keyboard-hint" id="kbdModal">
+  <div class="kbd-panel">
+    <div class="kbd-header">
+      <h3>&#x2328; Keyboard Shortcuts</h3>
+      <button class="kbd-close" id="kbdClose">&times;</button>
+    </div>
+    <div class="kbd-body">
+      <div class="kbd-item"><span class="kbd-key">Ctrl+F</span><span class="kbd-desc">Focus search</span></div>
+      <div class="kbd-item"><span class="kbd-key">Escape</span><span class="kbd-desc">Close modal / overlay</span></div>
+      <div class="kbd-item"><span class="kbd-key">S</span><span class="kbd-desc">Focus sort dropdown</span></div>
+      <div class="kbd-item"><span class="kbd-key">E</span><span class="kbd-desc">Open export dialog</span></div>
+      <div class="kbd-item"><span class="kbd-key">?</span><span class="kbd-desc">Toggle this panel</span></div>
+      <div class="kbd-item"><span class="kbd-key">R</span><span class="kbd-desc">Refresh data</span></div>
+      <div class="kbd-item"><span class="kbd-key">A</span><span class="kbd-desc">Select all keys</span></div>
+      <div class="kbd-item"><span class="kbd-key">D</span><span class="kbd-desc">Deselect all keys</span></div>
+    </div>
+    <div class="kbd-body-extra">Press <kbd style="display:inline-flex;align-items:center;justify-content:center;padding:1px 6px;font-size:10px;font-weight:600;font-family:monospace;background:rgba(0,0,0,0.4);border:1px solid var(--border);border-radius:3px;color:var(--text)">?</kbd> to toggle this panel at any time.</div>
+  </div>
+</div>
+
+<!-- Confirmation dialog template -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <div class="confirm-message" id="confirmMessage">Are you sure?</div>
+    <div class="confirm-actions">
+      <button class="btn btn-ghost btn-sm" id="confirmCancel">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="confirmOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Connection status bar -->
+<div class="conn-bar" id="connBar"><div class="conn-bar-inner" id="connBarInner"></div></div>
+
+<!-- Scroll to top button -->
+<button class="scroll-top" id="scrollTop" title="Scroll to top">&uarr;</button>
+
+<!-- Hidden file input for import -->
+<input type="file" id="dropInput" accept=".env,.txt" style="display:none">
+
+=== JS ===
+/* Place in a new <script> tag before </body>, after the existing <script> block.
+   All new vars are scoped inside the IIFE to avoid conflicts with existing globals. */
+
+(function() {
+  'use strict';
+
+  /* -------- utilities -------- */
+  function debounce(fn, delay) {
+    var timer = null;
+    return function() {
+      var ctx = this, args = arguments;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function() { fn.apply(ctx, args); }, delay);
+    };
+  }
+
+  function throttle(fn, delay) {
+    var last = 0, timer = null;
+    return function() {
+      var ctx = this, args = arguments, now = Date.now();
+      if (now - last >= delay) {
+        last = now;
+        fn.apply(ctx, args);
+      } else if (!timer) {
+        timer = setTimeout(function() {
+          last = Date.now();
+          timer = null;
+          fn.apply(ctx, args);
+        }, delay - (now - last));
+      }
+    };
+  }
+
+  function fuzzyMatch(text, query) {
+    if (!query) return true;
+    text = text.toLowerCase();
+    query = query.toLowerCase();
+    var ti = 0;
+    for (var qi = 0; qi < query.length; qi++) {
+      var ch = query[qi];
+      if (ch === ' ') continue;
+      ti = text.indexOf(ch, ti);
+      if (ti === -1) return false;
+      ti++;
+    }
+    return true;
+  }
+
+  /* -------- state -------- */
+  var selectedKeys = {};
+  var sortMethod = 'default';
+  var exportFormat = 'json';
+  var confirmResolve = null;
+  var sortVisible = false;
+  var verifyQueue = [];
+  var verifyRunning = false;
+
+  /* -------- DOM refs -------- */
+  var $ = function(id) { return document.getElementById(id); };
+
+  /* -------- sort -------- */
+  function sortKeys(method) {
+    if (method === 'default') { sortMethod = 'default'; return; }
+    sortMethod = method;
+    var parts = method.split('-');
+    var field = parts[0];
+    var dir = parts.length > 1 ? parts[1] : 'asc';
+    kData.sort(function(a, b) {
+      var va, vb;
+      switch (field) {
+        case 'name':
+          va = (a.name || '').toLowerCase();
+          vb = (b.name || '').toLowerCase();
+          break;
+        case 'category':
+          va = (a.category || '').toLowerCase();
+          vb = (b.category || '').toLowerCase();
+          break;
+        case 'status':
+          va = a.present ? 1 : 0;
+          vb = b.present ? 1 : 0;
+          break;
+        case 'pricing':
+          va = (a.pricing || '').toLowerCase();
+          vb = (b.pricing || '').toLowerCase();
+          break;
+        default: return 0;
+      }
+      if (va < vb) return dir === 'asc' ? -1 : 1;
+      if (va > vb) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  function resetSort() {
+    sortMethod = 'default';
+    $('sortSelect').value = 'default';
+  }
+
+  function sortChangeHandler() {
+    var val = $('sortSelect').value;
+    if (val === 'default') {
+      sortMethod = 'default';
+      loadK();
+    } else {
+      sortKeys(val);
+      rK();
+    }
+  }
+
+  /* -------- export -------- */
+  function exportData(format) {
+    var configured = [];
+    for (var i = 0; i < kData.length; i++) {
+      if (kData[i].present) configured.push(kData[i]);
+    }
+    if (configured.length === 0) {
+      t('No configured keys to export.', 'error');
+      return;
+    }
+    var filename = 'friday-api-keys.' + (format === 'csv' ? 'csv' : 'json');
+    var content = '';
+    if (format === 'csv') {
+      var rows = [['key','name','category','value']];
+      for (var j = 0; j < configured.length; j++) {
+        var k = configured[j];
+        rows.push([k.key, k.name || '', k.category || '', k.value || '']);
+      }
+      content = rows.map(function(r) {
+        return r.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
+      }).join('\n');
+      content = '\uFEFF' + content;
+    } else {
+      var obj = {};
+      for (var jj = 0; jj < configured.length; jj++) {
+        obj[configured[jj].key] = configured[jj].value || '';
+      }
+      content = JSON.stringify(obj, null, 2);
+    }
+    var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    t('Exported ' + configured.length + ' keys as ' + format.toUpperCase(), 'success');
+  }
+
+  /* -------- import -------- */
+  function importFromClipboard(text) {
+    if (!text || !text.trim()) {
+      t('No text to import.', 'error');
+      return 0;
+    }
+    var lines = text.split('\n');
+    var imported = 0;
+    var matched = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line.startsWith('#') || line.startsWith(';')) continue;
+      var eqIdx = line.indexOf('=');
+      if (eqIdx === -1) continue;
+      var envKey = line.substring(0, eqIdx).trim();
+      var envVal = line.substring(eqIdx + 1).trim();
+      if (!envKey || !envVal) continue;
+      for (var j = 0; j < kData.length; j++) {
+        var nameUpper = kData[j].name.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        var keyUpper = kData[j].key.toUpperCase();
+        if (envKey === nameUpper || envKey === keyUpper || envKey.indexOf(keyUpper) !== -1) {
+          if (!kData[j].present || kData[j].value !== envVal) {
+            var inp = document.querySelector('.kIn[data-key="' + kData[j].key + '"]');
+            if (inp) inp.value = envVal;
+            matched.push(kData[j].name);
+            imported++;
+          }
+          break;
+        }
+      }
+    }
+    if (imported > 0) {
+      t('Imported ' + imported + ' key(s): ' + matched.join(', '), 'success');
+      $('dzResult').textContent = 'Imported ' + imported + ' key(s) from file.';
+      $('dzResult').className = 'dz-result show dz-ok';
+    } else {
+      t('No matching keys found in import.', 'info');
+      $('dzResult').textContent = 'No matching keys found. Check the file format (KEY_NAME=value).';
+      $('dzResult').className = 'dz-result show dz-err';
+    }
+    return imported;
+  }
+
+  /* -------- bulk select -------- */
+  function updateBulkBar() {
+    var count = 0;
+    for (var key in selectedKeys) {
+      if (selectedKeys.hasOwnProperty(key) && selectedKeys[key]) count++;
+    }
+    $('bulkCount').textContent = count;
+    $('bulkBar').classList.toggle('visible', count > 0);
+    document.querySelectorAll('.card').forEach(function(c) {
+      var k = c.dataset.key;
+      c.classList.toggle('selected', !!selectedKeys[k]);
+    });
+  }
+
+  function bulkSelectAll() {
+    document.querySelectorAll('#kGrid .card').forEach(function(c) {
+      var key = c.dataset.key;
+      if (key) selectedKeys[key] = true;
+    });
+    updateBulkBar();
+  }
+
+  function bulkDeselectAll() {
+    selectedKeys = {};
+    updateBulkBar();
+  }
+
+  function getSelectedKeyList() {
+    var list = [];
+    for (var key in selectedKeys) {
+      if (selectedKeys.hasOwnProperty(key) && selectedKeys[key]) list.push(key);
+    }
+    return list;
+  }
+
+  /* -------- batch verify -------- */
+  function batchVerify() {
+    var keys = getSelectedKeyList();
+    if (keys.length === 0) {
+      var cards = document.querySelectorAll('#kGrid .card');
+      keys = [];
+      cards.forEach(function(c) { if (c.dataset.key) keys.push(c.dataset.key); });
+    }
+    if (keys.length === 0) {
+      t('No keys to verify.', 'info');
+      return;
+    }
+    verifyQueue = keys.slice();
+    verifyRunning = false;
+    processVerifyQueue();
+  }
+
+  function processVerifyQueue() {
+    if (verifyQueue.length === 0) {
+      verifyRunning = false;
+      t('Batch verification complete.', 'success');
+      return;
+    }
+    if (verifyRunning) return;
+    var key = verifyQueue.shift();
+    var btn = document.querySelector('.tBtn[data-key="' + key + '"]');
+    if (btn && !btn.disabled) {
+      verifyRunning = true;
+      btn.click();
+      var checkDone = setInterval(function() {
+        if (btn.disabled) return;
+        clearInterval(checkDone);
+        verifyRunning = false;
+        processVerifyQueue();
+      }, 200);
+    } else {
+      processVerifyQueue();
+    }
+  }
+
+  /* -------- keyboard shortcuts -------- */
+  function showKeyboardShortcuts() {
+    $('kbdModal').classList.add('open');
+  }
+
+  function hideKeyboardShortcuts() {
+    $('kbdModal').classList.remove('open');
+  }
+
+  function initKeyboardShortcuts() {
+    document.addEventListener('keydown', function(e) {
+      var ctrl = e.ctrlKey || e.metaKey;
+      var tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        if (e.key === 'Escape') {
+          e.target.blur();
+          if ($('mOverlay').classList.contains('open')) $('mOverlay').classList.remove('open');
+        }
+        return;
+      }
+      if (e.key === '?') {
+        e.preventDefault();
+        $('kbdModal').classList.contains('open') ? hideKeyboardShortcuts() : showKeyboardShortcuts();
+        return;
+      }
+      if (e.key === 'Escape') {
+        if ($('kbdModal').classList.contains('open')) { hideKeyboardShortcuts(); e.preventDefault(); return; }
+        if ($('exportModal').classList.contains('open')) { $('exportModal').classList.remove('open'); e.preventDefault(); return; }
+        if ($('confirmOverlay').classList.contains('open')) { $('confirmCancel').click(); e.preventDefault(); return; }
+        return;
+      }
+      if (ctrl && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        var activePage = document.querySelector('.page.active');
+        if (activePage) {
+          var search = activePage.querySelector('.search-input');
+          if (search) search.focus();
+        }
+        return;
+      }
+      if (e.key === 's' || e.key === 'S') {
+        if (!ctrl) {
+          e.preventDefault();
+          $('sortSelect').focus();
+          if (!$('sortBar').classList.contains('visible')) {
+            $('sortBar').classList.add('visible');
+            sortVisible = true;
+          }
+          return;
+        }
+      }
+      if (e.key === 'e' || e.key === 'E') {
+        if (!ctrl) {
+          e.preventDefault();
+          $('exportModal').classList.add('open');
+          return;
+        }
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        if (!ctrl) {
+          e.preventDefault();
+          loadK();
+          t('Refreshed data.', 'info');
+          return;
+        }
+      }
+      if (e.key === 'a' || e.key === 'A') {
+        if (!ctrl) {
+          e.preventDefault();
+          bulkSelectAll();
+          return;
+        }
+      }
+      if (e.key === 'd' || e.key === 'D') {
+        if (!ctrl) {
+          e.preventDefault();
+          bulkDeselectAll();
+          return;
+        }
+      }
+    });
+  }
+
+  /* -------- search highlight -------- */
+  function searchHighlight(text) {
+    var q = (text || '').trim().toLowerCase();
+    document.querySelectorAll('.card-desc').forEach(function(el) {
+      var orig = el.getAttribute('data-orig') || el.textContent;
+      if (!el.getAttribute('data-orig')) el.setAttribute('data-orig', orig);
+      if (!q || q.length < 1) {
+        el.innerHTML = el.getAttribute('data-orig');
+        return;
+      }
+      var lower = orig.toLowerCase();
+      var idx = lower.indexOf(q);
+      if (idx === -1) {
+        el.innerHTML = orig;
+        return;
+      }
+      var before = orig.substring(0, idx);
+      var match = orig.substring(idx, idx + q.length);
+      var after = orig.substring(idx + q.length);
+      el.innerHTML = before + '<span class="search-highlight">' + match + '</span>' + after;
+    });
+  }
+
+  /* -------- collapsible groups / faq -------- */
+  function initCollapsibleGroups() {
+    document.querySelectorAll('.faq-q').forEach(function(q) {
+      q.onclick = function() {
+        var idx = this.dataset.faq;
+        var answer = document.querySelector('.faq-a[data-faq="' + idx + '"]');
+        if (!answer) return;
+        var isOpen = answer.classList.contains('open');
+        answer.classList.toggle('open');
+        this.classList.toggle('open');
+      };
+    });
+  }
+
+  /* -------- auto-save on blur -------- */
+  var autoSaveTimers = {};
+
+  function autoSaveKey(key, value) {
+    if (autoSaveTimers[key]) clearTimeout(autoSaveTimers[key]);
+    autoSaveTimers[key] = setTimeout(function() {
+      var v = (value || '').replace(/\*+/g, '').trim();
+      if (!v) return;
+      var btn = document.querySelector('.sBtn[data-key="' + key + '"]');
+      if (btn) btn.click();
+    }, 1200);
+  }
+
+  /* -------- health ping -------- */
+  function pingHealth() {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/settings/api/health', true);
+    x.timeout = 5000;
+    x.onload = function() {
+      if (x.status === 200) {
+        var inner = $('connBarInner');
+        inner.style.width = '100%';
+        inner.className = '';
+        setTimeout(function() { inner.style.width = '0%'; }, 2000);
+      }
+    };
+    x.onerror = function() {
+      var inner = $('connBarInner');
+      inner.style.width = '100%';
+      inner.className = 'err';
+      setTimeout(function() { inner.style.width = '0%'; }, 2000);
+    };
+    x.ontimeout = function() {
+      var inner = $('connBarInner');
+      inner.style.width = '100%';
+      inner.className = 'warn';
+      setTimeout(function() { inner.style.width = '0%'; }, 2000);
+    };
+    x.send();
+  }
+
+  /* -------- live indicator -------- */
+  function updateLiveIndicator() {
+    var dot = document.querySelector('#sLive span');
+    if (dot) {
+      dot.style.transition = 'opacity 0.3s';
+      dot.style.opacity = '0.3';
+      setTimeout(function() { dot.style.opacity = '1'; }, 300);
+    }
+  }
+
+  /* -------- loading skeleton -------- */
+  function showLoadingSkeleton() {
+    var grid = $('kGrid');
+    var skeletonHTML = '';
+    for (var i = 0; i < 4; i++) {
+      skeletonHTML += '<div class="skeleton"><div class="skeleton-row"><div class="skeleton-avatar"></div><div class="skeleton-col"><div class="skeleton-line w60 h16"></div><div class="skeleton-line w80"></div><div class="skeleton-line w40"></div></div><div class="skeleton-btn"></div></div><div class="skeleton-line w40"></div><div class="skeleton-row" style="margin-top:4px"><div class="skeleton-line w60"></div><div class="skeleton-line w30" style="margin-left:auto"></div></div></div>';
+    }
+    grid.innerHTML = skeletonHTML;
+  }
+
+  /* -------- confirm dialog -------- */
+  function confirmDialog(message) {
+    return new Promise(function(resolve) {
+      $('confirmMessage').textContent = message;
+      $('confirmOverlay').classList.add('open');
+      confirmResolve = resolve;
+    });
+  }
+
+  /* -------- format pricing -------- */
+  function formatPricing(pricing) {
+    if (!pricing) return '<span class="status-badge off" style="font-size:10px;padding:1px 8px">Unknown</span>';
+    var p = pricing.toLowerCase();
+    if (p.indexOf('free') !== -1) return '<span class="status-badge on" style="font-size:10px;padding:1px 8px">Free</span>';
+    if (p.indexOf('paid') !== -1 || p.indexOf('tier') !== -1) return '<span class="status-badge off" style="font-size:10px;padding:1px 8px;background:rgba(255,214,0,0.1);color:var(--yellow)">Paid</span>';
+    return '<span class="status-badge off" style="font-size:10px;padding:1px 8px">' + pricing + '</span>';
+  }
+
+  /* -------- drag-drop -------- */
+  function initDragDrop() {
+    var zone = $('dropZone');
+    var input = $('dropInput');
+    zone.onclick = function() { input.click(); };
+    zone.ondragover = function(e) { e.preventDefault(); e.stopPropagation(); zone.classList.add('drag-over'); };
+    zone.ondragleave = function(e) { e.preventDefault(); e.stopPropagation(); zone.classList.remove('drag-over'); };
+    zone.ondrop = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      zone.classList.remove('drag-over');
+      var files = e.dataTransfer.files;
+      if (files.length > 0) processImportFile(files[0]);
+    };
+    input.onchange = function() {
+      if (input.files.length > 0) processImportFile(input.files[0]);
+      input.value = '';
+    };
+  }
+
+  function processImportFile(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    $('dzResult').className = 'dz-result show';
+    $('dzResult').textContent = 'Reading ' + file.name + '...';
+    reader.onload = function(e) {
+      importFromClipboard(e.target.result);
+    };
+    reader.onerror = function() {
+      $('dzResult').textContent = 'Error reading file.';
+      $('dzResult').className = 'dz-result show dz-err';
+    };
+    reader.readAsText(file);
+  }
+
+  /* -------- scroll to top -------- */
+  function initScrollToTop() {
+    var btn = $('scrollTop');
+    var threshold = 400;
+    var onScroll = throttle(function() {
+      var scrollY = window.pageYOffset || document.documentElement.scrollTop;
+      btn.classList.toggle('visible', scrollY > threshold);
+    }, 150);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    btn.onclick = function() {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+  }
+
+  /* -------- filter animation -------- */
+  function filterAnimation(cards, filterFn) {
+    cards.forEach(function(c) {
+      c.classList.remove('filtered-in', 'filtered-out');
+      if (filterFn(c)) {
+        c.classList.add('filtered-in');
+      } else {
+        c.classList.add('filtered-out');
+      }
+    });
+  }
+
+  /* -------- init event wiring -------- */
+  function initExtendedUI() {
+    /* sort controls */
+    $('showSortBtn').onclick = function() {
+      sortVisible = !sortVisible;
+      $('sortBar').classList.toggle('visible', sortVisible);
+    };
+    $('sortSelect').onchange = sortChangeHandler;
+    $('sortOrderBtn').onclick = function() {
+      var sel = $('sortSelect');
+      var val = sel.value;
+      if (val === 'default') { sel.value = 'name-asc'; sortChangeHandler(); return; }
+      var parts = val.split('-');
+      var field = parts[0];
+      var dir = parts[1] === 'asc' ? 'desc' : 'asc';
+      sel.value = field + '-' + dir;
+      sortChangeHandler();
+    };
+    $('sortClear').onclick = function() {
+      resetSort();
+      loadK();
+    };
+
+    /* export */
+    $('exportBtn').onclick = function() {
+      var count = 0;
+      for (var i = 0; i < kData.length; i++) { if (kData[i].present) count++; }
+      $('exportCount').textContent = count;
+      exportFormat = 'json';
+      document.querySelectorAll('.export-opt').forEach(function(o) { o.classList.remove('selected'); });
+      document.querySelector('.export-opt[data-format="json"]').classList.add('selected');
+      $('exportModal').classList.add('open');
+    };
+    document.querySelectorAll('.export-opt').forEach(function(o) {
+      o.onclick = function() {
+        document.querySelectorAll('.export-opt').forEach(function(x) { x.classList.remove('selected'); });
+        this.classList.add('selected');
+        exportFormat = this.dataset.format;
+      };
+    });
+    $('exportCancel').onclick = function() { $('exportModal').classList.remove('open'); };
+    $('exportConfirm').onclick = function() {
+      $('exportModal').classList.remove('open');
+      exportData(exportFormat);
+    };
+    $('exportModal').onclick = function(e) {
+      if (e.target === e.currentTarget) this.classList.remove('open');
+    };
+
+    /* import */
+    $('importBtn').onclick = function() { $('dropInput').click(); };
+
+    /* bulk */
+    $('bulkSelectAll').onclick = bulkSelectAll;
+    $('bulkDeselectAll').onclick = bulkDeselectAll;
+    $('bulkVerifyBtn').onclick = batchVerify;
+    $('bulkExportBtn').onclick = function() {
+      var selected = getSelectedKeyList();
+      var count = 0;
+      for (var i = 0; i < kData.length; i++) {
+        if (selected.indexOf(kData[i].key) !== -1 && kData[i].present) count++;
+      }
+      $('exportCount').textContent = count;
+      exportFormat = 'json';
+      document.querySelectorAll('.export-opt').forEach(function(o) { o.classList.remove('selected'); });
+      document.querySelector('.export-opt[data-format="json"]').classList.add('selected');
+      $('exportModal').classList.add('open');
+    };
+    $('batchVerifyBtn').onclick = function() {
+      selectedKeys = {};
+      updateBulkBar();
+      batchVerify();
+    };
+
+    /* card click to toggle selection */
+    document.addEventListener('click', function(e) {
+      var card = e.target.closest('.card');
+      if (card && card.closest('#kGrid')) {
+        var key = card.dataset.key;
+        if (key && !e.target.closest('button') && !e.target.closest('input') && !e.target.closest('a')) {
+          selectedKeys[key] = !selectedKeys[key];
+          updateBulkBar();
+        }
+      }
+    });
+
+    /* capture existing render to hook highlight and auto-save */
+    var origRK = window.rK;
+    var self = this;
+    if (origRK) {
+      window.rK = function() {
+        origRK();
+        /* rewire auto-save on blur for new inputs */
+        document.querySelectorAll('.kIn').forEach(function(inp) {
+          inp.onblur = function() {
+            var k = this.dataset.key;
+            autoSaveKey(k, this.value);
+          };
+        });
+      };
+    }
+
+    /* keyboard shortcuts */
+    initKeyboardShortcuts();
+
+    /* collapsible FAQ */
+    initCollapsibleGroups();
+
+    /* drag-drop */
+    initDragDrop();
+
+    /* scroll to top */
+    initScrollToTop();
+
+    /* confirm dialog */
+    $('confirmOk').onclick = function() {
+      $('confirmOverlay').classList.remove('open');
+      if (confirmResolve) confirmResolve(true);
+      confirmResolve = null;
+    };
+    $('confirmCancel').onclick = function() {
+      $('confirmOverlay').classList.remove('open');
+      if (confirmResolve) confirmResolve(false);
+      confirmResolve = null;
+    };
+    $('confirmOverlay').onclick = function(e) {
+      if (e.target === e.currentTarget) {
+        $('confirmCancel').click();
+      }
+    };
+
+    /* health ping */
+    setInterval(pingHealth, 30000);
+
+    /* search highlight integration */
+    $('kSearch').addEventListener('input', function() {
+      searchHighlight(this.value);
+    });
+    $('gSearch').addEventListener('input', function() {
+      searchHighlight(this.value);
+    });
+  }
+
+  /* -------- start -------- */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initExtendedUI);
+  } else {
+    initExtendedUI();
+  }
+
+})();

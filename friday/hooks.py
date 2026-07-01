@@ -172,7 +172,7 @@ def _kg_extraction_post_hook(name: str, args: dict, result: str, session=None) -
 def _kg_tool_name_filter(name: str) -> bool:
     """Only extract from informative tools, not desktop noise."""
     noisy = {"click", "move_mouse", "scroll", "press_key", "hotkey", "type_text",
-             "opencli_scroll", "opencli_keys", "opencli_screenshot"}
+             }
     return name not in noisy
 
 
@@ -231,7 +231,6 @@ def _auto_skill_post_hook(name: str, args: dict, result: str, session=None) -> N
         _tool_sequence_buffer.clear()
         return
     noisy = {"click", "move_mouse", "scroll", "press_key", "hotkey", "type_text",
-             "opencli_scroll", "opencli_keys", "opencli_screenshot",
              "system_cpu", "system_memory", "system_disk", "system_network",
              "get_active_window", "status_check", "list_running_apps",
              "clock_tool", "get_time"}

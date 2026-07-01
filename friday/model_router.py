@@ -164,11 +164,11 @@ PRESET_MODELS: Dict[str, ModelInfo] = {
 # ─── Router Config ───────────────────────────────────────
 
 DEFAULT_CONFIG = {
-    "primary_model": "gemini-3.1-flash-live-preview",
+    "primary_model": "gemini-2.5-flash-native-audio-preview-12-2025",
     "fallback_model": "gemini-2.5-pro",
     "code_model": "gpt-4o-mini",
     "vision_model": "gemini-2.5-pro",
-    "fast_model": "gemini-3.1-flash-live-preview",
+    "fast_model": "gemini-2.5-flash-native-audio-preview-12-2025",
     "local_model": "local-llama",
     "enable_fallback": True,
     "enable_cost_tracking": True,

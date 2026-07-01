@@ -76,7 +76,7 @@ from friday.tools import (
     copy_file, move_file, delete_file, clipboard_get, clipboard_set,
     situational_awareness, git_ops, take_snapshot, recall_snapshot,
     smart_home_command, video_search, see_screen, stark_log,
-    vision_click, stayfree_status, stayfree_today, stayfree_week,
+    vision_click, point_at, stayfree_status, stayfree_today, stayfree_week,
     system_cpu, system_memory, system_disk, system_network, system_processes,
     open_roblox_game, open_microsoft_store,
     github_create_repo, github_list_issues, github_create_issue, github_search_code,
@@ -84,7 +84,7 @@ from friday.tools import (
     github_authorize, github_exchange_code, github_refresh_token, github_setup,
     search_browser_history, open_history_item, tell_alexa,
     spotify_next, spotify_prev, spotify_volume,
-    send_instagram_dm, netflix_play, google_authorize, gmail_authorize, google_authorize_category, exchange_oauth_code, read_emails, send_email,
+    send_instagram_dm, netflix_play,     enable_google_api, google_authorize, gmail_authorize, google_authorize_category, exchange_oauth_code, read_emails, send_email,
     read_discord_messages, read_slack_messages,
     close_app, list_running_apps, generate_file,
     get_active_window, draft_email, list_recent_history,
@@ -148,13 +148,10 @@ from friday.security_use_bridge import (
     port_scan, ping_host, ssl_certificate_check,
     shodan_search, shodan_host, shodan_search_count, shodan_ports,
     whois_lookup, geoip_lookup, hibp_breach_check,
-    # Advanced WiFi & Metasploit & Pentesting
+    # Advanced WiFi & Pentesting
     generate_smart_wordlist, wifi_smart_crack,
     wifi_capture_handshake, wifi_crack_handshake,
     download_wordlist, wordlist_stats, wifi_detect_deauth,
-    msf_auto_install, msf_ensure_rpc,
-    msf_quick_scan, msf_find_exploits, msf_auto_exploit, msf_auto_pwn,
-    msf_exploit_eternalblue,
     pentest_scan_target, pentest_enumerate, pentest_exploit,
     pentest_full_chain, pentest_generate_report,
     pentest_tools_check, pentest_wifi_assessment, pentest_plan,
@@ -203,15 +200,10 @@ from friday.extension_registry import extension_registry_tool
 from friday.diagnostics import diagnostics_tool
 from friday.health_monitor import health_monitor_tool
 from friday.cv_engine import cv_tool, ask_camera, show_camera_feed, hide_camera_feed, start_camera_cycle, stop_camera_cycle, locate_on_camera, ask_camera_smart, nim_describe_screen
-from friday.visual_overlay import show_pointer, show_cursor_hint, show_annotation_box, clear_overlays
+from friday.visual_overlay import show_pointer, show_cursor_hint, show_annotation_box, show_draw_arrow, show_text, draw_line, draw_path, draw_polygon, start_teaching, stop_teaching, teaching_move_to, teaching_click, teaching_highlight, clear_overlays, start_overlay
+from friday.pointing_agent import analyze_screen as analyze_screen_tool
 
 # ─── New Module Imports: Metasploit, Email Analysis, Agent Terminal, OSINT Extra ───
-from friday.metasploit_tool import (
-    metasploit_connect, metasploit_status, metasploit_exploit,
-    metasploit_scan, metasploit_post_exploit, metasploit_payload_gen,
-    msf_search, msf_workspace_create, msf_workspace_list,
-    msf_hosts_list, msf_vulns_list, msf_creds_list, msf_sessions_list,
-)
 from friday.email_analysis_tool import (
     analyze_email_headers, trace_email_path, detect_email_spoofing,
     check_spf_record, check_dkim_record, check_dmarc_record,
@@ -458,15 +450,45 @@ The point is to not go silent. You are FRIDAY — handle it your way.
 Screen & Vision:
 - **Automatic**: The screen is ALREADY streamed as live video to FRIDAY. You can see everything on it continuously. Do NOT call see_screen or nim_describe_screen for basic "what's on screen" questions - you can already see it.
 - **nim_describe_screen(question)** — ONLY use in fallback text mode (NIM/Zen) when screen streaming is not available. Or use for detailed text/UI analysis that needs a higher-res still frame.
+- **analyze_screen(question)** — Capture ALL monitors and identify every UI element via NIM vision. Returns [POINT:x,y:label] tags with exact coordinates. Use this to get precise positions, then use the drawing/annotation tools below to visually mark them while you narrate. Each call re-analyzes the current screen.
 - **see_screen(question)** — Same as above, for fallback mode only. Do NOT call during normal Live API operation.
-- **Camera functions** (cv_tool, ask_camera, ask_camera_smart, locate_on_camera) — Capture the **physical world** via webcam. Use these when the user asks about their physical surroundings, room, desk, or themselves.
-- **AUTO-SWITCH CAMERAS**: If one camera doesn't show the user well (e.g. they are out of frame, or another camera has a better angle), use `cv_tool("list_cameras")` to see options, then `cv_tool("switch", camera_index=N)` to switch. Or use `start_camera_cycle()` to monitor all cameras. Use `ask_camera_smart(question, label_hint)` to auto-select the camera that last saw an object/person. You SHOULD proactively switch cameras when it gives the user a better view.
-- Do NOT confuse screen capture with camera. Screen = monitor display. Camera = physical world.
-- vision_click(target_description) — find element by description and click it.
-- show_pointer(x, y, label, duration) — Draw a blue circle + label at screen coordinates. Like Clicky's [POINT] mechanic. Use when you want to visually indicate something on screen (e.g. "the button is right here").
-- show_cursor_hint(text, duration) — Show a text bubble near the user's cursor. Like Clicky's buddy popup. Use for quick contextual tips.
-- show_annotation_box(x, y, width, height, label, duration) — Highlight a region with a colored dashed border. Use to draw attention to specific UI areas.
-- clear_overlays() — Remove all visual indicators from screen.
+- **Camera functions** (cv_tool, ask_camera, ask_camera_smart, locate_on_camera) — Capture the **physical world** via webcam.
+- **AUTO-SWITCH CAMERAS**: Use `cv_tool("list_cameras")` to see options, `cv_tool("switch", camera_index=N)` to switch, `start_camera_cycle()` to monitor all cameras.
+- **vision_click(description)** — Find element by description and click it.
+
+--- OVERLAY ENGINE (Screen Annotation System) ---
+The overlay is ALWAYS RUNNING — a white 6px dot "buddy" follows the cursor. You have FULL CONTROL over what appears on screen and when it disappears.
+
+PERSISTENCE RULES (CRITICAL):
+- ALL drawings persist until YOU call `clear_overlays()`. Default duration is 3600 seconds (1 hour).
+- You control the lifecycle: DRAW → NARRATE → CLEAR → DRAW NEW
+- Call `clear_overlays()` when you want to wipe everything and start fresh.
+- Labels, arrows, lines, shapes all stay on screen until explicitly cleared.
+
+YOUR DRAWING TOOLS (all non-blocking, return immediately):
+- **point_at(x, y, label)** — Fly the white dot buddy to (x,y) with optional speech bubble label. Use this to point to elements while narrating. Non-blocking.
+- **show_text(x, y, text)** — Place text label at (x,y). Black text on white background. Stays until cleared. Use for labeling UI elements or math notation like "a²", "b²", "c²".
+- **draw_line(x1, y1, x2, y2, color)** — Draw animated straight line. The buddy follows along as the line draws. Stays until cleared.
+- **show_draw_arrow(x1, y1, x2, y2, color)** — Draw bold arrow (5px, rounded caps, soft arrowhead). Stays until cleared.
+- **show_annotation_box(x, y, w, h, label, color)** — Dashed border box around a region. Stays until cleared.
+- **draw_polygon([(x1,y1),(x2,y2),(x3,y3),...], color, fill_color)** — Draw closed polygon (triangle, rectangle, square, etc.). YOU control fill color. Stays until cleared. Perfect for drawing squares on sides of a triangle for Pythagoras demonstrations.
+- **draw_path(path_data, x, y, color, width)** — Draw arbitrary SVG path. Path commands: M=move, L=line, C=bezier curve, Z=close. Example for a right triangle: "M 100 400 L 100 200 L 300 400 Z". Draws anything anywhere. Stays until cleared.
+
+TEACHING MODE (independent golden cursor for walkthroughs):
+- **start_teaching()** — Enter teaching mode. A 10px golden dot appears, independent of the white buddy.
+- **teaching_move_to(x, y, label)** — Move the teaching cursor with bezier arc flight.
+- **teaching_click(x, y, label)** — Animate teaching cursor clicking at (x,y) with burst animation.
+- **teaching_highlight(x, y, w, h, label)** — Highlight a region with the teaching cursor.
+- **stop_teaching()** — Exit teaching mode, golden dot disappears, white buddy returns to normal.
+
+HOW TO TEACH WITH THE OVERLAY (step-by-step example for Pythagoras theorem):
+1. Call `analyze_screen("Find the right triangle, measure its vertices")` → get [POINT] tags
+2. Call `draw_line(x1,y1,x2,y2,"#3B82F6")` to trace each side of the triangle at EXACT coordinates
+3. Call `draw_polygon(...)` to draw squares on each side
+4. Call `show_text(x, y, "a²")`, `show_text(x, y, "b²")`, `show_text(x, y, "c²")` to label
+5. Call `teaching_move_to(x, y, "This is the base a")` to point while narrating
+6. Narration: "The Pythagorean theorem says a² + b² = c²..."
+7. When done explaining, call `clear_overlays()` to remove everything
 
 Browser Automation (browser-use — use when page interaction is needed):
 For simple URL opens, use open_url(url) instead — it's faster.
@@ -650,16 +672,6 @@ For system stats: use status_check() or system_cpu/system_memory, NOT separate t
 
 You have MAJOR new capabilities. Use them.
 
-Security & Exploitation (Metasploit):
-- metasploit_connect() — Connect to Metasploit RPC (requires MSF_HOST, MSF_PORT, MSF_PASS env vars set by Boss)
-- metasploit_status() — Check Metasploit RPC connection health
-- metasploit_exploit(target, port, module_path, payload) — Run an exploit (e.g. eternalblue, struts2)
-- metasploit_scan(target, scan_type, ports) — Run scanners (port, service, SMB, HTTP, SSH, FTP)
-- metasploit_post_exploit(action, session_id) — Post-exploitation on active session
-- metasploit_payload_gen(payload, lhost, lport, format) — Generate payload binaries
-- msf_search(query) — Search modules by name or CVE
-- msf_sessions_list() / msf_session_details(id) — Manage active sessions
-
 Email Analysis & Forensics (Behind the Email):
 - behind_the_email(raw_headers) — ULTIMATE email analysis: trace path, detect spoofing, SPF/DKIM/DMARC, forensics, security scoring. Returns executive summary with verdict.
 - forensic_investigate(raw_headers) — Full forensic investigation
@@ -803,7 +815,7 @@ You are FRIDAY v6.0 — Sovereign-class digital assistant running on Windows PC.
 Your architecture:
 - live.py — Main event loop, system prompt, Gemini Live API connection, tool dispatch (TOOL_MAP with 760+ tools), background cache system
 - tools_flat.py — Desktop automation, file ops, clipboard, screen, system stats, keyboard/mouse (176 functions)
-- metasploit_tool.py — Metasploit RPC client, exploit runner, session manager, payload generator (48 functions)
+
 - email_analysis_tool.py — Full email forensics: SPF/DKIM/DMARC, spoof detection, phishing, SMTP verify (62 functions)
 - agent_terminal.py — Agent spawning with per-terminal windows, key management, task delegation, agent bus (26 functions)
 - tools_osint_extra.py — OSINT intelligence: social media, DNS, web tech, breaches, IP, domain, dark web, threat intel (475 functions)
@@ -815,10 +827,9 @@ Your architecture:
 - osint_enhanced_tools.py — Knowledge graphs, multi-agent OSINT, attack surface mapping
 - pentesting_agent.py — Full pentest chain: scan → enumerate → exploit → report
 - wifi_advanced_tools.py — Smart password generator, handshake capture/crack, wordlist manager, deauth detection
-- msf_auto_tools.py — Metasploit auto-install, auto-pwn, eternalblue
 - agent_profiles.py — 12 specialist agent profiles: pentester, ecosystem, osint_investigator, and more
 - memory_use_bridge.py — ChromaDB, Redis, Neo4j, Vector Memory, KYU learning
-- security_use_bridge.py — Unified WiFi, network, OSINT, pentesting, Metasploit tool kit
+- security_use_bridge.py — Unified WiFi, network, OSINT, pentesting tool kit
 - tool_registry.py — Tool metadata registry
 - orchestrator.py — Multi-agent orchestration
 - agent_bus.py / agent_profiles.py — Agent communication and definitions
@@ -1422,17 +1433,23 @@ The adapter reads tasks from a shared file, executes them using FRIDAY's subsyst
 and reports results via heartbeat. Task types: research, deep_research, code, security, browse, scan, suggest, general.
 
 [SETTINGS DASHBOARD — WEB-BASED CONFIGURATION PANEL]
-FRIDAY has a full settings dashboard running at http://127.0.0.1:7071/settings with two main tabs:
+FRIDAY has a full settings dashboard running at http://127.0.0.1:7071/settings with tabbed navigation:
 
 ── API KEYS ──
-Manage 50+ API keys with real brand logos, verify buttons that test each key with a real HTTP request, save-to-.env with hot-reload (no restart needed), search by name/category, filter by All/Connected/Not Configured, show/hide secret values. Keys are grouped by category (AI, OSINT, Cloud, Social, Credentials, etc.). Each key has pricing hints, docs links, and a how-to-get guide.
+Manage 50+ API keys with real brand logos, verify buttons that test each key with a real HTTP request, save-to-.env with hot-reload (no restart needed), search by name/category, filter by All/Connected/Not Configured, show/hide secret values. Keys are grouped by category (AI, OSINT, Cloud, Social, Credentials, etc.). Each key has pricing hints, docs links, and a how-to-get guide. After saving a key, FRIDAY is notified via .config_updated sentinel file.
 
 ── GOOGLE SERVICES ──
 24 OAuth scope categories displayed as cards. Each card shows the category name, scope count, and a Connect button that authorises exactly that category's scopes (via get_scope_string(category) from friday/google_oauth.py). Connected categories show a scopes-expander so you can inspect individual scopes. Top bar shows overall Google Account status with Connect All / Revoke buttons. Search and filter work on category names.
 
-The dashboard auto-polls every 15 seconds for live status. If Boss asks about settings, API keys, or Google auth, guide them to http://127.0.0.1:7071/settings.
+── GITHUB ──
+GitHub OAuth via device flow — click Connect, a PIN is auto-copied, the GitHub device page opens, paste the PIN and authorise. No client secret needed. Uses the default public OAuth app from friday/github.py. Token saved to .github_token.json. On success FRIDAY is notified via .config_updated.
 
-All dashboard code is in friday/settings_dashboard.py (APIRouter registered in townhall_web.py at boot via register_settings_routes(app)). Scope categories are defined in friday/google_oauth.py (SCOPE_CATEGORIES dict with 24 merged categories).
+── SERVICES ──
+All 8 integrated services (Google, GitHub, Spotify, Reddit, Twitter/X, Telegram, Instagram, Discord) shown as cards with inline credential fields and Save buttons. Each card shows connection status (green/grey dot), the redirect URI for OAuth services, and an OAuth Connect button where applicable. Saving credentials or completing OAuth fires a .config_updated notification so FRIDAY picks up changes immediately. Discord supports optional guild/channel/announce/log channel IDs.
+
+The dashboard auto-polls every 15 seconds for live status. If Boss asks about settings, API keys, services, or any auth, guide them to http://127.0.0.1:7071/settings.
+
+All dashboard code is in friday/settings_dashboard.py (APIRouter registered in townhall_web.py at boot via register_settings_routes(app)). Scope categories are defined in friday/google_oauth.py (SCOPE_CATEGORIES dict with 24 merged categories). Config change notifications are written to .config_updated in the project root — FRIDAY should check this file periodically and reload relevant state.
 
 [BREVITY]
 Short responses. One or two sentences for spoken text.
@@ -1668,6 +1685,13 @@ def _build_tools():
                 }),
             ),
             types.FunctionDeclaration(
+                name="analyze_screen",
+                description="[NIM VISION] Capture screen and identify every visible UI element, button, text, icon, and interactive element. Returns [POINT:x,y:label] tags for each element. Use this to get exact coordinates of everything on screen, then call draw_line / point_at / show_text to annotate while you narrate. More detailed than the built-in screen stream.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "question": {"type": "STRING", "description": "Specific question about the screen (e.g. 'find all buttons', 'where is the search bar', 'what links are visible')."}
+                }),
+            ),
+            types.FunctionDeclaration(
                 name="ask_camera",
                 description="Ask a visual question about what the camera sees. Use for 'what am I holding?', 'what's on my desk?', 'what does my room look like?', 'is there someone at the door?'. Shows the current camera frame to an AI vision model and returns the answer.",
                 parameters=types.Schema(type="OBJECT", properties={
@@ -1716,7 +1740,7 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="show_pointer",
-                description="Draw a circular pointer with optional label at screen coordinates. Like Clicky's [POINT] mechanic. Use to visually indicate something on screen.",
+                description="Draw a circular pointer with optional label at screen coordinates. Use to visually indicate something on screen.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "x": {"type": "INTEGER", "description": "Screen X coordinate"},
                     "y": {"type": "INTEGER", "description": "Screen Y coordinate"},
@@ -1726,7 +1750,7 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="show_cursor_hint",
-                description="Show a text hint bubble near the user's cursor position. Like Clicky's buddy popup. Use for quick contextual tips.",
+                description="Show a text hint bubble near the user's cursor position. Use for quick contextual tips.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "text": {"type": "STRING", "description": "Hint text to display"},
                     "duration": {"type": "NUMBER", "description": "Seconds to show (default 3.0)"},
@@ -1743,6 +1767,109 @@ def _build_tools():
                     "label": {"type": "STRING", "description": "Optional label"},
                     "duration": {"type": "NUMBER", "description": "Seconds to show (default 4.0)"},
                 }, required=["x", "y", "width", "height"]),
+            ),
+            types.FunctionDeclaration(
+                name="show_draw_arrow",
+                description="Draw an arrow from one screen coordinate to another. Useful for showing direction or relationships between elements. Non-blocking.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "x1": {"type": "INTEGER", "description": "Start X"},
+                    "y1": {"type": "INTEGER", "description": "Start Y"},
+                    "x2": {"type": "INTEGER", "description": "End X"},
+                    "y2": {"type": "INTEGER", "description": "End Y"},
+                    "color": {"type": "STRING", "description": "Hex color (default #3B82F6)"},
+                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 3.0)"},
+                }, required=["x1", "y1", "x2", "y2"]),
+            ),
+            types.FunctionDeclaration(
+                name="show_text",
+                description="Show text at specific screen coordinates. Non-blocking.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "x": {"type": "INTEGER", "description": "Screen X coordinate"},
+                    "y": {"type": "INTEGER", "description": "Screen Y coordinate"},
+                    "text": {"type": "STRING", "description": "Text to display"},
+                    "color": {"type": "STRING", "description": "Hex color (default #FFFFFF)"},
+                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 3.0)"},
+                }, required=["x", "y", "text"]),
+            ),
+            types.FunctionDeclaration(
+                name="draw_line",
+                description="Draw an animated straight line between two points (no arrowhead). Buddy follows along as it draws. One line at a time.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "x1": {"type": "INTEGER", "description": "Start X"},
+                    "y1": {"type": "INTEGER", "description": "Start Y"},
+                    "x2": {"type": "INTEGER", "description": "End X"},
+                    "y2": {"type": "INTEGER", "description": "End Y"},
+                    "color": {"type": "STRING", "description": "Hex color (default #3B82F6)"},
+                    "duration": {"type": "NUMBER", "description": "Animation duration in seconds"},
+                }, required=["x1", "y1", "x2", "y2"]),
+            ),
+            types.FunctionDeclaration(
+                name="draw_polygon",
+                description="Draw a closed polygon (triangle, rectangle, square, etc.) from a list of coordinate pairs. Stays on screen until clear_overlays(). Perfect for drawing squares on triangle sides for math demonstrations.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "points": {"type": "ARRAY", "description": "List of [x,y] coordinate pairs, e.g. [[100,200],[300,200],[200,100]]"},
+                    "color": {"type": "STRING", "description": "Outline hex color (default #3B82F6)"},
+                    "fill_color": {"type": "STRING", "description": "Fill hex color (optional, e.g. #3B82F640 for semi-transparent)"},
+                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 3600)"},
+                }, required=["points"]),
+            ),
+            types.FunctionDeclaration(
+                name="draw_path",
+                description="Draw arbitrary SVG path on screen. Path data like M 100 100 L 200 200 C 300 150, 400 200, 500 100. Draws anything anywhere.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "path_data": {"type": "STRING", "description": "SVG path commands"},
+                    "x": {"type": "INTEGER", "description": "X offset"},
+                    "y": {"type": "INTEGER", "description": "Y offset"},
+                    "color": {"type": "STRING", "description": "Hex color (default #3B82F6)"},
+                }, required=["path_data"]),
+            ),
+            types.FunctionDeclaration(
+                name="start_teaching",
+                description="Enter teaching mode: independent golden cursor for demonstrations.",
+                parameters=types.Schema(type="OBJECT", properties={}),
+            ),
+            types.FunctionDeclaration(
+                name="stop_teaching",
+                description="Exit teaching mode, return to normal cursor-following.",
+                parameters=types.Schema(type="OBJECT", properties={}),
+            ),
+            types.FunctionDeclaration(
+                name="teaching_move_to",
+                description="Move the teaching cursor to a position with label.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "x": {"type": "INTEGER", "description": "X coordinate"},
+                    "y": {"type": "INTEGER", "description": "Y coordinate"},
+                    "label": {"type": "STRING", "description": "Label text"},
+                }, required=["x", "y"]),
+            ),
+            types.FunctionDeclaration(
+                name="teaching_click",
+                description="Animate the teaching cursor clicking at position.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "x": {"type": "INTEGER", "description": "X coordinate"},
+                    "y": {"type": "INTEGER", "description": "Y coordinate"},
+                    "label": {"type": "STRING", "description": "Label text"},
+                }, required=["x", "y"]),
+            ),
+            types.FunctionDeclaration(
+                name="teaching_highlight",
+                description="Highlight a region with the teaching cursor.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "x": {"type": "INTEGER", "description": "Top-left X"},
+                    "y": {"type": "INTEGER", "description": "Top-left Y"},
+                    "width": {"type": "INTEGER", "description": "Width"},
+                    "height": {"type": "INTEGER", "description": "Height"},
+                    "label": {"type": "STRING", "description": "Label text"},
+                }, required=["x", "y", "width", "height"]),
+            ),
+            types.FunctionDeclaration(
+                name="point_at",
+                description="Animate cursor buddy to screen coordinates with label. Non-blocking — returns immediately.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "x": {"type": "INTEGER", "description": "Screen X coordinate"},
+                    "y": {"type": "INTEGER", "description": "Screen Y coordinate"},
+                    "label": {"type": "STRING", "description": "Optional label text for speech bubble"},
+                }, required=["x", "y"]),
             ),
             types.FunctionDeclaration(
                 name="clear_overlays",
@@ -2930,51 +3057,7 @@ def _build_tools():
                     "query": {"type": "STRING", "description": "Capability search query for discover."},
                 }),
             ),
-            # ─── Metasploit Security Tools ───
-            types.FunctionDeclaration(
-                name="metasploit_connect",
-                description="Connect to Metasploit RPC daemon. Uses env vars MSF_HOST, MSF_PORT, MSF_PASS.",
-            ),
-            types.FunctionDeclaration(
-                name="metasploit_exploit",
-                description="Run a Metasploit exploit against a target host:port. Wraps msf_exploit_run with session monitoring.",
-                parameters=types.Schema(type="OBJECT", properties={
-                    "target": {"type": "STRING", "description": "Target IP or hostname."},
-                    "port": {"type": "INTEGER", "description": "Target port."},
-                    "module_path": {"type": "STRING", "description": "Full module path or CVE (e.g. exploit/multi/http/struts2_rest_xstream)."},
-                    "payload": {"type": "STRING", "description": "Optional payload (e.g. windows/meterpreter/reverse_tcp)."},
-                }, required=["target", "port", "module_path"]),
-            ),
-            types.FunctionDeclaration(
-                name="metasploit_scan",
-                description="Run Metasploit auxiliary scanners (port scan, service scan, SMB scan, etc.) against a target.",
-                parameters=types.Schema(type="OBJECT", properties={
-                    "target": {"type": "STRING", "description": "Target IP or CIDR."},
-                    "scan_type": {"type": "STRING", "description": "Scan type: port, service, smb, http, ssh, ftp, or auto."},
-                    "ports": {"type": "STRING", "description": "Port range for port scan (e.g. 1-1000)."},
-                }, required=["target"]),
-            ),
-            types.FunctionDeclaration(
-                name="metasploit_payload_gen",
-                description="Generate a Metasploit payload binary for various platforms/formats.",
-                parameters=types.Schema(type="OBJECT", properties={
-                    "payload": {"type": "STRING", "description": "Payload name (e.g. windows/meterpreter/reverse_tcp)."},
-                    "lhost": {"type": "STRING", "description": "Listener IP address."},
-                    "lport": {"type": "INTEGER", "description": "Listener port."},
-                    "format": {"type": "STRING", "description": "Output format: raw, exe, dll, psh, python, bash, c, etc."},
-                }, required=["payload", "lhost", "lport"]),
-            ),
-            types.FunctionDeclaration(
-                name="msf_sessions_list",
-                description="List all active Metasploit sessions with details."
-            ),
-            types.FunctionDeclaration(
-                name="msf_search",
-                description="Search Metasploit modules by name or CVE.",
-                parameters=types.Schema(type="OBJECT", properties={
-                    "query": {"type": "STRING", "description": "Search term or CVE ID."}
-                }, required=["query"]),
-            ),
+
             # ─── Email Analysis / Behind the Email ───
             types.FunctionDeclaration(
                 name="behind_the_email",
@@ -3152,9 +3235,13 @@ _cache_lock = threading.Lock()
 
 def _capture_cam_frame(cam_index):
     import cv2, base64
-    cap = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
-    if not cap.isOpened():
-        cap = cv2.VideoCapture(cam_index)
+    _old = _suppress_cv_stderr()
+    try:
+        cap = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(cam_index)
+    finally:
+        _restore_stderr(_old)
     if not cap.isOpened():
         return None
     for _ in range(6):
@@ -3219,17 +3306,38 @@ def _cache_load():
 
 _no_camera_available: bool = False
 
+def _suppress_cv_stderr():
+    import sys, os
+    try:
+        old = sys.stderr
+        sys.stderr = open(os.devnull, 'w')
+        return old
+    except Exception:
+        return None
+
+def _restore_stderr(old):
+    try:
+        if old is not None:
+            sys.stderr.close()
+            sys.stderr = old
+    except Exception:
+        pass
+
 def _cache_cycle():
     global _no_camera_available
     import cv2
     available = []
-    for i in range(5):
-        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(i)
-        if cap.isOpened():
-            available.append(i)
-            cap.release()
+    _old = _suppress_cv_stderr()
+    try:
+        for i in range(4):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                available.append(i)
+                cap.release()
+    finally:
+        _restore_stderr(_old)
     if not available:
         _no_camera_available = True
         return
@@ -3363,6 +3471,7 @@ TOOL_MAP = {
     "gmail_authorize": gmail_authorize,
     "google_authorize_category": google_authorize_category,
     "exchange_oauth_code": exchange_oauth_code,
+    "enable_google_api": enable_google_api,
     "read_emails": read_emails,
     "send_email": send_email,
     "sheets_create": sheets_create,
@@ -3537,6 +3646,7 @@ TOOL_MAP = {
     "locate_on_camera": locate_on_camera,
     "ask_camera_smart": ask_camera_smart,
     "nim_describe_screen": nim_describe_screen,
+    "analyze_screen": analyze_screen_tool,
     "recall_recent_activity": recall_recent_activity,
 
     # Phase 14/15 module tools
@@ -3554,21 +3664,6 @@ TOOL_MAP = {
     "extension_registry_tool": extension_registry_tool,
     "diagnostics_tool": diagnostics_tool,
     "health_monitor_tool": health_monitor_tool,
-
-    # ─── Metasploit Tools ───
-    "metasploit_connect": metasploit_connect,
-    "metasploit_status": metasploit_status,
-    "metasploit_exploit": metasploit_exploit,
-    "metasploit_scan": metasploit_scan,
-    "metasploit_post_exploit": metasploit_post_exploit,
-    "metasploit_payload_gen": metasploit_payload_gen,
-    "msf_search": msf_search,
-    "msf_workspace_create": msf_workspace_create,
-    "msf_workspace_list": msf_workspace_list,
-    "msf_hosts_list": msf_hosts_list,
-    "msf_vulns_list": msf_vulns_list,
-    "msf_creds_list": msf_creds_list,
-    "msf_sessions_list": msf_sessions_list,
 
     # ─── Email Analysis Tools ───
     "analyze_email_headers": analyze_email_headers,
@@ -3613,13 +3708,7 @@ TOOL_MAP = {
     "wifi_detect_deauth": wifi_detect_deauth,
 
     # ─── Metasploit Auto Tools ───
-    "msf_auto_install": msf_auto_install,
-    "msf_ensure_rpc": msf_ensure_rpc,
-    "msf_quick_scan": msf_quick_scan,
-    "msf_find_exploits": msf_find_exploits,
-    "msf_auto_exploit": msf_auto_exploit,
-    "msf_auto_pwn": msf_auto_pwn,
-    "msf_exploit_eternalblue": msf_exploit_eternalblue,
+
 
     # ─── Pentesting Agent Tools ───
     "pentest_scan_target": pentest_scan_target,
@@ -3836,11 +3925,22 @@ TOOL_MAP = {
     "kyu_learn": kyu_learn,
     "kyu_profile": kyu_profile,
 
-    # ─── Visual Overlay (Clicky-style pointers, hints, annotations) ───
+    # ─── Visual Overlay (animated cursor buddy, pointers, hints) ───
     "show_pointer": show_pointer,
     "show_cursor_hint": show_cursor_hint,
     "show_annotation_box": show_annotation_box,
+    "show_draw_arrow": show_draw_arrow,
+    "show_text": show_text,
+    "draw_line": draw_line,
+    "draw_path": draw_path,
+    "draw_polygon": draw_polygon,
     "clear_overlays": clear_overlays,
+    "point_at": point_at,
+    "start_teaching": start_teaching,
+    "stop_teaching": stop_teaching,
+    "teaching_move_to": teaching_move_to,
+    "teaching_click": teaching_click,
+    "teaching_highlight": teaching_highlight,
 }
 
 # Merge auto-registered tools from tools/registry.py into TOOL_MAP
@@ -4735,29 +4835,40 @@ async def friday_live_engine():
 
                 # Connect with minimal payload, inject full system+tools after
                 live_tools = _build_live_tools()
+                live_config = dict(
+                    response_modalities=[types.Modality.AUDIO],
+                    tools=live_tools if live_tools else None,
+                    thinking_config=types.ThinkingConfig(include_thoughts=True),
+                    context_window_compression=types.ContextWindowCompressionConfig(
+                        sliding_window=types.SlidingWindow(),
+                    ),
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
+                        )
+                    ),
+                    system_instruction=types.Content(
+                        parts=[types.Part(text="You are FRIDAY, a sovereign AI assistant. Full instructions follow in the first message.")]
+                    ),
+                    input_audio_transcription=types.AudioTranscriptionConfig(),
+                    output_audio_transcription=types.AudioTranscriptionConfig(),
+                    proactivity=types.ProactivityConfig(proactive_audio=True),
+                )
+                if resume_handle:
+                    live_config["session_resumption"] = types.SessionResumption(handle=resume_handle)
                 async with client.aio.live.connect(
                     model=_current_model,
-                    config=types.LiveConnectConfig(
-                        response_modalities=["AUDIO"],
-                        thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level=types.ThinkingLevel.HIGH),
-                        speech_config=types.SpeechConfig(
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
-                            )
-                        ),
-                        system_instruction=types.Content(
-                            parts=[types.Part(text="You are FRIDAY, a sovereign AI assistant. Full instructions follow in the first message.")]
-                        ),
-                        input_audio_transcription=types.AudioTranscriptionConfig(),
-                        output_audio_transcription=types.AudioTranscriptionConfig(),
-                        tools=live_tools if live_tools else None,
-                    )
+                    config=types.LiveConnectConfig(**live_config),
                 ) as session:
-                    # Inject full system + tools after session is alive
+                    # Inject full system + tools as client content (turn_complete=False to avoid triggering a model turn)
                     full_system_text = _build_full_system_text()
                     tool_ref = _build_tool_reference()
-                    await session.send_realtime_input(
-                        text=f"[FULL SYSTEM CONTEXT]\n{full_system_text}\n\n{tool_ref}"
+                    await session.send_client_content(
+                        turns=types.Content(
+                            role='user',
+                            parts=[types.Part(text=f"[FULL SYSTEM CONTEXT]\n{full_system_text}\n\n{tool_ref}")]
+                        ),
+                        turn_complete=False,
                     )
                     console.print("[bold green]Neural link established.[/]\n")
                     await chat.start()
@@ -4913,10 +5024,6 @@ async def friday_live_engine():
                                             for part in sc.model_turn.parts:
                                                 if part.inline_data:
                                                     _audio_playback_queue.put(part.inline_data.data)
-                                                    if not hasattr(_audio_playback_queue, '_debug_printed'):
-                                                        _audio_playback_queue._debug_printed = True
-                                                        mt = getattr(part.inline_data, 'mime_type', 'unknown')
-                                                        chat.add_system(f"[AUDIO] mime={mt} size={len(part.inline_data.data)}b")
                                                 if part.thought and part.text:
                                                     thinking_parts.append(part.text)
                                             # Show thinking IMMEDIATELY (before speech transcription)
@@ -5017,6 +5124,14 @@ async def friday_live_engine():
                                             displayed_transcript = ""
                                             follow_up_mode = True
                                             chat.add_system("[MUTE] Interrupted")
+                                            # Clear audio buffer so old response stops immediately
+                                            while not _audio_playback_queue.empty():
+                                                try:
+                                                    _audio_playback_queue.get_nowait()
+                                                except _thread_queue.Empty:
+                                                    break
+                                            _mic_muted.clear()
+                                            _model_turn_done.set()
                                             from friday.comms import live_to_dashboard_queue
                                             live_to_dashboard_queue.put({
                                                 "type": "system",

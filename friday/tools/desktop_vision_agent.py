@@ -381,7 +381,7 @@ def _save_to_memory(state_json: str) -> str:
 
 def desktop_vision_observe() -> str:
     state_json = analyze_desktop_state()
-    path = _save_to_memory(json.loads(state_json))
+    path = _save_to_memory(state_json)
     return state_json
 
 

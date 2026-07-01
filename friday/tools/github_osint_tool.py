@@ -216,9 +216,12 @@ async def github_search_users(
 
         token = _get_token()
         g = Github(token, retry=1) if token else Github(retry=1)
-        users = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: list(g.search_users(query)[:limit])
-        )
+        try:
+            users = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: list(g.search_users(query)[:limit])
+            )
+        except (IndexError, StopIteration):
+            return GithubResult(results=[], total_count=0, query=query, time=time.time()-t0, error="No users found")
 
         results = []
         for u in users:

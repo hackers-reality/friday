@@ -210,7 +210,7 @@ body { background: #050510; color: #c8c8d8; font-family: 'Segoe UI', system-ui, 
 <body>
 <div id="three-container"></div>
 
-<div id="status-bar"><span class="badge">&#9679;</span> Townhall <span style="color:#484868">|</span> <span id="conn-status">connecting...</span></div>
+<div id="status-bar"><span class="badge">&#9679;</span> Townhall <span style="color:#484868">|</span> <span id="conn-status">connecting...</span> <span style="color:#484868">|</span> <a href="/settings" style="color:#00bfff;text-decoration:none;pointer-events:auto" target="_blank">&#9881; Settings</a></div>
 
 <div id="sidebar-left">
   <div class="section-title">&#9679; Selected Agent</div>

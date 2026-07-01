@@ -215,7 +215,7 @@ class FRIDAYTUI:
     def __init__(
         self,
         *,
-        model_id: str = "gemini-3.1-flash-live-preview",
+        model_id: str = "gemini-2.5-flash-native-audio-preview-12-2025",
         tools_count: int = 0,
     ):
         self.console = Console()
@@ -257,7 +257,7 @@ class FRIDAYTUI:
             "standby": "bright_black",
         }
         dot_color = status_colors.get(self._connection_status, "yellow")
-        model_display = self.model_id or "gemini-3.1-flash-live-preview"
+        model_display = self.model_id or "gemini-2.5-flash-native-audio-preview-12-2025"
 
         grid = Table.grid(padding=(0, 2))
         grid.add_column(ratio=1)
@@ -419,7 +419,7 @@ class ChatDisplay:
     def __init__(
         self,
         *,
-        model_id: str = "gemini-3.1-flash-live-preview",
+        model_id: str = "gemini-2.5-flash-native-audio-preview-12-2025",
         tools_count: int = 0,
     ):
         self.console = Console()

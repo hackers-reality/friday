@@ -79,6 +79,171 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FRIDAY-OSINT/3.0"
 EMAIL_REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 PHONE_REGEX = re.compile(r'(\+?\d{1,4}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}')
 
+# ─── Data Tables ────────────────────────────────────────────
+COUNTRY_NAMES: dict[str, str] = {
+    "US": "United States", "GB": "United Kingdom", "DE": "Germany", "FR": "France",
+    "JP": "Japan", "CN": "China", "IN": "India", "BR": "Brazil", "CA": "Canada",
+    "AU": "Australia", "RU": "Russia", "KR": "South Korea", "IT": "Italy",
+    "ES": "Spain", "NL": "Netherlands", "SE": "Sweden", "NO": "Norway",
+    "FI": "Finland", "DK": "Denmark", "PL": "Poland", "CH": "Switzerland",
+    "AT": "Austria", "BE": "Belgium", "IE": "Ireland", "IL": "Israel",
+    "SG": "Singapore", "HK": "Hong Kong", "TW": "Taiwan", "ZA": "South Africa",
+    "AR": "Argentina", "MX": "Mexico", "CO": "Colombia", "CL": "Chile",
+    "PT": "Portugal", "GR": "Greece", "HU": "Hungary", "CZ": "Czech Republic",
+    "SK": "Slovakia", "RO": "Romania", "BG": "Bulgaria", "TR": "Turkey",
+    "AE": "United Arab Emirates", "SA": "Saudi Arabia", "EG": "Egypt",
+    "NG": "Nigeria", "KE": "Kenya", "TH": "Thailand", "VN": "Vietnam",
+    "PH": "Philippines", "ID": "Indonesia", "MY": "Malaysia", "NZ": "New Zealand",
+    "PK": "Pakistan", "BD": "Bangladesh", "UA": "Ukraine", "IR": "Iran",
+    "IQ": "Iraq", "LY": "Libya", "DZ": "Algeria", "MA": "Morocco",
+    "TN": "Tunisia", "SD": "Sudan", "ET": "Ethiopia", "TZ": "Tanzania",
+    "GH": "Ghana", "CM": "Cameroon", "CI": "Cote d'Ivoire", "SN": "Senegal",
+    "UG": "Uganda", "ZM": "Zambia", "ZW": "Zimbabwe", "MW": "Malawi",
+    "MZ": "Mozambique", "AO": "Angola", "MN": "Mongolia", "NP": "Nepal",
+    "LK": "Sri Lanka", "KH": "Cambodia", "MM": "Myanmar", "LA": "Laos",
+    "CU": "Cuba", "DO": "Dominican Republic", "PR": "Puerto Rico",
+    "GT": "Guatemala", "SV": "El Salvador", "CR": "Costa Rica",
+    "PA": "Panama", "EC": "Ecuador", "PE": "Peru", "BO": "Bolivia",
+    "PY": "Paraguay", "UY": "Uruguay", "VE": "Venezuela",
+}
+COUNTRY_CALLING_CODES: dict[str, str] = {
+    "US": "+1", "CA": "+1", "GB": "+44", "DE": "+49", "FR": "+33",
+    "JP": "+81", "CN": "+86", "IN": "+91", "BR": "+55", "AU": "+61",
+    "RU": "+7", "KR": "+82", "IT": "+39", "ES": "+34", "NL": "+31",
+    "SE": "+46", "NO": "+47", "FI": "+358", "DK": "+45", "PL": "+48",
+    "CH": "+41", "AT": "+43", "BE": "+32", "IE": "+353", "IL": "+972",
+    "SG": "+65", "HK": "+852", "TW": "+886", "ZA": "+27", "AR": "+54",
+    "MX": "+52", "CO": "+57", "CL": "+56", "PT": "+351", "GR": "+30",
+    "HU": "+36", "CZ": "+420", "SK": "+421", "RO": "+40", "BG": "+359",
+    "TR": "+90", "AE": "+971", "SA": "+966", "EG": "+20", "NG": "+234",
+    "KE": "+254", "TH": "+66", "VN": "+84", "PH": "+63", "ID": "+62",
+    "MY": "+60", "NZ": "+64", "PK": "+92", "BD": "+880", "UA": "+380",
+    "IR": "+98", "IQ": "+964",
+}
+EMAIL_PROVIDER_DOMAINS: dict[str, str] = {
+    "gmail.com": "Google Gmail", "googlemail.com": "Google Gmail",
+    "yahoo.com": "Yahoo Mail", "yahoo.co.uk": "Yahoo Mail",
+    "outlook.com": "Microsoft Outlook", "hotmail.com": "Microsoft Hotmail",
+    "live.com": "Microsoft Live", "msn.com": "Microsoft MSN",
+    "icloud.com": "Apple iCloud", "me.com": "Apple Me",
+    "protonmail.com": "ProtonMail", "proton.me": "ProtonMail",
+    "mail.com": "Mail.com", "aol.com": "AOL",
+    "zoho.com": "Zoho Mail", "yandex.com": "Yandex Mail",
+    "gmx.com": "GMX", "gmx.de": "GMX",
+    "fastmail.com": "FastMail", "tutanota.com": "Tutanota",
+    "runbox.com": "Runbox", "posteo.de": "Posteo",
+    "mail.ru": "Mail.ru", "yandex.ru": "Yandex",
+    "qq.com": "QQ Mail", "163.com": "NetEase",
+    "126.com": "NetEase", "sina.com": "Sina Mail",
+    "sohu.com": "Sohu Mail", "tom.com": "Tom Mail",
+    "yeah.net": "Yeah Mail", "facebook.com": "Facebook",
+    "twitter.com": "Twitter", "linkedin.com": "LinkedIn",
+    "rediffmail.com": "Rediffmail", "cox.net": "Cox Communications",
+    "verizon.net": "Verizon", "att.net": "AT&T",
+    "bell.net": "Bell Canada", "btinternet.com": "BT Internet",
+    "ntlworld.com": "Virgin Media", "virginmedia.com": "Virgin Media",
+    "blueyonder.co.uk": "Virgin Media", "sky.com": "Sky",
+    "talktalk.net": "TalkTalk", "t-online.de": "T-Online",
+    "web.de": "Web.de", "freenet.de": "Freenet",
+    "alice.it": "Alice Italy", "libero.it": "Libero",
+    "tin.it": "Telecom Italia", "telefonica.net": "Telefonica",
+    "terra.com.br": "Terra Brazil", "uol.com.br": "UOL",
+    "ig.com.br": "IG Brazil", "bol.com.br": "BOL",
+}
+SOCIAL_MEDIA_DOMAINS: dict[str, str] = {
+    "facebook.com": "Facebook", "fb.com": "Facebook",
+    "twitter.com": "Twitter", "x.com": "Twitter", "t.co": "Twitter",
+    "instagram.com": "Instagram", "linkedin.com": "LinkedIn",
+    "youtube.com": "YouTube", "youtu.be": "YouTube",
+    "reddit.com": "Reddit", "tiktok.com": "TikTok",
+    "pinterest.com": "Pinterest", "snapchat.com": "Snapchat",
+    "tumblr.com": "Tumblr", "whatsapp.com": "WhatsApp",
+    "telegram.org": "Telegram", "t.me": "Telegram",
+    "discord.com": "Discord", "discord.gg": "Discord",
+    "medium.com": "Medium", "twitch.tv": "Twitch",
+    "github.com": "GitHub", "gitlab.com": "GitLab",
+    "bitbucket.org": "Bitbucket", "stackoverflow.com": "Stack Overflow",
+    "quora.com": "Quora", "vk.com": "VKontakte",
+    "ok.ru": "Odnoklassniki", "weibo.com": "Weibo",
+    "qq.com": "QQ", "wechat.com": "WeChat",
+    "line.me": "Line", "kakao.com": "KakaoTalk",
+    "signal.org": "Signal", "slack.com": "Slack",
+    "mastodon.social": "Mastodon", "threads.net": "Threads",
+    "behance.net": "Behance", "dribbble.com": "Dribbble",
+    "flickr.com": "Flickr", "deviantart.com": "DeviantArt",
+    "vimeo.com": "Vimeo", "soundcloud.com": "SoundCloud",
+    "spotify.com": "Spotify", "bandcamp.com": "Bandcamp",
+    "patreon.com": "Patreon", "kickstarter.com": "Kickstarter",
+    "producthunt.com": "Product Hunt", "angel.co": "AngelList",
+    "crunchbase.com": "CrunchBase", "keybase.io": "Keybase",
+    "replit.com": "Replit", "codepen.io": "CodePen",
+    "hackerone.com": "HackerOne", "bugcrowd.com": "Bugcrowd",
+}
+TLD_COUNTRY_MAP: dict[str, str] = {
+    "us": "United States", "uk": "United Kingdom", "de": "Germany",
+    "fr": "France", "jp": "Japan", "cn": "China", "in": "India",
+    "br": "Brazil", "ca": "Canada", "au": "Australia", "ru": "Russia",
+    "kr": "South Korea", "it": "Italy", "es": "Spain", "nl": "Netherlands",
+    "se": "Sweden", "no": "Norway", "fi": "Finland", "dk": "Denmark",
+    "pl": "Poland", "ch": "Switzerland", "at": "Austria", "be": "Belgium",
+    "ie": "Ireland", "il": "Israel", "sg": "Singapore", "hk": "Hong Kong",
+    "tw": "Taiwan", "za": "South Africa", "ar": "Argentina", "mx": "Mexico",
+    "co": "Colombia", "pt": "Portugal", "gr": "Greece", "tr": "Turkey",
+    "ae": "United Arab Emirates", "sa": "Saudi Arabia", "eg": "Egypt",
+    "ng": "Nigeria", "th": "Thailand", "vn": "Vietnam", "ph": "Philippines",
+    "id": "Indonesia", "my": "Malaysia", "nz": "New Zealand", "pk": "Pakistan",
+    "bd": "Bangladesh", "ua": "Ukraine", "eu": "European Union",
+    "io": "British Indian Ocean Territory", "ai": "Anguilla",
+    "ly": "Libya", "me": "Montenegro", "tv": "Tuvalu",
+    "cc": "Cocos Islands", "ws": "Samoa", "gg": "Guernsey",
+}
+KNOWN_AS_NAMES: dict[int, str] = {
+    15169: "Google LLC", 8075: "Microsoft Corporation", 16509: "Amazon.com, Inc.",
+    14618: "Amazon Web Services", 3: "MIT", 13335: "Cloudflare Inc.",
+    32934: "Facebook Inc.", 19551: "Facebook Inc.", 54113: "Fastly Inc.",
+    20940: "Akamai Technologies", 16625: "Akamai Technologies",
+    714: "Apple Inc.", 6185: "Apple Inc.", 36351: "Apple Inc.",
+    7922: "Comcast Cable", 7018: "AT&T Services", 7132: "AT&T Internet Services",
+    22394: "Verizon Business", 701: "Verizon Business", 702: "Verizon Business",
+    22773: "Cox Communications", 20115: "Charter Communications",
+    11426: "Spectrum", 12271: "Charter Communications",
+    20001: "Time Warner Cable", 11351: "Time Warner Cable",
+    22822: "LinkedIn Corporation", 2906: "Netflix Inc.",
+    40065: "Netflix Inc.", 55095: "Netflix Inc.",
+    396982: "Google Cloud Platform", 36384: "Google Cloud Platform",
+    15133: "EdgeCast Networks", 20326: "Microsoft Azure",
+    63410: "Microsoft Azure", 8069: "Microsoft Azure",
+    16550: "NTT Communications", 2914: "NTT America",
+    1239: "Sprint", 10507: "Sprint Personal Communications",
+    33287: "T-Mobile USA", 21928: "T-Mobile USA",
+    22394: "Verizon Wireless", 6167: "Verizon Wireless",
+    13041: "Verizon Wireless", 398355: "Verizon Wireless",
+    36492: "Twitter Inc.", 13414: "Twitter Inc.",
+    20214: "Twitter Inc.", 3598: "Microsoft Online Services",
+    13238: "Yandex", 43515: "Yandex",
+    197068: "Yandex", 393026: "Yandex",
+    55836: "Reliance Jio Infocomm", 9829: "Quasi Networks",
+    9498: "BHARTI Airtel", 45609: "BHARTI Airtel",
+    24309: "Atria Convergence", 45820: "Tata Communications",
+}
+PHISHING_DOMAIN_PATTERNS: list[str] = [
+    r"paypal.*\.(?:com|net|org)\.[a-z]{2,}",
+    r"secure.*login",
+    r"account.*verify",
+    r"signin.*confirm",
+    r"banking.*update",
+    r"password.*reset",
+    r"appleid",
+    r"googlesupport",
+    r"\\b(bank|secure|login|account|verify|confirm|update|password|signin)\\b.*\\b(bank|secure|login|account|verify|confirm|update|password|signin)\\b",
+    r"xn--",  # internationalized domain (can be used for homograph attacks)
+]
+PHISHING_TLD_BLACKLIST: set[str] = {
+    "tk", "ml", "ga", "cf", "gq", "xyz", "top", "club", "work", "click",
+    "download", "review", "stream", "trade", "webcam", "win", "science",
+    "date", "racing", "faith", "men", "loan", "bid", "property", "cricket",
+    "accountant", "party", "trade", "tk", "ml", "ga", "cf", "gq",
+}
 
 # ─── Helper ─────────────────────────────────────────────────
 
@@ -11143,8 +11308,8 @@ async def full_ip_intel(target: str, timeout: float = 60.0) -> dict[str, Any]:
         result["started_at"] = datetime.now(timezone.utc).isoformat()
         t0 = time.time()
         result["stages"]["initialized"] = True
-        result["stages"]["geo"] = await geo_ip_lookup(target, timeout=min(timeout, 10.0))
-        result["stages"]["dnsbl"] = await dnsbl_lookup(target, timeout=min(timeout, 10.0))
+        result["stages"]["geo"] = await ip_geolocate_full(target, timeout=min(timeout, 10.0))
+        result["stages"]["dnsbl"] = await ip_blacklist_check(target, timeout=min(timeout, 10.0))
         result["stages"]["ports"] = {"note": "port scan requires extended time"}
         t1 = time.time()
         result["summary"]["duration"] = round(t1 - t0, 3)
@@ -11372,8 +11537,8 @@ async def full_network_intel(target: str, timeout: float = 60.0) -> dict[str, An
         result["started_at"] = datetime.now(timezone.utc).isoformat()
         t0 = time.time()
         result["stages"]["initialized"] = True
-        result["stages"]["geo"] = await geo_ip_lookup(target, timeout=min(timeout, 10.0))
-        result["stages"]["dnsbl"] = await dnsbl_lookup(target, timeout=min(timeout, 10.0))
+        result["stages"]["geo"] = await ip_geolocate_full(target, timeout=min(timeout, 10.0))
+        result["stages"]["dnsbl"] = await ip_blacklist_check(target, timeout=min(timeout, 10.0))
         result["stages"]["ports"] = {"note": "port scan requires extended time"}
         t1 = time.time()
         result["summary"]["duration"] = round(t1 - t0, 3)
@@ -13803,7 +13968,7 @@ async def domain_ssl_chain(domain: str) -> dict[str, Any]:
             result["error"] = f"SSL connection failed: {str(e)[:100]}"
         try:
             reader, writer = await asyncio.wait_for(asyncio.open_connection(domain_clean, 443, ssl=False), timeout=5.0)
-            writer.write(b"GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n".format(domain_clean.encode()))
+            writer.write(f"GET / HTTP/1.1\r\nHost: {domain_clean}\r\nConnection: close\r\n\r\n".encode())
             await writer.drain()
             response = b""
             while True:

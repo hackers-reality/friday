@@ -364,31 +364,24 @@ class KeyManager:
     async def prompt_for_missing_keys(self) -> dict[str, Any]:
         """Auto-verify existing keys, silently skip if missing."""
         result: dict[str, Any] = {"keys_updated": False, "nvidia_result": None, "opencode_result": None}
-        print(f"\n{ANSI_BOLD}{ANSI_CYAN}╔══════════════════════════════════════════════╗{ANSI_RESET}")
-        print(f"{ANSI_BOLD}{ANSI_CYAN}║     FRIDAY API KEY VERIFICATION              ║{ANSI_RESET}")
-        print(f"{ANSI_BOLD}{ANSI_CYAN}╚══════════════════════════════════════════════╝{ANSI_RESET}{ANSI_RESET}")
 
         nvidia_key = self._nvidia_key
         if nvidia_key and not self._nvidia_verified:
-            print(f"\n{ANSI_YELLOW}⚠ Verifying stored NVIDIA NIM key...{ANSI_RESET}")
             v = await self.verify_nvidia_key(nvidia_key)
             if v["verified"]:
                 self._nvidia_verified = True
                 result["nvidia_result"] = v
-                print(f"  {ANSI_GREEN}✔ NVIDIA NIM key verified!{ANSI_RESET}")
             else:
-                print(f"  {ANSI_RED}✘ Verification failed: {v['error']}{ANSI_RESET}")
+                pass
 
         opencode_key = self._opencode_key
         if opencode_key and not self._opencode_verified:
-            print(f"\n{ANSI_YELLOW}⚠ Verifying stored OpenCode Zen key...{ANSI_RESET}")
             v = await self.verify_opencode_key(opencode_key)
             if v["verified"]:
                 self._opencode_verified = True
                 result["opencode_result"] = v
-                print(f"  {ANSI_GREEN}✔ OpenCode Zen key verified!{ANSI_RESET}")
             else:
-                print(f"  {ANSI_RED}✘ Verification failed: {v['error']}{ANSI_RESET}")
+                pass
 
         result["keys_updated"] = self.have_valid_keys()
         return result

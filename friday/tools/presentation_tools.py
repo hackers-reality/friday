@@ -827,7 +827,7 @@ def presentation_create(slides_json: str, title: str = "Presentation",
         return {"success": False, "error": f"Invalid JSON: {e}"}
 
     if not isinstance(slides_data, list):
-        return {"success": False, "error": "slides_json must be a JSON array"}
+        slides_data = [slides_data]
 
     # Detect theme from first slide
     theme_name = slides_data[0].get("theme", "blue") if slides_data else "blue"
@@ -911,6 +911,9 @@ def presentation_create_demo(topic: str = "FRIDAY AI Assistant",
     Returns:
         dict with success, file_path, format, slide_count, title.
     """
+    if isinstance(topic, dict):
+        topic = topic.get("title", topic.get("topic", str(topic)))
+    topic = str(topic)
     n = max(4, min(slides, 30))
 
     demo_slides: list[dict[str, Any]] = [

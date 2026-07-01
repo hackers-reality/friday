@@ -1,97 +1,41 @@
-"""FRIDAY Visual Overlay — Cursor buddy + screen pointer inspired by Clicky.
-Shows temporary visual indicators (circles, labels, hints) on screen.
-Uses transparent Tkinter overlay windows for cross-platform compatibility.
+"""FRIDAY Visual Overlay — Non-blocking animated screen overlay.
+Wraps overlay_engine.py with the same API as before for backward compatibility.
+
+All functions are non-blocking — they queue commands to a background Tkinter
+process. The overlay window stays open persistently and shows a cursor-following
+"buddy" indicator, bezier-arc flight animations, speech bubbles, and annotations.
 """
+
 from __future__ import annotations
 
-import threading
-import tkinter as tk
+from .overlay_engine import get_engine, ensure_running as _ensure
 from typing import Optional
-
-_overlay_lock = threading.Lock()
-_overlay_windows: list[tk.Tk] = []
-
-
-def _make_overlay_window(x: int, y: int, width: int, height: int,
-                         color: str = "#3B82F6") -> tk.Tk:
-    """Create a transparent always-on-top overlay window."""
-    root = tk.Tk()
-    root.overrideredirect(True)
-    root.attributes("-topmost", True)
-    root.attributes("-transparentcolor", "white")
-    root.configure(bg="white")
-    root.geometry(f"{width}x{height}+{x}+{y}")
-    with _overlay_lock:
-        _overlay_windows.append(root)
-    return root
 
 
 def show_pointer(x: int, y: int, label: str = "",
                  duration: float = 3.0, color: str = "#3B82F6") -> str:
-    """Show a circular pointer with optional label at screen coordinates.
-    Inspired by Clicky's [POINT:x,y:label] mechanic.
+    """Animate the buddy to screen (x,y) with optional label.
+    Non-blocking — returns immediately.
     """
     try:
-        size = 120
-        root = _make_overlay_window(x - size // 2, y - size // 2, size, size + 30)
-        canvas = tk.Canvas(root, width=size, height=size + 30,
-                           bg="white", highlightthickness=0)
-        canvas.pack()
-        cx, cy = size // 2, size // 2 - 5
-        r = 25
-        canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
-                           outline=color, width=4, fill="")
-
-        inner_r = 8
-        canvas.create_oval(cx - inner_r, cy - inner_r,
-                           cx + inner_r, cy + inner_r,
-                           fill=color, outline="")
-
-        if label:
-            canvas.create_text(cx, cy + r + 15, text=label,
-                               font=("Segoe UI", 10), fill=color)
-
-        root.after(int(duration * 1000), _destroy_window, root)
-        root.mainloop()
-        return f"[OK] Pointer at ({x}, {y})" + (f": {label}" if label else "")
+        eng = _ensure()
+        eng.set_colors(primary=color)
+        eng.fly_to(float(x), float(y), label, duration)
+        return f"[OK] Pointer flying to ({x}, {y})" + (f": {label}" if label else "")
     except Exception as e:
         return f"[FAIL] Pointer: {e}"
 
 
 def show_cursor_hint(text: str, duration: float = 3.0,
                      color: str = "#3B82F6") -> str:
-    """Show a text hint near the current cursor position (like Clicky's buddy)."""
+    """Show a speech bubble near the cursor.
+    Non-blocking — the bubble appears at the buddy's current position.
+    """
     try:
-        import pyautogui
-        mx, my = pyautogui.position()
-        padding = 16
-        line_height = 20
-        lines = text.split("\n")
-        width = max(200, min(500, max(len(l) for l in lines) * 9))
-        height = len(lines) * line_height + padding * 2
-
-        x = min(mx + 20, pyautogui.size().width - width - 20)
-        y = min(my - height // 2, pyautogui.size().height - height - 20)
-        if y < 0:
-            y = max(0, my + 20)
-
-        root = _make_overlay_window(int(x), int(y), int(width), int(height))
-        canvas = tk.Canvas(root, width=int(width), height=int(height),
-                           bg="white", highlightthickness=0)
-        canvas.pack()
-
-        canvas.create_rectangle(0, 0, int(width), int(height),
-                                fill=color, outline="", stipple="gray25")
-        canvas.create_rectangle(2, 2, int(width) - 2, int(height) - 2,
-                                fill="white", outline=color, width=2)
-
-        for i, line in enumerate(lines):
-            canvas.create_text(int(width) // 2, padding + i * line_height + 4,
-                               text=line, font=("Segoe UI", 10),
-                               fill=color, anchor="n")
-
-        root.after(int(duration * 1000), _destroy_window, root)
-        root.mainloop()
+        eng = _ensure()
+        eng.set_colors(primary=color)
+        bx, by = eng.get_buddy_position()
+        eng.fly_to(bx, by - 60, text, duration)
         return f"[OK] Cursor hint: {text[:60]}"
     except Exception as e:
         return f"[FAIL] Cursor hint: {e}"
@@ -99,51 +43,174 @@ def show_cursor_hint(text: str, duration: float = 3.0,
 
 def show_annotation_box(x: int, y: int, width: int, height: int,
                         label: str = "", color: str = "#EF4444",
-                        duration: float = 4.0) -> str:
-    """Highlight a region of the screen with a colored border box.
-    Useful for pointing out UI elements, buttons, or sections.
+                        duration: float = 3.0,
+                        persist: float = 3600.0) -> str:
+    """Highlight a region with a colored dashed border.
+    Non-blocking — draws immediately on the overlay canvas.
+    persist: how long to stay (default 3600s = 1hr).
     """
     try:
-        root = _make_overlay_window(x, y, width, height)
-        canvas = tk.Canvas(root, width=width, height=height,
-                           bg="white", highlightthickness=0)
-        canvas.pack()
-
-        canvas.create_rectangle(2, 2, width - 2, height - 2,
-                                outline=color, width=4, dash=(8, 4))
-
-        if label:
-            text_bg = canvas.create_rectangle(4, 4, 8 + len(label) * 9, 24,
-                                              fill=color, outline="")
-            canvas.create_text(8 + len(label) * 4, 14, text=label,
-                               font=("Segoe UI", 10, "bold"),
-                               fill="white", anchor="center")
-
-        root.after(int(duration * 1000), _destroy_window, root)
-        root.mainloop()
+        eng = _ensure()
+        eng.draw_box(float(x), float(y), float(width), float(height),
+                     color=color, label=label, duration=duration,
+                     persist=persist)
         return f"[OK] Annotation at ({x},{y}) {width}x{height}"
     except Exception as e:
         return f"[FAIL] Annotation: {e}"
 
 
-def clear_overlays() -> str:
-    """Destroy all active overlay windows immediately."""
-    with _overlay_lock:
-        for w in _overlay_windows[:]:
-            try:
-                w.destroy()
-            except Exception:
-                pass
-        _overlay_windows.clear()
-    return "[OK] All overlays cleared."
-
-
-def _destroy_window(root: tk.Tk):
-    """Safely destroy an overlay window."""
+def show_draw_arrow(x1: int, y1: int, x2: int, y2: int,
+                    color: str = "#3B82F6", duration: float = 3.0,
+                    persist: float = 3600.0) -> str:
+    """Draw an arrow from (x1,y1) to (x2,y2).
+    duration: animation speed. persist: how long to stay on screen.
+    """
     try:
-        root.destroy()
-        with _overlay_lock:
-            if root in _overlay_windows:
-                _overlay_windows.remove(root)
+        eng = _ensure()
+        eng.draw_arrow(float(x1), float(y1), float(x2), float(y2),
+                       color=color, duration=duration, persist=persist)
+        return f"[OK] Arrow ({x1},{y1}) -> ({x2},{y2})"
+    except Exception as e:
+        return f"[FAIL] Arrow: {e}"
+
+
+def draw_line(x1: int, y1: int, x2: int, y2: int,
+              color: str = "#3B82F6", width: int = 4,
+              duration: float = 3.0, persist: float = 3600.0) -> str:
+    """Draw animated line. duration=animation speed, persist=how long it stays."""
+    try:
+        eng = _ensure()
+        eng.draw_line(float(x1), float(y1), float(x2), float(y2),
+                      color=color, width=width, duration=duration,
+                      persist=persist)
+        return f"[OK] Line ({x1},{y1}) -> ({x2},{y2})"
+    except Exception as e:
+        return f"[FAIL] Line: {e}"
+
+
+def draw_polygon(points: list, color: str = "#3B82F6",
+                 fill_color: Optional[str] = None,
+                 duration: float = 3.0,
+                 persist: float = 3600.0) -> str:
+    """Draw a closed polygon from a list of (x,y) coordinate pairs.
+    duration=animation speed, persist=how long it stays.
+    """
+    try:
+        eng = _ensure()
+        pts = [(float(p[0]), float(p[1])) for p in points]
+        eng.draw_polygon(pts, color=color, fill_color=fill_color,
+                         duration=duration, persist=persist)
+        return f"[OK] Polygon with {len(pts)} points"
+    except Exception as e:
+        return f"[FAIL] Polygon: {e}"
+
+
+def show_text(x: int, y: int, text: str,
+              color: str = "#FFFFFF", duration: float = 3.0,
+              persist: float = 3600.0) -> str:
+    """Show text at screen coordinates.
+    duration=animation speed, persist=how long it stays.
+    """
+    try:
+        eng = _ensure()
+        eng.show_text(float(x), float(y), text, color=color,
+                      duration=duration, persist=persist)
+        return f"[OK] Text at ({x},{y}): {text[:60]}"
+    except Exception as e:
+        return f"[FAIL] Text: {e}"
+
+
+def draw_path(path_data: str, x: int = 0, y: int = 0,
+              color: str = "#3B82F6", width: float = 3,
+              duration: float = 3.0, persist: float = 3600.0) -> str:
+    """Draw an arbitrary SVG path on the overlay.
+    path_data: SVG path string like 'M 100 100 C 200 50, 300 150, 400 100'
+    duration: animation speed, persist: how long it stays.
+    """
+    try:
+        eng = _ensure()
+        eng.draw_path(path_data, float(x), float(y), color, width,
+                      duration, persist)
+        return f"[OK] Path drawn at offset ({x},{y})"
+    except Exception as e:
+        return f"[FAIL] Draw path: {e}"
+
+
+def start_teaching():
+    """Enter teaching mode — independent cursor for demonstrations."""
+    try:
+        eng = _ensure()
+        eng.start_teaching()
+        return "[OK] Teaching mode started"
+    except Exception as e:
+        return f"[FAIL] Start teaching: {e}"
+
+
+def stop_teaching():
+    """Exit teaching mode."""
+    try:
+        eng = get_engine()
+        eng.stop_teaching()
+        return "[OK] Teaching mode stopped"
+    except Exception as e:
+        return f"[FAIL] Stop teaching: {e}"
+
+
+def teaching_move_to(x: int, y: int, label: str = ""):
+    """Move the teaching cursor to a position."""
+    try:
+        eng = _ensure()
+        eng.teaching_move_to(float(x), float(y), label)
+        return f"[OK] Teaching cursor moved to ({x},{y})"
+    except Exception as e:
+        return f"[FAIL] Teaching move: {e}"
+
+
+def teaching_click(x: int, y: int, label: str = ""):
+    """Show teaching cursor clicking at position."""
+    try:
+        eng = _ensure()
+        eng.teaching_click(float(x), float(y), label)
+        return f"[OK] Teaching click at ({x},{y})"
+    except Exception as e:
+        return f"[FAIL] Teaching click: {e}"
+
+
+def teaching_highlight(x: int, y: int, width: int, height: int, label: str = ""):
+    """Highlight a region with the teaching cursor."""
+    try:
+        eng = _ensure()
+        eng.teaching_highlight(float(x), float(y), float(width), float(height), label)
+        return f"[OK] Teaching highlight at ({x},{y}) {width}x{height}"
+    except Exception as e:
+        return f"[FAIL] Teaching highlight: {e}"
+
+
+def clear_overlays() -> str:
+    """Remove all overlays and return buddy to cursor-following mode."""
+    try:
+        eng = get_engine()
+        eng.clear_all()
+        return "[OK] All overlays cleared."
+    except Exception as e:
+        return f"[FAIL] Clear overlays: {e}"
+
+
+def start_overlay():
+    """Start the overlay engine (background thread)."""
+    _ensure()
+
+
+def stop_overlay():
+    """Stop the overlay engine."""
+    try:
+        eng = get_engine()
+        eng.stop()
     except Exception:
         pass
+
+
+def set_overlay_state(state: str):
+    """Set overlay visibility state: 'hidden' or 'active'."""
+    eng = get_engine()
+    eng.set_state(state)

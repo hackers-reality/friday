@@ -62,22 +62,36 @@ def _ensure_com():
         pass
 
 
-def _get_windows():
+def _get_windows(timeout=15):
     """Return list of all desktop windows, retrying with win32 backend if UIA crashes."""
     from pywinauto import Desktop
+    import threading
     last_err = None
     for backend in ("uia", "win32"):
         for attempt in range(2):
-            try:
-                import gc; gc.collect()
-                if backend == "uia":
-                    _ensure_com()
-                d = Desktop(backend=backend)
-                return d.windows()
-            except Exception as e:
-                last_err = e
-                logger.warning("_get_windows(%s) attempt %d failed: %s", backend, attempt + 1, e)
+            result = [None]
+            exc_info = [None]
+            def _fetch():
+                try:
+                    import gc; gc.collect()
+                    if backend == "uia":
+                        _ensure_com()
+                    d = Desktop(backend=backend)
+                    result[0] = d.windows()
+                except Exception as e:
+                    exc_info[0] = e
+            t = threading.Thread(target=_fetch, daemon=True)
+            t.start()
+            t.join(timeout)
+            if t.is_alive():
+                last_err = RuntimeError(f"_get_windows({backend}) timed out after {timeout}s")
+                break
+            if exc_info[0] is not None:
+                last_err = exc_info[0]
+                logger.warning("_get_windows(%s) attempt %d failed: %s", backend, attempt + 1, exc_info[0])
                 time.sleep(1)
+                continue
+            return result[0]
     raise last_err or RuntimeError("Failed to list desktop windows")
 
 
@@ -197,7 +211,15 @@ def desktop_launch_app(path: str) -> str:
     try:
         from pywinauto import Application
         app = Application(backend="uia").start(path, timeout=15)
-        title = app.top_window().window_text()
+        time.sleep(1)
+        try:
+            title = app.top_window().window_text()
+        except Exception:
+            title = desktop_get_active_window()
+            try:
+                title = json.loads(title).get("active_window", path)
+            except Exception:
+                title = path
         state = _load_state()
         state["total_actions"] += 1
         state["last_window"] = title
@@ -330,8 +352,12 @@ def desktop_scroll(direction: str = "down", clicks: int = 3) -> str:
         return json.dumps({"error": "pywinauto not installed"})
     try:
         import pywinauto.mouse as mouse
+        from pywinauto.win32functions import GetCursorPos
+        from pywinauto.win32structures import POINT
+        p = POINT()
+        GetCursorPos(p)
         delta = -120 * clicks if direction == "down" else 120 * clicks
-        mouse.scroll(coords=(0, 0), wheel_dist=delta)
+        mouse.scroll(coords=(p.x, p.y), wheel_dist=delta)
         state = _load_state()
         state["total_actions"] += 1
         _save_state(state)
@@ -376,7 +402,7 @@ def desktop_get_element_tree(window_title: str = "") -> str:
                     spec = d.window(title=found.window_text())
                 else:
                     wins = _get_windows()
-                    wins = [w for w in wins if w.window_text().strip()]
+                    wins = [w for w in wins if w.window_text().strip() and w.window_text().strip() not in _SKIP_WINDOWS]
                     if not wins:
                         return json.dumps({"error": "No windows with title found"})
                     spec = d.window(title=wins[0].window_text())

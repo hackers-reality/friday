@@ -205,19 +205,6 @@ from friday.paperclip_adapter import (
 )
 
 # ── New subsystem imports (Metasploit, Email Analysis, Agent Terminal, OSINT Extra) ──
-from friday.metasploit_tool import (
-    metasploit_connect, metasploit_status, metasploit_exploit,
-    metasploit_scan, metasploit_post_exploit, metasploit_payload_gen,
-    msf_connect, msf_status, msf_console_exec, msf_search,
-    msf_module_info, msf_exploit_run, msf_auxiliary_run,
-    msf_sessions_list, msf_session_details, msf_session_shell,
-    msf_payload_generate, msf_workspace_create, msf_workspace_list,
-    msf_workspace_switch, msf_workspace_delete, msf_hosts_list,
-    msf_vulns_list, msf_creds_list, msf_jobs_list, msf_job_stop,
-    msf_resource_script, msf_loot_list, msf_services_list,
-    msf_module_list, msf_session_stop, msf_session_meterpreter,
-    msf_version, msf_compatible_payloads, msf_notes_list, msf_db_import,
-)
 from friday.email_analysis_tool import (
     analyze_email_headers, extract_received_chain, trace_email_path,
     detect_email_spoofing, extract_authentication_results,
@@ -381,17 +368,7 @@ from friday.tools.mcp_tools import (
     mcp_create_from_openapi_spec, mcp_create_tool_server, mcp_test_endpoint,
 )
 
-from friday.kimi_webbridge_tool import (
-    webbridge_connect, webbridge_disconnect, webbridge_doctor,
-    webbridge_navigate, webbridge_click, webbridge_fill,
-    webbridge_type_text, webbridge_screenshot, webbridge_extract_text,
-    webbridge_get_page_state, webbridge_scroll, webbridge_press_key,
-    webbridge_key_combo, webbridge_evaluate, webbridge_submit_form,
-    webbridge_select_option, webbridge_list_tabs, webbridge_close_tab,
-    webbridge_get_current_url, webbridge_get_title, webbridge_hover,
-    webbridge_focus, webbridge_double_click, webbridge_drag,
-    webbridge_install_instructions,
-)
+
 
 # Merged __all__ for master.py and introspection
 __all__ = _tflat.__all__ + [
@@ -451,9 +428,6 @@ __all__ = _tflat.__all__ + [
 
     "books_search", "books_get_volume",
     "youtube_analytics_advanced",
-    # ── Metasploit ──
-    "metasploit_connect", "metasploit_status", "metasploit_exploit",
-    "metasploit_scan", "metasploit_post_exploit", "metasploit_payload_gen",
     # ── Email Analysis ──
     "analyze_email_headers", "trace_email_path", "detect_email_spoofing",
     "check_spf_record", "check_dkim_record",
@@ -492,16 +466,7 @@ __all__ = _tflat.__all__ + [
     "NaminterProfile", "NaminterResult", "run_naminter",
     # ── Wappalyzer Web Technology Detection ──
     "WappalyzerTech", "WappalyzerResult", "detect_technologies",
-    # ── Kimi WebBridge ──
-    "webbridge_connect", "webbridge_disconnect", "webbridge_doctor",
-    "webbridge_navigate", "webbridge_click", "webbridge_fill",
-    "webbridge_type_text", "webbridge_screenshot", "webbridge_extract_text",
-    "webbridge_get_page_state", "webbridge_scroll", "webbridge_press_key",
-    "webbridge_key_combo", "webbridge_evaluate", "webbridge_submit_form",
-    "webbridge_select_option", "webbridge_list_tabs", "webbridge_close_tab",
-    "webbridge_get_current_url", "webbridge_get_title", "webbridge_hover",
-    "webbridge_focus", "webbridge_double_click", "webbridge_drag",
-    "webbridge_install_instructions",
+
     # ── Search Tools (DuckDuckGo / Brave / Tavily) ──
     "SearchItem", "SearchResult",
     "search_duckduckgo", "search_brave", "search_tavily", "search_auto",

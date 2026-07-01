@@ -301,7 +301,7 @@ def auto_record_tool_call(name: str, args: dict, result: str, session=None) -> N
     """Post-hook: auto-record every tool call to episodic memory."""
     no_record = {"episodic_tool", "get_time", "system_cpu", "system_memory",
                  "system_disk", "system_network", "scroll", "move_mouse",
-                 "opencli_screenshot", "system_processes", "status_check",
+                 "system_processes", "status_check",
                  "get_active_window", "list_running_apps", "clock_tool"}
     if name in no_record:
         return

@@ -198,7 +198,6 @@ class Orchestrator:
         
         nim_key = os.getenv("NVIDIA_NIM_API_KEY")
         if not nim_key:
-            print("\n[STARK INDUSTRIES] ⚠️ NVIDIA NIM API Key is missing!", flush=True)
             new_key = input("Enter NVIDIA_NIM_API_KEY: ").strip()
             if new_key:
                 os.environ["NVIDIA_NIM_API_KEY"] = new_key
@@ -206,7 +205,6 @@ class Orchestrator:
                 
         opencode_key = os.getenv("OPENCODE_ZEN_API_KEY")
         if not opencode_key:
-            print("\n[STARK INDUSTRIES] ⚠️ OpenCode Zen API Key is missing!", flush=True)
             new_key = input("Enter OPENCODE_ZEN_API_KEY: ").strip()
             if new_key:
                 os.environ["OPENCODE_ZEN_API_KEY"] = new_key

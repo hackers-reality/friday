@@ -5,6 +5,9 @@ import asyncio
 
 def main():
     """Launch FRIDAY interactive session."""
+    print("⚡ Initializing FRIDAY...")
+    print("Loading systems, tools, and neural interface")
+    sys.stdout.flush()
     try:
         from friday.live import friday_live_engine
         asyncio.run(friday_live_engine())

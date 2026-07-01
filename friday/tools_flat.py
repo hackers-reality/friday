@@ -965,31 +965,61 @@ def see_screen(question: str = "What do you see on the screen?") -> str:
 
 
 def vision_click(target: str) -> str:
-    """Find and click an element on screen by description using Gemini Vision.
-
-    Uses see_screen to locate the element, then clicks at the reported coordinates.
+    """Find and click an element on screen by description.
+    Uses pointing_agent (vision LLM + pywinauto fallback) with overlay animation.
     """
     try:
-        import re
-        # Ask vision to find the element
-        vision_result = see_screen(
-            f"Find the exact location of '{target}' on screen. "
-            "Return ONLY the coordinates in format: X=123 Y=456"
-        )
-
-        # Extract coordinates from vision response
-        coords = re.search(r'[XYxy]\s*[=:]\s*(\d+).*?[XYxy]\s*[=:]\s*(\d+)', vision_result)
-        if not coords:
-            coords = re.search(r'\(?(\d{2,4})\s*,\s*(\d{2,4})\)?', vision_result)
-        if not coords:
-            return f"[FAIL] Could not find '{target}' on screen. Vision response:\n{vision_result[:500]}"
-
-        x, y = int(coords.group(1)), int(coords.group(2))
-        return click(x, y)
-    except ImportError:
-        return "[FAIL] pyautogui not installed."
+        from friday.pointing_agent import find_and_click_element
+        from friday.overlay_engine import get_engine
+        eng = get_engine()
+        return find_and_click_element(target, overlay_engine=eng)
     except Exception as e:
         return f"[FAIL] Vision click error: {e}"
+
+
+def draw_line(x1: int, y1: int, x2: int, y2: int,
+              color: str = "#3B82F6", width: int = 4,
+              duration: float = 5.0) -> str:
+    """Draw an animated straight line between two points (no arrowhead).
+    The buddy follows along as the line draws, creating a drawing effect.
+    """
+    try:
+        from friday.overlay_engine import ensure_running
+        eng = ensure_running()
+        eng.draw_line(float(x1), float(y1), float(x2), float(y2),
+                      color=color, width=width, duration=duration)
+        return f"[OK] Line ({x1},{y1}) -> ({x2},{y2})"
+    except Exception as e:
+        return f"[FAIL] draw_line: {e}"
+
+
+def draw_path(path_data: str, x: int = 0, y: int = 0,
+              color: str = "#3B82F6", width: float = 3,
+              duration: float = 5.0) -> str:
+    """Draw an arbitrary SVG path on the overlay.
+    path_data: SVG path string like 'M 100 100 C 200 50, 300 150, 400 100'
+    Draws anything, anywhere on screen.
+    """
+    try:
+        from friday.overlay_engine import ensure_running
+        eng = ensure_running()
+        eng.draw_path(path_data, float(x), float(y), color, width, duration)
+        return f"[OK] Path drawn at offset ({x},{y})"
+    except Exception as e:
+        return f"[FAIL] draw_path: {e}"
+
+
+def point_at(x: int, y: int, label: str = "") -> str:
+    """Animate the cursor buddy to screen coordinates with label.
+    Non-blocking — returns immediately after queuing the animation.
+    """
+    try:
+        from friday.overlay_engine import ensure_running
+        eng = ensure_running()
+        eng.fly_to(float(x), float(y), label)
+        return f"[OK] Pointing at ({x}, {y})" + (f": {label}" if label else "")
+    except Exception as e:
+        return f"[FAIL] point_at: {e}"
 
 
 def search_browser_history(query: str, days_back: int = 30) -> str:
@@ -1793,7 +1823,8 @@ def knowledge_query(topic: str) -> str:
 
 def generate_research_report(topic: str, depth: int = 30, max_pages: int = 50,
                               chart_types: list[str] | None = None,
-                              include_tables: bool = True) -> str:
+                              include_tables: bool = True,
+                              output_format: str = "pdf") -> str:
     """One-shot: deep research a topic using LLM-powered multi-source research + synthesis,
     save to knowledge store, and generate a detailed PDF report with charts and tables.
     Supports 20+ chart types: bar, line, pie, area, scatter, histogram, heatmap, radar, box, etc.
@@ -2837,6 +2868,28 @@ def exchange_oauth_code(redirect_url: str) -> str:
         return "[FAIL] google_oauth module not available."
     except Exception as e:
         return f"[FAIL] Code exchange failed: {e}"
+
+
+def enable_google_api(api_name: str) -> str:
+    """Enable a Google API service in your GCP project.
+    Call this when FRIDAY gets a 403 from a Google API. Common API names:
+    slides.googleapis.com, docs.googleapis.com, sheets.googleapis.com,
+    drive.googleapis.com, calendar.googleapis.com, gmail.googleapis.com,
+    youtube.googleapis.com, people.googleapis.com, books.googleapis.com.
+    Returns status message."""
+    try:
+        from friday.google_oauth import enable_api, get_access_token
+        token = get_access_token()
+        if not token:
+            return "[FAIL] No Google OAuth token. Run google_authorize() first."
+        result = enable_api(api_name)
+        if result.get("success"):
+            return f"[OK] Google API '{api_name}' enabled successfully!"
+        return f"[FAIL] Could not enable '{api_name}': {result.get('error', 'Unknown error')}"
+    except ImportError:
+        return "[FAIL] google_oauth module not available."
+    except Exception as e:
+        return f"[FAIL] enable_google_api error: {e}"
 
 
 def read_emails(count: int = 10) -> str:

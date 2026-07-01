@@ -151,7 +151,7 @@ def _check_browser_use() -> bool:
 async def run_browser_task(
     task: str,
     llm_provider: str = "google",
-    llm_model: str = "gemini-3.1-flash-live-preview",
+    llm_model: str = "gemini-2.5-flash-native-audio-preview-12-2025",
     headless: bool = False,
     max_steps: int = 30,
     keep_browser_open: bool = False,
@@ -240,7 +240,7 @@ def _build_llm(provider: str, model: str):
 
     if provider == "builtin":
         from browser_use import ChatBrowserUse
-        return ChatBrowserUse(model=model if model != "gemini-3.1-flash-live-preview" else None)
+        return ChatBrowserUse(model=model if model != "gemini-2.5-flash-native-audio-preview-12-2025" else None)
     elif provider == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")

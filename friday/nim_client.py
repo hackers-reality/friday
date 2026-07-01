@@ -174,6 +174,12 @@ class InferenceClient:
         if tools:
             payload["tools"] = tools
 
+        # Skip models that are NOT NIM models — they'll 404
+        if model.startswith("opencode/") or "mimo" in model:
+            return NIMResult(model=model,
+                             content=f"[NIM skip] '{model}' is not a NIM model, falling through.",
+                             usage={}, duration_ms=0)
+
         for attempt in range(4):
             t0 = time.monotonic()
             try:

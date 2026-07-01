@@ -288,7 +288,7 @@ class FridayApp(App):
         Binding("ctrl+n", "townhall", "Townhall"),
     ]
 
-    def __init__(self, *, model_id="gemini-3.1-flash-live-preview", tools_count=0):
+    def __init__(self, *, model_id="gemini-2.5-flash-native-audio-preview-12-2025", tools_count=0):
         super().__init__()
         self.mid = model_id
         self.tcnt = tools_count

@@ -19,11 +19,23 @@ import json
 import os
 import re
 import asyncio
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+CONFIG_CHANGE_FILE = Path(__file__).resolve().parent.parent / ".config_updated"
+
+
+def _notify_friday(event_type: str, details: str = ""):
+    """Write a change event so Friday can pick it up and react."""
+    try:
+        data = {"event": event_type, "details": details, "ts": time.time(), "iso": datetime.now(timezone.utc).isoformat()}
+        CONFIG_CHANGE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
 # ── Inline SVG Data URIs for brands not available on SimpleIcons CDN ───────
 # These are 40x40 rounded-square icons with the brand letter on brand color.
@@ -81,32 +93,26 @@ API_LOGO = {
     "SECURITYTRAILS_API_KEY": {"src": f"{FAVICON.format(domain='securitytrails.com')}", "type": "favicon", "fallback": "securitytrails", "domain": "securitytrails.com"},
     "WHATCMS_API_KEY": {"src": f"{FAVICON.format(domain='whatcms.org')}", "type": "favicon", "fallback": "whatcms", "domain": "whatcms.org"},
     "FULLCONTACT_API_KEY": {"src": f"{FAVICON.format(domain='fullcontact.com')}", "type": "favicon", "fallback": "fullcontact", "domain": "fullcontact.com"},
-    "GITHUB_TOKEN": {"src": f"{SIMPLEICONS}/github/FFFFFF", "type": "simpleicons", "fallback": "github", "domain": "github.com"},
+    "GITHUB_CLIENT_ID": {"src": f"{SIMPLEICONS}/github/FFFFFF", "type": "simpleicons", "fallback": "github", "domain": "github.com"},
+    "GITHUB_CLIENT_SECRET": {"src": f"{SIMPLEICONS}/github/FFFFFF", "type": "simpleicons", "fallback": "github", "domain": "github.com"},
     "OPENCAGE_API_KEY": {"src": f"{SIMPLEICONS}/opencage/00e5ff", "type": "simpleicons", "fallback": "opencage", "domain": "opencagedata.com"},
     "SPOTIFY_CLIENT_ID": {"src": f"{SIMPLEICONS}/spotify/1DB954", "type": "simpleicons", "fallback": "spotify", "domain": "spotify.com"},
     "SPOTIFY_CLIENT_SECRET": {"src": f"{SIMPLEICONS}/spotify/1DB954", "type": "simpleicons", "fallback": "spotify", "domain": "spotify.com"},
-    "SPOTIFY_REDIRECT_URI": {"src": f"{SIMPLEICONS}/spotify/1DB954", "type": "simpleicons", "fallback": "spotify", "domain": "spotify.com"},
-    "ALEXA_WEBHOOK_URL": {"src": f"{FAVICON.format(domain='alexa.com')}", "type": "favicon", "fallback": "alexa", "domain": "alexa.com"},
-    "FRIDAY_WEBHOOK_SECRET": {"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%234a5568'/%3E%3Ctext x='20' y='28' font-size='22' font-family='Arial,sans-serif' font-weight='bold' fill='%2300e5ff' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E", "type": "svg", "fallback": None, "domain": None},
-    "GCP_PROJECT": {"src": f"{SIMPLEICONS}/googlecloud/4285F4", "type": "simpleicons", "fallback": "googlecloud", "domain": "cloud.google.com"},
-    "GCP_LOCATION": {"src": f"{SIMPLEICONS}/googlecloud/4285F4", "type": "simpleicons", "fallback": "googlecloud", "domain": "cloud.google.com"},
-    "OPENCODE_ZEN_MODEL": {"src": f"{SIMPLEICONS}/opencode/00e5ff", "type": "simpleicons", "fallback": "opencode", "domain": "opencode.ai"},
-    "NVIDIA_NIM_VISION_MODEL": {"src": f"{SIMPLEICONS}/nvidia/76B900", "type": "simpleicons", "fallback": "nvidia", "domain": "nvidia.com"},
     "GITLAB_TOKEN": {"src": f"{SIMPLEICONS}/gitlab/E24329", "type": "simpleicons", "fallback": "gitlab", "domain": "gitlab.com"},
-    "TELEGRAM_API_ID": {"src": f"{FAVICON.format(domain='telegram.org')}", "type": "favicon", "fallback": "telegram", "domain": "telegram.org"},
     "TELEGRAM_API_HASH": {"src": f"{FAVICON.format(domain='telegram.org')}", "type": "favicon", "fallback": "telegram", "domain": "telegram.org"},
     "REDDIT_CLIENT_ID": {"src": f"{SIMPLEICONS}/reddit/FF4500", "type": "simpleicons", "fallback": "reddit", "domain": "reddit.com"},
     "REDDIT_CLIENT_SECRET": {"src": f"{SIMPLEICONS}/reddit/FF4500", "type": "simpleicons", "fallback": "reddit", "domain": "reddit.com"},
     "TWITTER_BEARER_TOKEN": {"src": f"{SIMPLEICONS}/x/FFFFFF", "type": "simpleicons", "fallback": "x", "domain": "twitter.com"},
     "TWITTER_API_KEY": {"src": f"{SIMPLEICONS}/x/FFFFFF", "type": "simpleicons", "fallback": "x", "domain": "twitter.com"},
     "TWITTER_API_SECRET": {"src": f"{SIMPLEICONS}/x/FFFFFF", "type": "simpleicons", "fallback": "x", "domain": "twitter.com"},
-    "INSTAGRAM_USER": {"src": f"{SIMPLEICONS}/instagram/E4405F", "type": "simpleicons", "fallback": "instagram", "domain": "instagram.com"},
     "INSTAGRAM_PASS": {"src": f"{SIMPLEICONS}/instagram/E4405F", "type": "simpleicons", "fallback": "instagram", "domain": "instagram.com"},
     "OTX_API_KEY": {"src": f"{FAVICON.format(domain='alienvault.com')}", "type": "favicon", "fallback": "alienvault", "domain": "alienvault.com"},
     "LEAKCHECK_API_KEY": {"src": f"{FAVICON.format(domain='leakcheck.io')}", "type": "favicon", "fallback": "leakcheck", "domain": "leakcheck.io"},
     "FLICKR_API_KEY": {"src": f"{FAVICON.format(domain='flickr.com')}", "type": "favicon", "fallback": "flickr", "domain": "flickr.com"},
     "DISCOGS_TOKEN": {"src": f"{FAVICON.format(domain='discogs.com')}", "type": "favicon", "fallback": "discogs", "domain": "discogs.com"},
-    "DEHASHED_EMAIL": {"src": f"{FAVICON.format(domain='dehashed.com')}", "type": "favicon", "fallback": "dehashed", "domain": "dehashed.com"},
+    "DISCORD_BOT_TOKEN": {"src": f"{SIMPLEICONS}/discord/5865F2", "type": "simpleicons", "fallback": "discord", "domain": "discord.com"},
+    "TELEGRAM_API_ID": {"src": f"{FAVICON.format(domain='telegram.org')}", "type": "favicon", "fallback": "telegram", "domain": "telegram.org"},
+    "INSTAGRAM_USER": {"src": f"{SIMPLEICONS}/instagram/E4405F", "type": "simpleicons", "fallback": "instagram", "domain": "instagram.com"},
 }
 
 GOOGLE_LOGO = {
@@ -157,7 +163,6 @@ CATEGORY_ICON_MAP = {
     "BigQuery": "bigquery",
     "Cloud Storage": "cloudstorage",
     "Cloud Platform": "cloud",
-    "Maps": "maps",
     "Classroom": "classroom",
     "Gmail Readonly": "gmail",
     "Drive Readonly": "drive",
@@ -494,18 +499,31 @@ API_KEY_META = {
         "ratelimit": "Free: 1 lookup/second. Paid: 5 lookups/second.",
         "related": "None",
     },
-    "GITHUB_TOKEN": {
-        "name": "GitHub Personal Token",
+    "GITHUB_CLIENT_ID": {
+        "name": "GitHub OAuth Client ID",
         "category": "Development",
-        "description": "GitHub Personal Access Token for authenticating with the GitHub API. FRIDAY uses GitHub for code repository analysis (read file contents, commit history, contributors), issue and PR management (create, update, close issues and pull requests), code search across public repositories, user profile lookup, repository statistics and health metrics, GitHub Actions monitoring (workflow runs, job status), and software composition analysis.",
-        "pricing": "Free — unlimited API calls with a rate limit of 5,000 requests per hour for authenticated users (versus 60/hour unauthenticated). Fine-grained tokens allow scoped access to specific repositories and permissions. GitHub Actions minutes included: free tier gives 2,000 minutes/month for public repositories and self-hosted runners.",
-        "url": "https://github.com/settings/tokens",
-        "docs": "https://docs.github.com/en/rest",
-        "test_url": "https://api.github.com/user",
-        "test_headers": {"Authorization": "Bearer {key}"},
-        "howto": "1. Go to github.com/settings/tokens 2. Click 'Generate new token (classic)' or 'Fine-grained token' 3. Select scopes: repo (full control), read:user, read:org, workflow 4. Generate and copy the token 5. Paste into FRIDAY settings. Store it securely as GitHub only shows it once.",
-        "ratelimit": "5,000 requests/hour for API. 2,000 GitHub Actions minutes/month (free).",
-        "related": "None",
+        "description": "GitHub OAuth App client identifier for authenticating FRIDAY with the GitHub API via OAuth flow. FRIDAY uses GitHub for code repository analysis (read file contents, commit history, contributors), issue and PR management (create, update, close issues and pull requests), code search across public repositories, user profile lookup, repository statistics and health metrics, GitHub Actions monitoring (workflow runs, job status), and software composition analysis. OAuth provides scoped, revocable access without sharing a long-lived token.",
+        "pricing": "Free — unlimited API calls with a rate limit of 5,000 requests per hour for authenticated users (versus 60/hour unauthenticated). GitHub Actions minutes included: free tier gives 2,000 minutes/month for public repositories and self-hosted runners.",
+        "url": "https://github.com/settings/developers",
+        "docs": "https://docs.github.com/en/apps/oauth-apps",
+        "test_url": None,
+        "test_headers": None,
+        "howto": "1. Go to github.com/settings/developers 2. Click 'New OAuth App' 3. Set Application name: FRIDAY 4. Set Homepage URL: http://127.0.0.1:7071 5. Set Authorization callback URL: http://127.0.0.1:7071/settings/github/callback 6. Register and copy the Client ID and Client Secret 7. Paste both into FRIDAY settings.",
+        "ratelimit": "5,000 requests/hour. 2,000 GitHub Actions minutes/month (free).",
+        "related": "GITHUB_CLIENT_SECRET",
+    },
+    "GITHUB_CLIENT_SECRET": {
+        "name": "GitHub OAuth Client Secret",
+        "category": "Development",
+        "description": "GitHub OAuth App client secret — the confidential counterpart to GITHUB_CLIENT_ID. Used together in the OAuth authorization code flow to exchange temporary codes for access tokens. FRIDAY stores this locally and uses it to authenticate GitHub API requests on your behalf. Never share this secret — it grants API access to all repos your OAuth app has scoped access to.",
+        "pricing": "Free — no cost for OAuth App registration or usage. GitHub does not charge for API calls made through OAuth tokens.",
+        "url": "https://github.com/settings/developers",
+        "docs": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps",
+        "test_url": None,
+        "test_headers": None,
+        "howto": "1. In the same GitHub OAuth App where you got the Client ID 2. Click 'Generate a new client secret' 3. Copy the secret immediately (it's shown only once) 4. Paste into FRIDAY settings. Keep this value secure — it's equivalent to a password for your GitHub integration.",
+        "ratelimit": "Same as Client ID: 5,000 requests/hour.",
+        "related": "GITHUB_CLIENT_ID",
     },
     "OPENCAGE_API_KEY": {
         "name": "OpenCage Geocoding Key",
@@ -648,7 +666,7 @@ API_KEY_META = {
         "test_headers": {"Authorization": "Bearer {key}"},
         "howto": "1. Go to gitlab.com/-/user_settings/personal_access_tokens 2. Enter a token name and set an expiration date 3. Select scopes: 'api', 'read_repository', 'write_repository' 4. Click 'Create personal access token' 5. Copy the token immediately (it won't be shown again after you leave the page)",
         "ratelimit": "Free: 2,000 requests/hour. Premium/Ultimate: 6,000 requests/hour",
-        "related": "GITHUB_TOKEN",
+        "related": "None",
     },
     "TELEGRAM_API_ID": {
         "name": "Telegram API ID",
@@ -819,6 +837,19 @@ API_KEY_META = {
         "ratelimit": "25 requests/minute per IP. Database endpoints: 60 requests/minute for authenticated users.",
         "related": "DISCOGS_CONSUMER_KEY, DISCOGS_CONSUMER_SECRET",
     },
+    "DISCORD_BOT_TOKEN": {
+        "name": "Discord Bot Token",
+        "category": "Social",
+        "description": "Discord bot token for authenticating your bot with Discord's API. FRIDAY uses this to read messages, manage servers, and interact with users on Discord servers where the bot is invited. The token is generated from the Discord Developer Portal and grants full access to all capabilities your bot has been assigned.",
+        "pricing": "Free. Discord bots are free to create and use. No paid tier required. However, Discord has rate limits: 50 API calls per second per bot, with specific endpoint limits (e.g., 10,000 webhook updates per day).",
+        "url": "https://discord.com/developers/applications",
+        "docs": "https://discord.com/developers/docs/topics/oauth2#bot-tokens",
+        "test_url": "https://discord.com/api/v10/users/@me",
+        "test_headers": {"Authorization": "Bot {key}"},
+        "howto": "1. Go to discord.com/developers/applications 2. Click 'New Application' and name it FRIDAY 3. Go to Bot settings 4. Click 'Reset Token' 5. Copy the token (starts with 'MTE...') 6. Under Privileged Gateway Intents, enable all three intents 7. Paste the token into FRIDAY settings",
+        "ratelimit": "50 requests/second per bot. Global rate limit: ~100 requests/second.",
+        "related": "None",
+    },
     "DEHASHED_EMAIL": {
         "name": "Dehashed API Email",
         "category": "OSINT",
@@ -837,27 +868,147 @@ API_KEY_META = {
 SERVICE_CATEGORIES = ["AI", "Google", "Voice", "Media", "OSINT", "Development", "Integration"]
 
 API_KEYS_ORDER = [
-    "GOOGLE_API_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
-    "GCP_PROJECT", "GCP_LOCATION",
-    "NVIDIA_VISION_API_KEY", "NVIDIA_NIM_API_KEY", "NVIDIA_NIM_VISION_MODEL",
-    "OPENCODE_ZEN_API_KEY", "OPENCODE_ZEN_MODEL",
+    "GOOGLE_API_KEY",
+    "NVIDIA_VISION_API_KEY", "NVIDIA_NIM_API_KEY",
+    "OPENCODE_ZEN_API_KEY",
     "GROQ_API_KEY", "SARVAM_API_KEY", "PICOVOICE_ACCESS_KEY",
     "SHODAN_API_KEY", "CENSYS_API_ID", "CENSYS_API_SECRET",
     "VIRUSTOTAL_API_KEY", "HUNTER_API_KEY", "CLEARBIT_API_KEY",
-    "HIBP_API_KEY", "DEHASHED_API_KEY", "DEHASHED_EMAIL", "INTELX_API_KEY",
+    "HIBP_API_KEY", "DEHASHED_API_KEY", "INTELX_API_KEY",
     "OTX_API_KEY", "LEAKCHECK_API_KEY",
     "ABUSEIPDB_API_KEY", "IPINFO_API_KEY", "URLSCAN_API_KEY",
     "BUILTWITH_API_KEY", "SECURITYTRAILS_API_KEY", "WHATCMS_API_KEY",
     "FULLCONTACT_API_KEY",
-    "GITHUB_TOKEN", "GITLAB_TOKEN",
-    "TELEGRAM_API_ID", "TELEGRAM_API_HASH",
-    "REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET",
-    "TWITTER_BEARER_TOKEN", "TWITTER_API_KEY", "TWITTER_API_SECRET",
-    "INSTAGRAM_USER", "INSTAGRAM_PASS",
-    "OPENCAGE_API_KEY",
-    "SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REDIRECT_URI",
-    "FLICKR_API_KEY", "DISCOGS_TOKEN",
-    "ALEXA_WEBHOOK_URL", "FRIDAY_WEBHOOK_SECRET",
+    "GITLAB_TOKEN", "OPENCAGE_API_KEY", "FLICKR_API_KEY", "DISCOGS_TOKEN",
+]
+
+# ── Service Credential Cards (multi-input, OAuth-capable) ────────────────
+# Each service has: id, name, logo, fields (inputs), redirect_uri (shown to user),
+# oauth (bool), connected_check (how to detect connected state)
+
+SERVICES = [
+    {
+        "id": "google",
+        "name": "Google",
+        "logo": f"{SIMPLEICONS}/google/4285F4",
+        "color": "#4285F4",
+        "desc": "OAuth credentials for Google services (Gmail, Calendar, Drive, Docs, Sheets, Slides, YouTube, etc.). Get these from Google Cloud Console > APIs & Services > Credentials.",
+        "fields": [
+            {"key": "GOOGLE_CLIENT_ID", "label": "Client ID", "type": "text"},
+            {"key": "GOOGLE_CLIENT_SECRET", "label": "Client Secret", "type": "password"},
+        ],
+        "redirect_uri": "http://127.0.0.1:7071/settings/google/callback",
+        "oauth": True,
+        "oauth_url": "/settings/google/auth",
+        "revoke_url": "/settings/google/revoke",
+        "status_url": "/settings/google/status",
+        "connected_check": "has_creds",
+    },
+    {
+        "id": "github",
+        "name": "GitHub",
+        "logo": f"{SIMPLEICONS}/github/FFFFFF",
+        "color": "#FFFFFF",
+        "desc": "OAuth credentials for GitHub API access (repos, issues, PRs, workflows, orgs). Register an OAuth App at GitHub Settings > Developer Settings > OAuth Apps.",
+        "fields": [
+            {"key": "GITHUB_CLIENT_ID", "label": "Client ID", "type": "text"},
+            {"key": "GITHUB_CLIENT_SECRET", "label": "Client Secret", "type": "password"},
+        ],
+        "redirect_uri": "http://127.0.0.1:7071/settings/github/callback",
+        "oauth": True,
+        "oauth_url": "/settings/github/auth",
+        "revoke_url": "/settings/github/revoke",
+        "status_url": "/settings/github/status",
+        "connected_check": "has_token",
+    },
+    {
+        "id": "spotify",
+        "name": "Spotify",
+        "logo": f"{SIMPLEICONS}/spotify/1DB954",
+        "color": "#1DB954",
+        "desc": "Spotify API credentials for music playback control. Register at Spotify Developer Dashboard, then add the redirect URI below to your app settings.",
+        "fields": [
+            {"key": "SPOTIFY_CLIENT_ID", "label": "Client ID", "type": "text"},
+            {"key": "SPOTIFY_CLIENT_SECRET", "label": "Client Secret", "type": "password"},
+        ],
+        "redirect_uri": "http://127.0.0.1:8888/callback",
+        "oauth": False,
+        "connected_check": "both",
+    },
+    {
+        "id": "reddit",
+        "name": "Reddit",
+        "logo": f"{SIMPLEICONS}/reddit/FF4500",
+        "color": "#FF4500",
+        "desc": "Reddit API credentials for reading posts, comments, and subreddit data. Create an app at Reddit App Preferences > Apps > Create App.",
+        "fields": [
+            {"key": "REDDIT_CLIENT_ID", "label": "Client ID", "type": "text"},
+            {"key": "REDDIT_CLIENT_SECRET", "label": "Client Secret", "type": "password"},
+        ],
+        "redirect_uri": "http://127.0.0.1:8000/reddit_callback",
+        "oauth": False,
+        "connected_check": "both",
+    },
+    {
+        "id": "twitter",
+        "name": "Twitter / X",
+        "logo": f"{SIMPLEICONS}/x/FFFFFF",
+        "color": "#FFFFFF",
+        "desc": "Twitter API credentials for posting tweets, reading timelines, and searching content. Get these from the Twitter Developer Portal > Projects & Apps.",
+        "fields": [
+            {"key": "TWITTER_BEARER_TOKEN", "label": "Bearer Token", "type": "password"},
+            {"key": "TWITTER_API_KEY", "label": "API Key", "type": "text"},
+            {"key": "TWITTER_API_SECRET", "label": "API Secret", "type": "password"},
+        ],
+        "redirect_uri": None,
+        "oauth": False,
+        "connected_check": "any",
+    },
+    {
+        "id": "telegram",
+        "name": "Telegram",
+        "logo": f"{FAVICON.format(domain='telegram.org')}",
+        "color": "#0088CC",
+        "desc": "Telegram API credentials for reading channels and messages. Get API ID and Hash at my.telegram.org > API Development Tools.",
+        "fields": [
+            {"key": "TELEGRAM_API_ID", "label": "API ID", "type": "text"},
+            {"key": "TELEGRAM_API_HASH", "label": "API Hash", "type": "password"},
+        ],
+        "redirect_uri": None,
+        "oauth": False,
+        "connected_check": "both",
+    },
+    {
+        "id": "instagram",
+        "name": "Instagram",
+        "logo": f"{SIMPLEICONS}/instagram/E4405F",
+        "color": "#E4405F",
+        "desc": "Instagram credentials for profile access and content monitoring. Used for OSINT data collection. Note: Basic Display API requires Facebook Login setup.",
+        "fields": [
+            {"key": "INSTAGRAM_USER", "label": "Username", "type": "text"},
+            {"key": "INSTAGRAM_PASS", "label": "Password", "type": "password"},
+        ],
+        "redirect_uri": None,
+        "oauth": False,
+        "connected_check": "both",
+    },
+    {
+        "id": "discord",
+        "name": "Discord",
+        "logo": f"{SIMPLEICONS}/discord/5865F2",
+        "color": "#5865F2",
+        "desc": "Discord bot token for server management, message reading, and community interaction. Create a bot at Discord Developer Portal, then copy the token. Optionally set guild/channel IDs for auto-join or announcements.",
+        "fields": [
+            {"key": "DISCORD_BOT_TOKEN", "label": "Bot Token", "type": "password"},
+            {"key": "DISCORD_GUILD_ID", "label": "Guild ID (optional)", "type": "text"},
+            {"key": "DISCORD_CHANNEL_ID", "label": "Default Channel ID (optional)", "type": "text"},
+            {"key": "DISCORD_ANNOUNCE_CHANNEL", "label": "Announcement Channel ID (optional)", "type": "text"},
+            {"key": "DISCORD_LOG_CHANNEL", "label": "Log Channel ID (optional)", "type": "text"},
+        ],
+        "redirect_uri": None,
+        "oauth": False,
+        "connected_check": "present",
+    },
 ]
 
 # ── Google Services with ALL OAuth scopes and detailed features ───────────
@@ -1100,9 +1251,7 @@ CATEGORY_TO_SCOPE_CATEGORIES = {
         "Cloud Platform", "BigQuery", "Cloud Storage",
         "Translation", "Natural Language", "Firebase",
     ],
-    "maps_places": [
-        "Maps",
-    ],
+    "maps_places": [],
     "education": [
         "Classroom",
     ],
@@ -1214,6 +1363,7 @@ async def update_api_key(req: Request):
         return JSONResponse({"success": False, "error": "Key value is required"}, status_code=400)
     ok = _save_env({key: value})
     if ok:
+        _notify_friday("api_key_saved", key)
         meta = API_KEY_META.get(key, {})
         return JSONResponse({"success": True, "key": key, "name": meta.get("name", key),
             "value": _mask_key(value) if value else "", "present": bool(value)})
@@ -1255,6 +1405,40 @@ async def test_api_key(req: Request):
         return JSONResponse({"success": False, "message": "Request timed out."})
     except Exception as e:
         return JSONResponse({"success": False, "message": str(e)[:200]})
+
+
+@router.get("/settings/services/status")
+async def services_status():
+    env = _load_env()
+    from friday.google_oauth import credentials_exist as google_creds_exist
+    result = []
+    for sv in SERVICES:
+        present = 0
+        for f in sv["fields"]:
+            if env.get(f["key"], ""):
+                present += 1
+        total = len(sv["fields"])
+        d = {"id": sv["id"], "name": sv["name"], "logo": sv["logo"], "color": sv["color"],
+             "desc": sv["desc"], "fields": sv["fields"],
+             "redirect_uri": sv.get("redirect_uri"), "oauth": sv.get("oauth", False),
+             "field_count": total, "filled": present}
+        cc = sv.get("connected_check", "")
+        if cc == "both":
+            d["connected"] = present == total
+        elif cc == "any":
+            d["connected"] = present > 0
+        elif cc == "present":
+            d["connected"] = present == total
+        elif cc == "has_creds":
+            d["connected"] = google_creds_exist()
+        elif cc == "has_token":
+            d["connected"] = GITHUB_TOKEN_PATH.exists() and GITHUB_TOKEN_PATH.stat().st_size > 10
+        else:
+            d["connected"] = False
+        result.append(d)
+    total = len(result)
+    connected = sum(1 for r in result if r["connected"])
+    return JSONResponse({"services": result, "total": total, "connected": connected})
 
 
 @router.get("/settings/google/status")
@@ -1346,6 +1530,8 @@ async def google_auth_category(category: str):
         "&response_type=code"
         f"&scope={scope_str}"
         "&access_type=offline&prompt=consent"
+        "&include_granted_scopes=true"
+        f"&state={category}"
     )
     return RedirectResponse(auth_url)
 
@@ -1368,6 +1554,7 @@ async def google_auth_all():
         "&response_type=code"
         f"&scope={scope_str}"
         "&access_type=offline&prompt=consent"
+        "&include_granted_scopes=true"
     )
     return RedirectResponse(auth_url)
 
@@ -1393,7 +1580,9 @@ async def google_callback(code: str = "", error: str = "", state: str = ""):
             if resp.status_code != 200:
                 return HTMLResponse(f"<html><body style='background:#080c14;color:#e0e6f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'><div style='text-align:center'><h2>Token exchange failed</h2><p>{resp.text[:200]}</p><a href='/settings' style='color:#00e5ff'>\u2190 Back</a></div></body></html>")
             td = resp.json()
-            success = save_token_data(td, category=None)
+            category = state or None
+            success = save_token_data(td, category=category)
+        _notify_friday("oauth_connected", "google")
         return HTMLResponse("""<html><head><style>
 body{background:#080c14;color:#e0e6f0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 .c{background:rgba(255,255,255,0.04);border:1px solid rgba(0,229,255,0.2);border-radius:16px;padding:48px;text-align:center;max-width:440px}
@@ -1417,10 +1606,173 @@ async def google_revoke():
     if creds_path.exists():
         try:
             creds_path.unlink()
+            _notify_friday("oauth_revoked", "google")
             return JSONResponse({"success": True, "message": "Credentials revoked."})
         except Exception as e:
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
     return JSONResponse({"success": True, "message": "No credentials found."})
+
+
+# ── GitHub OAuth ──
+
+GITHUB_TOKEN_PATH = Path(__file__).resolve().parent.parent / ".github_token.json"
+
+
+@router.get("/settings/github/status")
+async def github_status():
+    env = _load_env()
+    from friday.github import _GITHUB_CLIENT_ID as GH_DEFAULT_CID
+    cid = env.get("GITHUB_CLIENT_ID", GH_DEFAULT_CID)
+    csecret = env.get("GITHUB_CLIENT_SECRET", "")
+    configured = bool(cid)
+    token = ""
+    if GITHUB_TOKEN_PATH.exists():
+        try:
+            token = json.loads(GITHUB_TOKEN_PATH.read_text()).get("access_token", "")
+        except Exception:
+            pass
+    return JSONResponse({
+        "configured": configured,
+        "client_id": _mask_key(cid) if cid != GH_DEFAULT_CID else "(default public app)",
+        "has_token": bool(token),
+        "user": "",
+    })
+
+
+@router.get("/settings/github/auth")
+async def github_auth():
+    env = _load_env()
+    from friday.github import _GITHUB_CLIENT_ID as GH_DEFAULT_CID
+    cid = env.get("GITHUB_CLIENT_ID", GH_DEFAULT_CID)
+    if not cid:
+        return HTMLResponse("<html><body style='background:#080c14;color:#e0e6f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'><div style='text-align:center'><h2>GitHub Client ID not configured</h2><p>No default or configured client ID found.</p><a href='/settings' style='color:#00e5ff'>&#x2190; Back</a></div></body></html>")
+    # Device flow — no client secret needed
+    import httpx, time
+    async with httpx.AsyncClient(timeout=15) as client:
+        payload = {"client_id": cid, "scope": "repo workflow admin:org"}
+        resp = await client.post("https://github.com/login/device/code", data=payload, headers={"Accept": "application/json"})
+        data = resp.json()
+    if "device_code" not in data:
+        return HTMLResponse(f"<html><body style='background:#080c14;color:#e0e6f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'><div style='text-align:center'><h2>Device Flow Error</h2><p>{data.get('error_description','Could not get device code')}</p><a href='/settings' style='color:#00e5ff'>&#x2190; Back</a></div></body></html>")
+    device_code = data["device_code"]
+    user_code = data["user_code"]
+    interval = data.get("interval", 5)
+    page = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>GitHub Device Auth — FRIDAY</title>
+<style>
+*{box-sizing:border-box}
+body{background:#080c14;color:#e0e6f0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}
+.card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:40px;text-align:center;max-width:480px;width:100%}
+h1{font-size:24px;margin:0 0 8px}
+p{color:#6b7a99;font-size:14px;margin:0 0 24px;line-height:1.6}
+.code{display:inline-block;font-size:32px;font-weight:700;letter-spacing:8px;padding:16px 32px;background:rgba(255,255,255,0.06);border:2px dashed rgba(0,229,255,0.3);border-radius:12px;color:#00e5ff;font-family:monospace;margin:16px 0;cursor:pointer;transition:background 0.2s;user-select:all}
+.code:hover{background:rgba(0,229,255,0.08)}
+.btn{display:inline-block;padding:12px 32px;background:#00e5ff;color:#080c14;text-decoration:none;border-radius:8px;font-weight:600;border:none;cursor:pointer;font-size:14px}
+.btn:hover{background:#00c4dd}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+#status{margin-top:20px;font-size:13px;color:#6b7a99}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,229,255,0.3);border-top-color:#00e5ff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1a2332;color:#e0e6f0;padding:12px 24px;border-radius:10px;border:1px solid rgba(0,229,255,0.2);font-size:13px;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999}
+#toast.show{opacity:1}
+a{color:#00e5ff}
+</style></head><body>
+<div id="toast"></div>
+<div class="card">
+<h1>&#x1f454; GitHub Device Auth</h1>
+<p>Using the <strong>default public app</strong>.<br>Your code has been copied &mdash; paste it at the GitHub page that just opened.</p>
+<div class="code" id="codeEl">__USER_CODE__</div>
+<p style="margin:4px 0 16px;font-size:12px;color:#4a5a7a">Click the code above to copy again</p>
+<div id="status"><span class="spinner"></span>Waiting for authorization... (auto-checks every __INTERVAL__s)</div>
+<p style="margin-top:20px;font-size:12px;color:#4a5a7a">After authorizing, this page will auto-redirect to your dashboard.</p>
+</div>
+<script>
+var dc="__DEVICE_CODE__",iv=__INTERVAL__;
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.className='show';setTimeout(function(){t.className=''},2500)}
+function copyCode(){var el=document.getElementById('codeEl'),t=el.textContent.trim();navigator.clipboard.writeText(t).then(function(){toast('\\u2705 PIN copied to clipboard')}).catch(function(){var r=document.createRange();r.selectNode(el);window.getSelection().removeAllRanges();window.getSelection().addRange(r);document.execCommand('copy');window.getSelection().removeAllRanges();toast('\\u2705 PIN copied to clipboard')})}
+copyCode();var w=window.open('https://github.com/login/device');if(!w){document.getElementById('status').innerHTML='\\u26a0 Popup blocked. <a href="https://github.com/login/device" target="_blank" style="color:#00e5ff">Click here</a>'}
+function poll(){var x=new XMLHttpRequest();x.open('POST','/settings/github/device/poll',true);x.setRequestHeader('Content-Type','application/json');x.onload=function(){if(x.status===200){try{var d=JSON.parse(x.responseText);if(d.success){document.getElementById('status').innerHTML='\\u2705 Authorized! Redirecting...';setTimeout(function(){window.location.href='/settings'},1500)}else if(d.error==='authorization_pending'){var s=document.getElementById('status');s.innerHTML='<span class=\"spinner\"></span>Still waiting...';setTimeout(poll,iv*1000)}else if(d.error==='access_denied'){document.getElementById('status').innerHTML='\\u274c Authorization denied. <a href=\"/settings/github/auth\" style=\"color:#00e5ff\">Try again</a>'}else{document.getElementById('status').innerHTML='\\u23f3 '+d.error;setTimeout(poll,iv*1000)}}}catch(e){setTimeout(poll,5000)}};x.onerror=function(){setTimeout(poll,5000)};x.send(JSON.stringify({device_code:dc}))}
+setTimeout(poll,iv*1000);
+document.getElementById('codeEl').onclick=copyCode;
+</script></body></html>"""
+    page = page.replace("__USER_CODE__", user_code).replace("__DEVICE_CODE__", device_code).replace("__INTERVAL__", str(interval))
+    return HTMLResponse(page)
+
+
+@router.post("/settings/github/device/poll")
+async def github_device_poll(data: dict):
+    from friday.github import _GITHUB_CLIENT_ID as GH_DEFAULT_CID
+    dc = data.get("device_code", "")
+    if not dc:
+        return JSONResponse({"error": "no device_code"}, status_code=400)
+    env = _load_env()
+    cid = env.get("GITHUB_CLIENT_ID", GH_DEFAULT_CID)
+    import httpx
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post("https://github.com/login/oauth/access_token", data={
+            "client_id": cid, "device_code": dc,
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        }, headers={"Accept": "application/json"})
+        result = resp.json()
+    if "access_token" in result:
+        GITHUB_TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+        import time
+        saved = {"access_token": result["access_token"], "token_type": result.get("token_type", "bearer"),
+                 "scope": result.get("scope", ""), "created_at": time.time()}
+        GITHUB_TOKEN_PATH.write_text(json.dumps(saved, indent=2), encoding="utf-8")
+        _notify_friday("oauth_connected", "github")
+        return JSONResponse({"success": True})
+    error = result.get("error", "unknown")
+    return JSONResponse({"error": error})
+
+
+@router.get("/settings/github/callback")
+async def github_callback(code: str = "", error: str = ""):
+    from friday.github import _GITHUB_CLIENT_ID as GH_DEFAULT_CID
+    if error:
+        return HTMLResponse(f"<html><body style='background:#080c14;color:#e0e6f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'><div style='text-align:center'><h2>GitHub Auth Error</h2><p>{error}</p><a href='/settings' style='color:#00e5ff'>&#x2190; Back</a></div></body></html>")
+    if not code:
+        return HTMLResponse("<html><body style='background:#080c14;color:#e0e6f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'><div style='text-align:center'><h2>No auth code</h2><a href='/settings' style='color:#00e5ff'>&#x2190; Back</a></div></body></html>")
+    try:
+        env = _load_env()
+        cid = env.get("GITHUB_CLIENT_ID", GH_DEFAULT_CID)
+        csecret = env.get("GITHUB_CLIENT_SECRET", "")
+        import httpx
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post("https://github.com/login/oauth/access_token", data={
+                "client_id": cid, "client_secret": csecret, "code": code,
+                "redirect_uri": "http://127.0.0.1:7071/settings/github/callback",
+            }, headers={"Accept": "application/json"})
+            if resp.status_code != 200:
+                return HTMLResponse(f"<html><body style='background:#080c14;color:#e0e6f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'><div style='text-align:center'><h2>GitHub token exchange failed</h2><p>{resp.text[:200]}</p><a href='/settings' style='color:#00e5ff'>&#x2190; Back</a></div></body></html>")
+            td = resp.json()
+            GITHUB_TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+            GITHUB_TOKEN_PATH.write_text(json.dumps(td, indent=2), encoding="utf-8")
+        return HTMLResponse("""<html><head><style>
+body{background:#080c14;color:#e0e6f0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.c{background:rgba(255,255,255,0.04);border:1px solid rgba(0,229,255,0.2);border-radius:16px;padding:48px;text-align:center;max-width:440px}
+h1{font-size:28px;margin:0 0 12px;background:linear-gradient(135deg,#00e5ff,#76ff03);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+p{color:#6b7a99;font-size:14px;margin:0 0 24px}
+a{display:inline-block;padding:12px 32px;background:#00e5ff;color:#080c14;text-decoration:none;border-radius:8px;font-weight:600}
+.check{font-size:48px;margin-bottom:16px}
+</style></head><body><div class="c"><div class="check">&#x2705;</div><h1>GitHub Connected!</h1><p>Your GitHub account is linked. FRIDAY can now access your repos.</p><a href="/settings">&#x2190; Back to Dashboard</a></div></body></html>""")
+    except ImportError:
+        return HTMLResponse("<html><body style='background:#080c14;color:#e0e6f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'><div style='text-align:center'><h2>httpx library required</h2><a href='/settings' style='color:#00e5ff'>&#x2190; Back</a></div></body></html>")
+    except Exception as e:
+        return HTMLResponse(f"<html><body style='background:#080c14;color:#e0e6f0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'><div style='text-align:center'><h2>GitHub OAuth Error</h2><p>{str(e)}</p><a href='/settings' style='color:#00e5ff'>&#x2190; Back</a></div></body></html>")
+
+
+@router.post("/settings/github/revoke")
+async def github_revoke():
+    if GITHUB_TOKEN_PATH.exists():
+        try:
+            GITHUB_TOKEN_PATH.unlink()
+            _notify_friday("oauth_revoked", "github")
+            return JSONResponse({"success": True, "message": "GitHub token revoked."})
+        except Exception as e:
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+    return JSONResponse({"success": True, "message": "No GitHub token found."})
 
 
 DASHBOARD_HTML = r"""<!DOCTYPE html>
@@ -1569,6 +1921,7 @@ img{-webkit-user-drag:none;user-select:none}
 <nav class="panel-nav">
 <a class="nav-item active" data-page="keys"><span class="nav-icon"><img src="https://cdn.simpleicons.org/key/00e5ff" alt="" onerror="this.style.display='none'"><span class="fb" style="display:none">&#x1f511;</span></span><span class="nav-label">API Keys</span><span class="nav-badge" id="navKB">0</span></a>
 <a class="nav-item" data-page="google"><span class="nav-icon"><img src="https://cdn.simpleicons.org/google/4285F4" alt="" onerror="this.style.display='none'"><span class="fb" style="display:none">&#x1f310;</span></span><span class="nav-label">Google Services</span><span class="nav-badge" id="navGB">0</span></a>
+<a class="nav-item" data-page="services"><span class="nav-icon"><img src="https://cdn.simpleicons.org/apps/00e5ff" alt="" onerror="this.style.display='none'"><span class="fb" style="display:none">&#x2699;</span></span><span class="nav-label">Services</span><span class="nav-badge" id="navSvB">0</span></a>
 </nav></aside>
 <main class="main-content" id="mainContent">
 <header class="top-bar"><button class="hamburger" id="hamburger">&#x2630;</button><h1 id="pageTitle">API Keys</h1><div class="top-bar-right"><span id="sLive" style="display:flex;align-items:center;gap:4px"><span style="color:var(--green)">&#x25cf;</span> Live</span><span id="sClock"></span></div></header>
@@ -1602,6 +1955,28 @@ img{-webkit-user-drag:none;user-select:none}
 </div>
 <div class="card-grid" id="gGrid"></div>
 </div>
+<div class="page" id="page-github">
+<div class="gauth-card" id="ghAuthC">
+<div class="gauth-info"><div class="gdot off" id="ghDot"></div><div class="gauth-text"><h3>GitHub Account</h3><p id="ghStat">Not connected</p></div></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="ghConn">&#x1f517; Connect with GitHub</button><button class="btn btn-danger" id="ghRev" style="display:none">&#x274c; Revoke</button></div>
+</div>
+<div style="margin-top:16px;padding:20px 24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+<p style="font-size:13px;color:var(--text-dim);line-height:1.6">Once connected, FRIDAY can access your repositories, issues, pull requests, workflows, and organization data via the GitHub API with the following scopes:</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:14px">
+<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px"><span style="color:var(--primary)">&#x25cf;</span> repo (full control)</div>
+<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px"><span style="color:var(--primary)">&#x25cf;</span> user (profile, email)</div>
+<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px"><span style="color:var(--primary)">&#x25cf;</span> workflow (Actions)</div>
+<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px"><span style="color:var(--primary)">&#x25cf;</span> admin:org (org management)</div>
+<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px"><span style="color:var(--primary)">&#x25cf;</span> delete_repo</div>
+</div>
+</div>
+</div>
+<div class="page" id="page-services">
+<div class="page-toolbar">
+<div class="toolbar-stats"><span>&#x2699; <b id="svT">0</b></span><span style="color:var(--green)">&#x25cf; <b id="svTON">0</b></span></div>
+</div>
+<div id="svGrid" style="display:flex;flex-direction:column;gap:14px"></div>
+</div>
 </main>
 </div>
 <div class="modal-overlay" id="mOverlay"><div class="modal-panel"><div class="modal-header"><h2 id="mTitle"></h2><button class="modal-close" id="mClose">&#x2715;</button></div><div class="modal-body" id="mBody"></div></div></div>
@@ -1611,7 +1986,7 @@ var kData=[],gCat=[],gAuth={},kF='all',kS='',gF='all',gS='';
 function t(m,ty){ty=ty||'info';var c=document.getElementById('tC'),e=document.createElement('div');e.className='toast '+ty;e.textContent=m;c.appendChild(e);setTimeout(function(){e.classList.add('removing');setTimeout(function(){if(e.parentNode)e.parentNode.removeChild(e)},300)},3500)}
 document.getElementById('hamburger').onclick=function(){document.getElementById('sidePanel').classList.toggle('open');document.getElementById('mainContent').classList.toggle('expanded')};
 document.getElementById('panelToggle').onclick=function(){var s=document.getElementById('sidePanel');s.classList.toggle('closed');setTimeout(function(){document.getElementById('mainContent').classList.toggle('expanded')},50)};
-document.querySelectorAll('.nav-item').forEach(function(n){n.onclick=function(){document.querySelectorAll('.nav-item').forEach(function(x){x.classList.remove('active')});document.querySelectorAll('.page').forEach(function(x){x.classList.remove('active')});n.classList.add('active');document.getElementById('page-'+n.dataset.page).classList.add('active');document.getElementById('pageTitle').textContent=n.querySelector('.nav-label').textContent;if(n.dataset.page==='google')loadG();if(window.innerWidth<=768){document.getElementById('sidePanel').classList.remove('open');document.getElementById('mainContent').classList.remove('expanded')}}});
+document.querySelectorAll('.nav-item').forEach(function(n){n.onclick=function(){document.querySelectorAll('.nav-item').forEach(function(x){x.classList.remove('active')});document.querySelectorAll('.page').forEach(function(x){x.classList.remove('active')});n.classList.add('active');document.getElementById('page-'+n.dataset.page).classList.add('active');document.getElementById('pageTitle').textContent=n.querySelector('.nav-label').textContent;if(n.dataset.page==='google')loadG();if(n.dataset.page==='github')loadGH();if(n.dataset.page==='services')loadSV();if(window.innerWidth<=768){document.getElementById('sidePanel').classList.remove('open');document.getElementById('mainContent').classList.remove('expanded')}}});
 function loadK(){var x=new XMLHttpRequest();x.open('GET','/settings/api/keys',true);x.onload=function(){if(x.status===200){try{var d=JSON.parse(x.responseText);kData=d.keys||[];document.getElementById('kT').textContent=d.total;document.getElementById('kTON').textContent=d.connected;document.getElementById('kTOFF').textContent=d.disconnected;document.getElementById('navKB').textContent=d.total;rK()}catch(e){}}};x.send()}
 function rK(){var g=document.getElementById('kGrid'),q=kS.toLowerCase(),f=[];for(var i=0;i<kData.length;i++){var k=kData[i];if(kF==='connected'&&!k.present)continue;if(kF==='disconnected'&&k.present)continue;if(q&&k.name.toLowerCase().indexOf(q)===-1&&k.key.toLowerCase().indexOf(q)===-1&&k.category.toLowerCase().indexOf(q)===-1)continue;f.push(k)}
 document.getElementById('kAll').textContent=kData.length;var nOn=0,nOff=0;for(i=0;i<kData.length;i++){if(kData[i].present)nOn++;else nOff++}
@@ -1627,19 +2002,29 @@ document.getElementById('gT').textContent=d.total_scope_cats||0;document.getElem
 function rG(){var g=document.getElementById('gGrid'),q=gS.toLowerCase(),f=[];for(var i=0;i<gCat.length;i++){var c=gCat[i];if(gF==='connected'&&!c.connected)continue;if(gF==='disconnected'&&c.connected)continue;if(q&&c.name.toLowerCase().indexOf(q)===-1)continue;f.push(c)}
 document.getElementById('gAll').textContent=gCat.length;var nOn=0;for(i=0;i<gCat.length;i++){if(gCat[i].connected)nOn++}document.getElementById('gOn').textContent=nOn;document.getElementById('gOff').textContent=gCat.length-nOn
 if(f.length===0){g.innerHTML='<div class="empty-state">No scope categories match your filter.</div>';return}
-var h='';for(i=0;i<f.length;i++){c=f[i];var cls=c.connected?'on':'off';var nm=c.name;var svgKey=nm.toLowerCase().replace(/ /g,'').replace(/readonly/g,'readonly').replace(/gmail/g,'gmail').replace(/drive/g,'drive');var iconURL='https://cdn.simpleicons.org/google'+nm.replace(/ /g,'')+'/4285F4';if(nm==='Gmail'||nm==='Gmail Readonly')iconURL='https://cdn.simpleicons.org/gmail/EA4335';if(nm==='Calendar')iconURL='https://cdn.simpleicons.org/googlecalendar/4285F4';if(nm==='Drive'||nm==='Drive Readonly')iconURL='https://cdn.simpleicons.org/googledrive/FBBC04';if(nm==='YouTube')iconURL='https://cdn.simpleicons.org/youtube/FF0000';if(nm==='Photos')iconURL='https://cdn.simpleicons.org/googlephotos/FF6F00';if(nm==='Docs')iconURL='https://cdn.simpleicons.org/googledocs/4285F4';if(nm==='Sheets')iconURL='https://cdn.simpleicons.org/googlesheets/0F9D58';if(nm==='Slides')iconURL='https://cdn.simpleicons.org/googleslides/FBBC04';if(nm==='Tasks')iconURL='https://cdn.simpleicons.org/googletasks/4285F4';if(nm==='People')iconURL='https://cdn.simpleicons.org/googlepeople/4285F4';if(nm==='Cloud Platform')iconURL='https://cdn.simpleicons.org/googlecloud/4285F4';if(nm==='Maps')iconURL='https://cdn.simpleicons.org/googlemaps/34A853';if(nm==='Classroom')iconURL='https://cdn.simpleicons.org/googleclassroom/1A73E8';if(nm==='Analytics')iconURL='https://cdn.simpleicons.org/googleanalytics/E37400';if(nm==='Firebase')iconURL='https://cdn.simpleicons.org/firebase/FFCA28';if(nm==='Forms')iconURL='https://cdn.simpleicons.org/googleforms/7248B9';if(nm==='Books')iconURL='https://cdn.simpleicons.org/googlebooks/4285F4';if(nm==='Translation')iconURL='https://cdn.simpleicons.org/googletranslate/4285F4';if(nm==='BigQuery')iconURL='https://cdn.simpleicons.org/googlebigquery/4285F4';if(nm==='Cloud Storage')iconURL='https://cdn.simpleicons.org/googlecloudstorage/4285F4';if(nm==='Search Console')iconURL='https://cdn.simpleicons.org/googlesearchconsole/4285F4';if(nm==='Natural Language')iconURL='https://cdn.simpleicons.org/googlenaturallanguage/4285F4'
+var h='';for(i=0;i<f.length;i++){c=f[i];var cls=c.connected?'on':'off';var nm=c.name;var svgKey=nm.toLowerCase().replace(/ /g,'').replace(/readonly/g,'readonly').replace(/gmail/g,'gmail').replace(/drive/g,'drive');var iconURL='https://cdn.simpleicons.org/google'+nm.replace(/ /g,'')+'/4285F4';if(nm==='Gmail'||nm==='Gmail Readonly')iconURL='https://cdn.simpleicons.org/gmail/EA4335';if(nm==='Calendar')iconURL='https://cdn.simpleicons.org/googlecalendar/4285F4';if(nm==='Drive'||nm==='Drive Readonly')iconURL='https://cdn.simpleicons.org/googledrive/FBBC04';if(nm==='YouTube')iconURL='https://cdn.simpleicons.org/youtube/FF0000';if(nm==='Photos')iconURL='https://cdn.simpleicons.org/googlephotos/FF6F00';if(nm==='Docs')iconURL='https://cdn.simpleicons.org/googledocs/4285F4';if(nm==='Sheets')iconURL='https://cdn.simpleicons.org/googlesheets/0F9D58';if(nm==='Slides')iconURL='https://cdn.simpleicons.org/googleslides/FBBC04';if(nm==='Tasks')iconURL='https://cdn.simpleicons.org/googletasks/4285F4';if(nm==='People')iconURL='https://cdn.simpleicons.org/googlepeople/4285F4';if(nm==='Cloud Platform')iconURL='https://cdn.simpleicons.org/googlecloud/4285F4';if(nm==='Classroom')iconURL='https://cdn.simpleicons.org/googleclassroom/1A73E8';if(nm==='Analytics')iconURL='https://cdn.simpleicons.org/googleanalytics/E37400';if(nm==='Firebase')iconURL='https://cdn.simpleicons.org/firebase/FFCA28';if(nm==='Forms')iconURL='https://cdn.simpleicons.org/googleforms/7248B9';if(nm==='Books')iconURL='https://cdn.simpleicons.org/googlebooks/4285F4';if(nm==='Translation')iconURL='https://cdn.simpleicons.org/googletranslate/4285F4';if(nm==='BigQuery')iconURL='https://cdn.simpleicons.org/googlebigquery/4285F4';if(nm==='Cloud Storage')iconURL='https://cdn.simpleicons.org/googlecloudstorage/4285F4';if(nm==='Search Console')iconURL='https://cdn.simpleicons.org/googlesearchconsole/4285F4';if(nm==='Natural Language')iconURL='https://cdn.simpleicons.org/googlenaturallanguage/4285F4'
 var scopesHTML='';for(var s=0;s<c.scopes.length;s++){scopesHTML+='<div style="font-size:11px;color:var(--text-muted);padding:2px 0;font-family:monospace;word-break:break-all">'+c.scopes[s]+'</div>'}
-h+='<div class="card" data-cat="'+c.name+'"><div class="card-top"><div class="card-logo"><img src="'+iconURL+'" alt="" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\\\\\'fb\\\\\\'>'+nm.charAt(0)+'</div>\'"></div><div class="card-info"><div class="card-name">'+nm+' <span class="badge">'+c.scope_count+' scope'+(c.scope_count!==1?'s':'')+'</span></div><div class="card-desc">Click Connect to authorize '+nm+' with '+c.scope_count+' OAuth scopes. Includes openid+userinfo+profile automatically.</div></div><div class="card-actions"><span class="status-badge '+cls+'"><span class="dot"></span> '+(c.connected?'Connected':'Not Connected')+'</span></div></div><div class="card-input-row">'+(c.connected?'<button class="btn btn-outline btn-sm gDiscBtn" data-cat="'+c.name+'" style="width:100%">Connected &#x2705; — Click to review scopes</button>':'<button class="btn btn-primary btn-sm gConnBtn" data-cat="'+c.name+'" style="width:100%">&#x1f517; Connect '+nm+'</button>')+'</div>'+'<div class="verify-result" data-cat="'+c.name+'" style="display:none">'+scopesHTML+'</div></div>'}
+h+='<div class="card" data-cat="'+c.name+'"><div class="card-top"><div class="card-logo"><img src="'+iconURL+'" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentNode.querySelector(\'.fb\').style.display=\'flex\'"><div class="fb" style="display:none">'+nm.charAt(0)+'</div></div><div class="card-info"><div class="card-name">'+nm+' <span class="badge">'+c.scope_count+' scope'+(c.scope_count!==1?'s':'')+'</span></div><div class="card-desc">Click Connect to authorize '+nm+' with '+c.scope_count+' OAuth scopes. Includes openid+userinfo+profile automatically.</div></div><div class="card-actions"><span class="status-badge '+cls+'"><span class="dot"></span> '+(c.connected?'Connected':'Not Connected')+'</span></div></div><div class="card-input-row">'+(c.connected?'<button class="btn btn-outline btn-sm gDiscBtn" data-cat="'+c.name+'" style="width:100%">Connected &#x2705; — Click to review scopes</button>':'<button class="btn btn-primary btn-sm gConnBtn" data-cat="'+c.name+'" style="width:100%">&#x1f517; Connect '+nm+'</button>')+'</div>'+'<div class="verify-result" data-cat="'+c.name+'" style="display:none">'+scopesHTML+'</div></div>'}
 g.innerHTML=h;g.querySelectorAll('.gConnBtn').forEach(function(b){b.onclick=function(){var cat=this.dataset.cat;window.location.href='/settings/google/auth/'+encodeURIComponent(cat)}});g.querySelectorAll('.gDiscBtn').forEach(function(b){b.onclick=function(){var cat=this.dataset.cat;for(var j=0;j<gCat.length;j++){if(gCat[j].name===cat){var d=gCat[j];var r=this.closest('.card').querySelector('.verify-result');if(r.style.display==='none'){r.style.display='block';this.textContent='Hide scopes'}else{r.style.display='none';this.textContent='Connected &#x2705; — Click to review scopes'}break}}}})}
 document.getElementById('mClose').onclick=function(){document.getElementById('mOverlay').classList.remove('open')}
 document.getElementById('mOverlay').onclick=function(e){if(e.target===e.currentTarget)this.classList.remove('open')}
 document.getElementById('gConn').onclick=function(){window.location.href='/settings/google/auth'}
 document.getElementById('gRev').onclick=function(){if(!confirm('Revoke all Google OAuth tokens?'))return;var x=new XMLHttpRequest();x.open('POST','/settings/google/revoke',true);x.onload=function(){t('Tokens revoked','info');loadG()};x.onerror=function(){t('Failed to revoke','error')};x.send()}
+function loadGH(){var x=new XMLHttpRequest();x.open('GET','/settings/github/status',true);x.onload=function(){if(x.status===200){try{var d=JSON.parse(x.responseText);var dot=document.getElementById('ghDot'),st=document.getElementById('ghStat'),cn=document.getElementById('ghConn'),rv=document.getElementById('ghRev');if(d.configured&&d.has_token){dot.className='gdot on';st.textContent='Connected';cn.textContent='&#x1f504; Reconnect';rv.style.display='inline-block';document.getElementById('navHubB').textContent='&#x2705;'}else if(d.configured){dot.className='gdot off';st.textContent='OAuth not completed';cn.textContent='&#x1f517; Connect with GitHub';rv.style.display='none';document.getElementById('navHubB').textContent=''}else{dot.className='gdot off';st.textContent='GITHUB_CLIENT_ID not configured';cn.disabled=true;cn.textContent='&#x26a0; Not Configured';rv.style.display='none';document.getElementById('navHubB').textContent=''}}catch(e){}}};x.send()}
+document.getElementById('ghConn').onclick=function(){window.location.href='/settings/github/auth'}
+document.getElementById('ghRev').onclick=function(){if(!confirm('Revoke GitHub OAuth token?'))return;var x=new XMLHttpRequest();x.open('POST','/settings/github/revoke',true);x.onload=function(){t('GitHub token revoked','info');loadGH()};x.onerror=function(){t('Failed to revoke','error')};x.send()}
+var svCfg=[];function loadSV(){var x=new XMLHttpRequest();x.open('GET','/settings/services/status',true);x.onload=function(){if(x.status===200){try{var d=JSON.parse(x.responseText);svCfg=d.services||[];document.getElementById('svT').textContent=d.total;document.getElementById('svTON').textContent=d.connected;document.getElementById('navSvB').textContent=d.total;rSV()}catch(e){}}};x.send()}
+function rSV(){var g=document.getElementById('svGrid'),h='';for(var i=0;i<svCfg.length;i++){var sv=svCfg[i],cls=sv.connected?'on':'off';var ru=sv.redirect_uri?'<div style="font-size:11px;color:var(--text-dim);margin-top:6px;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-family:monospace;word-break:break-all">Redirect URI: <span style="color:var(--primary)">'+sv.redirect_uri+'</span></div>':''
+var flds='';for(var j=0;j<sv.fields.length;j++){var f=sv.fields[j],v='',eK=f.key;for(var e=0;e<svCfg.length;e++){if(svCfg[e].id===sv.id&&svCfg[e].fields&&svCfg[e].fields[j])v=svCfg[e].fields[j].value||''}flds+='<div style="flex:1;min-width:120px"><label style="font-size:11px;color:var(--text-dim);margin-bottom:3px;display:block">'+f.label+'</label><input type="'+(f.type||'text')+'" class="svIn" data-svc="'+sv.id+'" data-idx="'+j+'" data-key="'+f.key+'" placeholder="Enter '+f.label+'..." value="'+v+'" autocomplete="off" style="width:100%;padding:8px 10px;font-size:12px;font-family:monospace;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;transition:border-color 0.2s"></div>'}
+var oa=sv.oauth?'<button class="btn btn-primary btn-sm svOAuthBtn" data-svc="'+sv.id+'" style="margin-top:8px">&#x1f517; Connect via OAuth</button>':''
+h+='<div class="card" style="width:100%" data-svc="'+sv.id+'"><div class="card-top" style="margin-bottom:0"><div class="card-logo" style="background:'+sv.color+'15;border-color:'+sv.color+'30"><img src="'+sv.logo+'" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentNode.querySelector(\'.fb\').style.display=\'flex\'"><div class="fb" style="display:none">'+sv.name.charAt(0)+'</div></div><div class="card-info"><div class="card-name">'+sv.name+'</div><div class="card-desc">'+(sv.desc||'')+'</div>'+ru+'</div><div class="card-actions" style="align-self:flex-start"><span class="status-badge '+cls+'"><span class="dot"></span> '+(sv.connected?'Connected':'Not Connected')+'</span></div></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">'+flds+'</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm svSaveBtn" data-svc="'+sv.id+'">Save Credentials</button>'+oa+'</div></div>'}
+g.innerHTML=h;g.querySelectorAll('.svSaveBtn').forEach(function(b){b.onclick=function(){var id=this.dataset.svc,up={};g.querySelectorAll('.svIn[data-svc="'+id+'"]').forEach(function(inp){var k=inp.dataset.key,v=inp.value.trim();if(v)up[k]=v});if(Object.keys(up).length===0){t('No values to save','error');return}var r=new XMLHttpRequest();r.open('POST','/settings/api/keys',true);r.setRequestHeader('Content-Type','application/json');r.onload=function(){if(r.status===200){try{var d=JSON.parse(r.responseText);if(d.success){t(id+' saved!','success');loadSV()}else t(d.error||'Save failed','error')}catch(e){t('Save failed','error')}}else t('Server error','error')};r.onerror=function(){t('Network error','error')};var keys=Object.keys(up);r.send(JSON.stringify({key:keys[0],value:up[keys[0]]}))}})
+g.querySelectorAll('.svOAuthBtn').forEach(function(b){b.onclick=function(){var id=this.dataset.svc;window.location.href='/settings/'+id+'/auth'}})}
 document.querySelectorAll('.filter-chip').forEach(function(c){c.onclick=function(){var g=this.parentElement;g.querySelectorAll('.filter-chip').forEach(function(x){x.classList.remove('active')});this.classList.add('active');var p=this.closest('.page');if(p&&p.id==='page-keys'){kF=this.dataset.f;rK()}else if(p&&p.id==='page-google'){gF=this.dataset.f;rG()}}})
 document.getElementById('kSearch').oninput=function(){kS=this.value;rK()}
 document.getElementById('gSearch').oninput=function(){gS=this.value;rG()}
 function uC(){var d=new Date();document.getElementById('sClock').textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0')}
-setInterval(uC,1000);uC();loadK();loadG();setInterval(function(){loadK();loadG()},15000);
+setInterval(uC,1000);uC();loadK();loadG();loadGH();loadSV();setInterval(function(){loadK();loadG();loadGH();loadSV()},60000);
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&document.getElementById('mOverlay').classList.contains('open')){document.getElementById('mOverlay').classList.remove('open')}});
 </script>
 </body>

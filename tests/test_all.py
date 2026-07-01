@@ -35,7 +35,8 @@ test('status has services', lambda: 'services' in d)
 test('status has version', lambda: 'version' in d)
 test('status has pid', lambda: 'pid' in d)
 r = bootstrap_tool('nonexistent_action')
-test('invalid action handled', lambda: r is not None)
+d = json.loads(r) if isinstance(r, str) else {}
+test('invalid action handled', lambda: 'error' in d or 'FAIL' in str(r))
 
 
 # =============================================
@@ -46,14 +47,16 @@ from friday.validation_middleware import validation_tool
 
 # Empty
 r = validation_tool('verify_python', code='')
-test('empty code', lambda: r is not None)
+d = json.loads(r) if isinstance(r, str) else r
+test('empty code', lambda: isinstance(d, dict) and 'passed' in d)
 
 # None
 try:
     r = validation_tool('verify_python', code=None)
-    test('None code', lambda: r is not None)
+    d = json.loads(r) if isinstance(r, str) else r
+    test('None code', lambda: isinstance(d, dict) and 'error' in d or 'FAIL' in str(r))
 except:
-    test('None code', lambda: True)
+    test('None code', lambda: False)
 
 # Syntax error
 r = validation_tool('verify_python', code='def foo(:\n  pass')
@@ -72,7 +75,8 @@ test('HTML script tag detected', lambda: d.get('passed') == False)
 
 # Empty HTML
 r = validation_tool('verify_html', html_content='')
-test('empty HTML', lambda: r is not None)
+d = json.loads(r) if isinstance(r, str) else r
+test('empty HTML', lambda: isinstance(d, dict) and 'passed' in d)
 
 # Valid JSON
 r = validation_tool('verify_json', code='{"key": [1, 2, 3]}')
@@ -147,7 +151,8 @@ d = json.loads(r) if isinstance(r, str) else r
 test('learn normal', lambda: d.get('stored', 0) > 0)
 
 r = autonomous_memory_tool(action='recall', query='')
-test('recall empty', lambda: r is not None)
+d = json.loads(r) if isinstance(r, str) else r
+test('recall empty', lambda: isinstance(d, dict) and 'memories' in d)
 
 r = autonomous_memory_tool(action='stats')
 d = json.loads(r) if isinstance(r, str) else r
@@ -161,23 +166,62 @@ print('\n## 6. CODEBASE ANALYZER')
 from friday.codebase_analyzer import codebase_analyzer_tool
 
 r = codebase_analyzer_tool(action='stats')
-test('stats', lambda: r is not None)
+d = json.loads(r) if isinstance(r, str) else r
+test('stats structure', lambda: 'total_files' in d and 'total_lines_of_code' in d)
 
 
 # =============================================
-# 7. API SERVER
+# 7. TOWNHALL WEB
 # =============================================
-print('\n## 7. API SERVER')
+print('\n## 7. TOWNHALL WEB')
+from friday.townhall_web import app as townhall_app, AgentNode, ChatChannel
+
+# Module-level globals exist
+test('app created', lambda: townhall_app is not None)
+test('agent node model', lambda: callable(AgentNode))
+test('chat channel model', lambda: callable(ChatChannel))
+
+# Verify callback can handle formatted and raw strings
+from friday.townhall_web import _on_agent_chat
+try:
+    _on_agent_chat("[bold green]TestAgent[/bold green]: Hello world")
+    test('agent chat callback', lambda: True)
+except Exception as e:
+    test('agent chat callback', lambda: f"EXCEPTION: {e}" == "" and False)
+
+try:
+    _on_agent_chat("Raw system message")
+    test('raw chat fallback', lambda: True)
+except Exception as e:
+    test('raw chat fallback', lambda: f"EXCEPTION: {e}" == "" and False)
+
+
+print("\n## 7b. TOWNHALL ENGINE DREAM")
+from friday.townhall_engine import DreamEngine
+from friday.townhall_web import AgentNode
+_test_channels = {"main": type('obj', (object,), {'messages': [], 'add_message': lambda s,a,m: None})()}
+engine = DreamEngine({}, _test_channels, lambda msg: None)
+test('engine created', lambda: engine is not None)
+test('engine log', lambda: callable(engine.log))
+test('engine start', lambda: callable(engine.start))
+test('engine stop', lambda: callable(engine.stop))
+
+
+# =============================================
+# 8. API SERVER
+# =============================================
+print('\n## 8. API SERVER')
 from friday.api_server import api_server_tool
 
 r = api_server_tool('status')
-test('status', lambda: 'Running' in r)
+test('status check', lambda: 'Running:' in r)
+
 
 
 # =============================================
-# 8. PLUGIN
+# 9. PLUGIN
 # =============================================
-print('\n## 8. PLUGIN')
+print('\n## 9. PLUGIN')
 from friday.plugins import plugin_tool
 
 r = plugin_tool('load', plugin_name='nonexistent_xyz')
@@ -194,9 +238,9 @@ test('stats', lambda: isinstance(r, str) and len(r) > 10)
 
 
 # =============================================
-# 9. CODE REVIEW
+# 10. CODE REVIEW
 # =============================================
-print('\n## 9. CODE REVIEW')
+print('\n## 10. CODE REVIEW')
 from friday.code_review import code_review_tool
 
 r = code_review_tool('review', code='x = eval(input())\n', filename='bad.py')
@@ -213,9 +257,9 @@ test('secrets detected', lambda: len(d.get('issues', [])) > 0)
 
 
 # =============================================
-# 10. WORKFLOW
+# 11. WORKFLOW
 # =============================================
-print('\n## 10. WORKFLOW')
+print('\n## 11. WORKFLOW')
 from friday.workflow_engine import workflow_tool, WorkflowEngine, TemplateLibrary
 
 r = workflow_tool('list')

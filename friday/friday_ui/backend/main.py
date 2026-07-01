@@ -81,7 +81,7 @@ def _categorize(name):
         "find_files": "files", "copy_file": "files", "move_file": "files",
         "delete_file": "files", "generate_file": "files",
         "clipboard_": "desktop", "take_snapshot": "desktop", "recall_snapshot": "desktop",
-        "browser_use_": "browser", "opencli_": "browser", "webbridge_": "browser",
+        "browser_use_": "browser",
         "desktop_use_": "desktop", "desktop_list_": "desktop", "desktop_get_": "desktop",
         "desktop_focus": "desktop", "desktop_launch": "desktop", "desktop_click": "desktop",
         "desktop_type": "desktop", "desktop_extract": "desktop", "desktop_screenshot": "desktop",
@@ -217,7 +217,7 @@ async def process_chat_ai(message: str) -> str:
             from google.genai import types
 
             client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
-            model_id = os.environ.get("GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview")
+            model_id = os.environ.get("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
             tool_decls = _get_deduped_tools()
 
             system_text = r"""[IDENTITY]
@@ -455,25 +455,19 @@ async def townhall_status():
 
 @app.get("/api/townhall/sessions")
 async def townhall_sessions():
-    from friday.townhall_agents import townhall_tool
-    raw = townhall_tool(action="list_sessions")
-    try: d = json.loads(raw) if isinstance(raw, str) else raw
-    except: d = {}
-    return {"sessions": d.get("sessions", []) if isinstance(d, dict) else []}
+    from friday.townhall_agents import _load_json, _SESSIONS_FILE
+    sessions = _load_json(_SESSIONS_FILE, [])
+    return {"sessions": sessions}
 
 @app.get("/api/townhall/agents")
 async def townhall_agents():
-    from friday.townhall_agents import townhall_tool
-    raw = townhall_tool(action="list_agents")
-    try: return json.loads(raw) if isinstance(raw, str) else raw
-    except: return {}
+    from friday.townhall_agents import AGENT_ROLES
+    return {"agents": AGENT_ROLES}
 
 @app.get("/api/townhall/agenda")
 async def townhall_agenda():
-    from friday.townhall_agents import townhall_tool
-    raw = townhall_tool(action="list_agenda")
-    try: return json.loads(raw) if isinstance(raw, str) else raw
-    except: return {}
+    from friday.townhall_agents import _load_json, _AGENDA_FILE
+    return _load_json(_AGENDA_FILE, {"items": []})
 
 @app.get("/api/services")
 async def services():

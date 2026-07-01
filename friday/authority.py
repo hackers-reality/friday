@@ -113,7 +113,7 @@ def classify_tool_risk(tool_name: str) -> str:
         return "destructive"
 
     # System control
-    if any(p in name_lower for p in ("run_cmd", "safe_run", "opencli_eval", "hotkey",
+    if any(p in name_lower for p in ("run_cmd", "safe_run", "hotkey",
                                        "press_key", "shutdown", "restart")):
         return "system_control"
 

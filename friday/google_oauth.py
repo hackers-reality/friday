@@ -8,6 +8,7 @@ from __future__ import annotations
 import http.server
 import json
 import os
+import random
 import time
 import threading
 from datetime import datetime, timedelta
@@ -207,18 +208,6 @@ SCOPE_CATEGORIES: dict[str, list[str]] = {
         "https://www.googleapis.com/auth/compute",
         "https://www.googleapis.com/auth/sqlservice.admin",
         "https://www.googleapis.com/auth/appengine.admin",
-    ],
-    "Maps": [
-        "https://www.googleapis.com/auth/maps",
-        "https://www.googleapis.com/auth/places",
-        "https://www.googleapis.com/auth/maps.addressvalidation",
-        "https://www.googleapis.com/auth/maps.directions",
-        "https://www.googleapis.com/auth/maps.distancematrix",
-        "https://www.googleapis.com/auth/maps.elevation",
-        "https://www.googleapis.com/auth/maps.geocoding",
-        "https://www.googleapis.com/auth/maps.places",
-        "https://www.googleapis.com/auth/maps.staticmap",
-        "https://www.googleapis.com/auth/maps.timezone",
     ],
     "Classroom": [
         "https://www.googleapis.com/auth/classroom.courses.readonly",
@@ -614,10 +603,63 @@ def _refresh_token(refresh_token: str) -> Optional[str]:
 
 # ── Google API caller ──
 
+_API_URL_TO_NAME: dict[str, str] = {
+    "slides.googleapis.com": "slides.googleapis.com",
+    "docs.googleapis.com": "docs.googleapis.com",
+    "sheets.googleapis.com": "sheets.googleapis.com",
+    "drive.googleapis.com": "drive.googleapis.com",
+    "people.googleapis.com": "people.googleapis.com",
+    "calendar.googleapis.com": "calendar.googleapis.com",
+    "gmail.googleapis.com": "gmail.googleapis.com",
+    "youtube.googleapis.com": "youtube.googleapis.com",
+    "books.googleapis.com": "books.googleapis.com",
+    "translate.googleapis.com": "translate.googleapis.com",
+    "vision.googleapis.com": "vision.googleapis.com",
+    "bigquery.googleapis.com": "bigquery.googleapis.com",
+    "storage.googleapis.com": "storage.googleapis.com",
+    "firestore.googleapis.com": "firestore.googleapis.com",
+    "maps.googleapis.com": "maps.googleapis.com",
+    "searchconsole.googleapis.com": "searchconsole.googleapis.com",
+    "analytics.googleapis.com": "analytics.googleapis.com",
+    "cloudresourcemanager.googleapis.com": "cloudresourcemanager.googleapis.com",
+    "dfareporting.googleapis.com": "dfareporting.googleapis.com",
+    "mybusiness.googleapis.com": "mybusiness.googleapis.com",
+}
+
+def _extract_api_name(url: str) -> str | None:
+    """Extract the Google API service name from a URL for enable_api()."""
+    for domain, api_name in _API_URL_TO_NAME.items():
+        if domain in url:
+            return api_name
+    return None
+
+
+def _do_request(method: str, url: str, headers: dict,
+                params: Optional[dict] = None,
+                json_body: Optional[dict] = None,
+                timeout: int = 15) -> requests.Response:
+    """Execute a single HTTP request, raising on HTTP errors."""
+    if method == "GET":
+        r = requests.get(url, params=params, headers=headers, timeout=timeout)
+    elif method == "POST":
+        r = requests.post(url, params=params, headers=headers, json=json_body, timeout=timeout)
+    elif method == "PUT":
+        r = requests.put(url, params=params, headers=headers, json=json_body, timeout=timeout)
+    elif method == "DELETE":
+        r = requests.delete(url, params=params, headers=headers, timeout=timeout)
+    else:
+        raise ValueError(f"Unsupported method: {method}")
+    r.raise_for_status()
+    return r
+
+
 def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
-             json_body: Optional[dict] = None, timeout: int = 15) -> Optional[dict]:
+             json_body: Optional[dict] = None, timeout: int = 15,
+             max_retries: int = 3) -> Optional[dict]:
     """Make an authenticated request to any Google API.
     Returns parsed JSON on success, None on failure (logs warnings).
+    Auto-enables the API if a 403 is received, then retries once.
+    Retries with exponential backoff on 429/5xx (up to max_retries).
     """
     token = get_access_token()
     if not token:
@@ -626,32 +668,79 @@ def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
     if requests is None:
         return None
     headers = {"Authorization": f"Bearer {token}"}
-    try:
-        if method == "GET":
-            r = requests.get(url, params=params, headers=headers, timeout=timeout)
-        elif method == "POST":
-            r = requests.post(url, params=params, headers=headers, json=json_body, timeout=timeout)
-        elif method == "PUT":
-            r = requests.put(url, params=params, headers=headers, json=json_body, timeout=timeout)
-        elif method == "DELETE":
-            r = requests.delete(url, params=params, headers=headers, timeout=timeout)
-        else:
+
+    for attempt in range(max_retries + 1):
+        try:
+            r = _do_request(method, url, headers, params, json_body, timeout)
+            return r.json()
+        except requests.HTTPError as exc:
+            body = getattr(exc.response, "text", "")
+            status = getattr(exc.response, "status_code", 0)
+
+            # Insufficient scopes — never retry, give clear guidance
+            if "insufficientPermissions" in body or "insufficient authentication scopes" in body.lower():
+                logger.warning("Google API call failed (insufficient scopes): %s %s", method, url)
+                return None
+
+            # 403 — try auto-enable once, then stop
+            if status == 403:
+                api_name = _extract_api_name(url)
+                if api_name:
+                    logger.info("403 on %s — attempting to enable API %s", url, api_name)
+                    enable_result = enable_api(api_name)
+                    if enable_result.get("success"):
+                        logger.info("API %s enabled successfully, retrying request", api_name)
+                        try:
+                            r = _do_request(method, url, headers, params, json_body, timeout)
+                            return r.json()
+                        except requests.HTTPError as retry_exc:
+                            retry_body = getattr(retry_exc.response, "text", "")
+                            retry_status = getattr(retry_exc.response, "status_code", 0)
+                            logger.warning("Still failing after enabling API (%s): %s",
+                                           retry_status, retry_body[:200])
+                            return None
+                        except Exception as retry_exc:
+                            logger.warning("Retry failed after enabling API: %s", retry_exc)
+                            return None
+                    else:
+                        logger.warning("Could not enable API %s: %s",
+                                       api_name, enable_result.get('error', 'unknown'))
+                        return None
+                else:
+                    logger.warning("Access forbidden (403) for %s. Check API is enabled.", url)
+                    return None
+
+            # 429 (rate limit) or 5xx (transient) — retry with backoff
+            if status in (429,) or (500 <= status < 600):
+                if attempt < max_retries:
+                    delay = (2 ** attempt) + random.uniform(0, 1)
+                    logger.info("Rate limit / server error on %s (%s), retrying in %.1fs (attempt %d/%d)",
+                                url, status, delay, attempt + 1, max_retries)
+                    time.sleep(delay)
+                    continue
+                logger.warning("Google API call failed after %d retries: %s %s -> %s", max_retries, method, url, exc)
+                return None
+
+            # Other HTTP errors — not retryable
+            logger.warning("Google API call failed: %s %s -> %s", method, url, exc)
             return None
-        r.raise_for_status()
-        return r.json()
-    except requests.HTTPError as exc:
-        body = getattr(exc.response, "text", "")
-        status = getattr(exc.response, "status_code", 0)
-        reason = ""
-        if "insufficientPermissions" in body or "insufficient authentication scopes" in body.lower():
-            reason = "Token scopes don't include this API. Re-run google_authorize_category() for the relevant category."
-        elif status == 403:
-            reason = "Access forbidden. Check API is enabled in Google Cloud Console."
-        logger.warning("Google API call failed: %s %s -> %s | %s", method, url, exc, reason)
-        return None
-    except Exception as exc:
-        logger.warning("Google API call failed: %s %s -> %s", method, url, exc)
-        return None
+
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            # Network errors — retry with backoff
+            if attempt < max_retries:
+                delay = (2 ** attempt) + random.uniform(0, 1)
+                logger.info("Connection/timeout on %s, retrying in %.1fs (attempt %d/%d)",
+                            url, delay, attempt + 1, max_retries)
+                time.sleep(delay)
+                continue
+            logger.warning("Google API call failed after %d retries: %s %s -> %s", max_retries, method, url, exc)
+            return None
+
+        except Exception as exc:
+            logger.warning("Google API call failed: %s %s -> %s", method, url, exc)
+            return None
+
+    return None
 
 
 def get_token_info() -> dict:
@@ -689,12 +778,9 @@ def revoke():
 
 def enable_api(api_name: str) -> dict:
     """Enable a GCP API via Service Usage REST API."""
-    creds = _load_credentials()
-    if not creds:
-        return {"error": "Not authenticated"}
-    token = creds.get("access_token")
+    token = get_access_token()
     if not token:
-        return {"error": "No access token"}
+        return {"error": "No access token (run google_authorize first)"}
     if not requests:
         return {"error": "requests not installed"}
     try:
