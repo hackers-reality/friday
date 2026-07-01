@@ -8,6 +8,8 @@ process. The overlay window stays open persistently and shows a cursor-following
 
 from __future__ import annotations
 
+import re
+
 from .overlay_engine import get_engine, ensure_running as _ensure
 from typing import Optional
 
@@ -88,16 +90,21 @@ def draw_line(x1: int, y1: int, x2: int, y2: int,
         return f"[FAIL] Line: {e}"
 
 
-def draw_polygon(points: list, color: str = "#3B82F6",
+def draw_polygon(points: list | str, color: str = "#3B82F6",
                  fill_color: Optional[str] = None,
                  duration: float = 3.0,
                  persist: float = 3600.0) -> str:
     """Draw a closed polygon from a list of (x,y) coordinate pairs.
     duration=animation speed, persist=how long it stays.
+    Accepts points as list of pairs or string like "x1,y1, x2,y2, ...".
     """
     try:
         eng = _ensure()
-        pts = [(float(p[0]), float(p[1])) for p in points]
+        if isinstance(points, str):
+            nums = [float(x.strip()) for x in re.split(r'[,\s]+', points) if x.strip()]
+            pts = [(nums[i], nums[i + 1]) for i in range(0, len(nums) - 1, 2)]
+        else:
+            pts = [(float(p[0]), float(p[1])) for p in points]
         eng.draw_polygon(pts, color=color, fill_color=fill_color,
                          duration=duration, persist=persist)
         return f"[OK] Polygon with {len(pts)} points"

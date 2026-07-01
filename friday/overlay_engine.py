@@ -531,9 +531,15 @@ class OverlayEngine:
     def _add_annotation(self, ann: dict, duration: float,
                         persist: Optional[float] = None):
         ann["created"] = time.time()
-        ann["duration"] = duration
+        try:
+            ann["duration"] = float(duration)
+        except (ValueError, TypeError):
+            ann["duration"] = 3.0
         if persist is not None:
-            ann["persist"] = persist
+            try:
+                ann["persist"] = float(persist)
+            except (ValueError, TypeError):
+                ann["persist"] = 5.0
         self._annotations.append(ann)
 
     def _start_fly_to(self, x: float, y: float, label: str = "",
