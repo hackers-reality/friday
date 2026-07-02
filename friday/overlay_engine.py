@@ -411,11 +411,13 @@ class OverlayEngine:
         elif ctype == "draw_polygon":
             dur = cmd.get("duration", 5.0)
             persist = cmd.get("persist")
+            pts = cmd.get("points", [])
             self._add_annotation({
                 "type": "polygon",
-                "points": cmd.get("points", []),
+                "points": pts,
                 "color": cmd.get("color", "#3B82F6"),
                 "fill_color": cmd.get("fill_color"),
+                "progress": 0.0,
             }, dur, persist)
 
         elif ctype == "draw_path":
@@ -587,18 +589,23 @@ class OverlayEngine:
         ]
 
         for ann in self._annotations:
-            if ann.get("type") == "line" and ann.get("progress", 1.0) < 1.0:
+            if ann.get("progress", 1.0) < 1.0:
                 elapsed = now - ann["created"]
                 dur = ann.get("duration", 3.0)
                 ann["progress"] = min(elapsed / dur, 1.0)
                 prog = ann["progress"]
-                sx, sy = ann["x1"], ann["y1"]
-                ex, ey = ann["x2"], ann["y2"]
-                self._buddy_x = sx + (ex - sx) * prog
-                self._buddy_y = sy + (ey - sy) * prog
-                if prog >= 1.0:
-                    self._buddy_x = ex
-                    self._buddy_y = ey
+                if ann.get("type") == "line":
+                    sx, sy = ann["x1"], ann["y1"]
+                    ex, ey = ann["x2"], ann["y2"]
+                    cx = sx + (ex - sx) * prog
+                    cy = sy + (ey - sy) * prog
+                    self._buddy_x = cx
+                    self._buddy_y = cy
+                elif ann.get("type") == "polygon":
+                    pts = ann.get("points", [])
+                    n_coords = len(pts) // 2
+                    n_visible = max(1, int(n_coords * prog))
+                    ann["_visible"] = n_visible
 
         if self._teaching_click_anim > 0:
             self._teaching_click_anim = max(0, self._teaching_click_anim - 0.05)
@@ -774,12 +781,16 @@ class OverlayEngine:
                 pts = ann.get("points", [])
                 color = ann["color"]
                 fill = ann.get("fill_color")
-                coords = [(pts[i], pts[i + 1]) for i in range(0, len(pts), 2)]
+                n_visible = ann.get("_visible", len(pts) // 2)
+                visible_pts = pts[:n_visible * 2]
+                if len(visible_pts) < 4:
+                    return
+                coords = [(visible_pts[i], visible_pts[i + 1]) for i in range(0, len(visible_pts), 2)]
                 flat = []
                 for p in coords:
                     flat.extend(p)
                 kwargs = {"outline": color, "width": 3}
-                if fill:
+                if fill and ann.get("progress", 1.0) >= 1.0:
                     kwargs["fill"] = fill
                 self._canvas.create_polygon(*flat, **kwargs)
 

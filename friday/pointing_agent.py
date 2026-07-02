@@ -280,8 +280,10 @@ def analyze_screen(question: str = "",
         monitors = capture_all_monitors()
 
         if overlay_engine and auto_annotate:
-            from friday.overlay_engine import ensure_running
+            from friday.overlay_engine import ensure_running, get_engine, OverlayEngine
             ensure_running()
+            if not isinstance(overlay_engine, OverlayEngine):
+                overlay_engine = get_engine()
 
         prompt = (
             "List ALL visible UI elements on this screen. Include buttons, text fields, "
@@ -349,9 +351,8 @@ def analyze_screen(question: str = "",
             return "[FAIL] All NIM vision models failed."
 
         if overlay_engine and auto_annotate:
-            targets, cleaned = parse_point_tags(text)
+            targets, _ = parse_point_tags(text)
             _annotate_targets(targets, monitors, overlay_engine)
-            return cleaned
 
         return text
 
@@ -408,9 +409,12 @@ def _analyze_screen_gemini(question: str, monitors: list[dict],
         text = data["candidates"][0]["content"]["parts"][0]["text"]
 
         if overlay_engine and auto_annotate:
-            targets, cleaned = parse_point_tags(text)
+            from friday.overlay_engine import ensure_running, get_engine, OverlayEngine
+            ensure_running()
+            if not isinstance(overlay_engine, OverlayEngine):
+                overlay_engine = get_engine()
+            targets, _ = parse_point_tags(text)
             _annotate_targets(targets, monitors, overlay_engine)
-            return cleaned
         return text
     except Exception as e:
         return f"[FAIL] Gemini fallback error: {e}"
@@ -462,7 +466,7 @@ def find_and_click_element(element_desc: str, overlay_engine=None) -> str:
     client = OpenAI(
         api_key=api_key,
         base_url="https://integrate.api.nvidia.com/v1",
-        max_retries=0,
+        max_retries=1,
     )
 
     vision_prompt = (
@@ -480,7 +484,7 @@ def find_and_click_element(element_desc: str, overlay_engine=None) -> str:
                     {"type": "text", "text": vision_prompt},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                 ]}],
-                max_tokens=256,
+                max_tokens=512,
                 temperature=0.3,
                 timeout=45,
             )
@@ -501,8 +505,10 @@ def find_and_click_element(element_desc: str, overlay_engine=None) -> str:
     abs_x, abs_y = map_to_screen_coords(t.x, t.y, cap_w, cap_h)
 
     if overlay_engine:
-        from friday.overlay_engine import ensure_running
+        from friday.overlay_engine import ensure_running, get_engine, OverlayEngine
         ensure_running()
+        if not isinstance(overlay_engine, OverlayEngine):
+            overlay_engine = get_engine()
         overlay_engine.fly_to(abs_x, abs_y, f"Click: {element_desc}")
         time.sleep(0.5)
 

@@ -459,36 +459,55 @@ Screen & Vision:
 --- OVERLAY ENGINE (Screen Annotation System) ---
 The overlay is ALWAYS RUNNING — a white 6px dot "buddy" follows the cursor. You have FULL CONTROL over what appears on screen and when it disappears.
 
-PERSISTENCE RULES (CRITICAL):
-- ALL drawings persist until YOU call `clear_overlays()`. Default duration is 3600 seconds (1 hour).
+**CRITICAL: When user asks you to teach/demonstrate something, DO NOT just give verbal instructions. You MUST autonomously use the overlay tools to visually demonstrate on screen while narrating.** The whole point of these tools is that you do the work, not tell the user to do it.
+
+PERSISTENCE RULES:
+- ALL drawings persist until YOU call `clear_overlays()`.
 - You control the lifecycle: DRAW → NARRATE → CLEAR → DRAW NEW
 - Call `clear_overlays()` when you want to wipe everything and start fresh.
-- Labels, arrows, lines, shapes all stay on screen until explicitly cleared.
+
+YOUR TEACHING WORKFLOW (use this whenever user asks to be taught something):
+1. **analyze_screen(question)** — Get [POINT:x,y:label] tags with exact coordinates of everything on screen
+2. **start_teaching()** — Enter teaching mode (golden cursor appears)
+3. **teaching_move_to/teaching_click** — Move golden cursor to the element while you narrate
+4. **draw_line/draw_polygon/draw_path** — Draw shapes to highlight what you're explaining
+5. **show_text** — Add labels like "Search bar", "Play button", "a² + b² = c²"
+6. **point_at** — Fly the white buddy to point at specific elements
+7. **stop_teaching() + clear_overlays()** — When done
 
 YOUR DRAWING TOOLS (all non-blocking, return immediately):
-- **point_at(x, y, label)** — Fly the white dot buddy to (x,y) with optional speech bubble label. Use this to point to elements while narrating. Non-blocking.
-- **show_text(x, y, text)** — Place text label at (x,y). Black text on white background. Stays until cleared. Use for labeling UI elements or math notation like "a²", "b²", "c²".
-- **draw_line(x1, y1, x2, y2, color)** — Draw animated straight line. The buddy follows along as the line draws. Stays until cleared.
-- **show_draw_arrow(x1, y1, x2, y2, color)** — Draw bold arrow (5px, rounded caps, soft arrowhead). Stays until cleared.
-- **show_annotation_box(x, y, w, h, label, color)** — Dashed border box around a region. Stays until cleared.
-- **draw_polygon([(x1,y1),(x2,y2),(x3,y3),...], color, fill_color)** — Draw closed polygon (triangle, rectangle, square, etc.). YOU control fill color. Stays until cleared. Perfect for drawing squares on sides of a triangle for Pythagoras demonstrations.
-- **draw_path(path_data, x, y, color, width)** — Draw arbitrary SVG path. Path commands: M=move, L=line, C=bezier curve, Z=close. Example for a right triangle: "M 100 400 L 100 200 L 300 400 Z". Draws anything anywhere. Stays until cleared.
+- **point_at(x, y, label)** — Fly the white dot buddy to (x,y) with speech bubble label. Shows text streaming animation (25 chars/sec). Use to point while narrating.
+- **show_text(x, y, text)** — Place text label at (x,y). Black text on white background. Stays until cleared.
+- **draw_line(x1, y1, x2, y2, color)** — Draw animated line. Buddy follows along as it draws. Animated.
+- **show_draw_arrow(x1, y1, x2, y2, color)** — Draw bold arrow (5px, rounded caps).
+- **show_annotation_box(x, y, w, h, label, color)** — Dashed border box around a region.
+- **draw_polygon(points, color, fill_color)** — Draw closed polygon (triangle, square, etc.). Points as "x1,y1, x2,y2, x3,y3" or [[x1,y1],...]. Animates vertex by vertex.
+- **draw_path(path_data, x, y, color, width)** — Draw SVG path. Commands: M=move, L=line, C=bezier, Z=close.
 
 TEACHING MODE (independent golden cursor for walkthroughs):
-- **start_teaching()** — Enter teaching mode. A 10px golden dot appears, independent of the white buddy.
-- **teaching_move_to(x, y, label)** — Move the teaching cursor with bezier arc flight.
+- **start_teaching()** — Enter teaching mode. 10px golden dot, independent of white buddy.
+- **teaching_move_to(x, y, label)** — Move teaching cursor with bezier arc flight.
 - **teaching_click(x, y, label)** — Animate teaching cursor clicking at (x,y) with burst animation.
-- **teaching_highlight(x, y, w, h, label)** — Highlight a region with the teaching cursor.
-- **stop_teaching()** — Exit teaching mode, golden dot disappears, white buddy returns to normal.
+- **teaching_highlight(x, y, w, h, label)** — Highlight a region.
+- **stop_teaching()** — Exit teaching mode.
 
-HOW TO TEACH WITH THE OVERLAY (step-by-step example for Pythagoras theorem):
-1. Call `analyze_screen("Find the right triangle, measure its vertices")` → get [POINT] tags
+EXAMPLE: Teaching Spotify (when user asks "teach me to play music"):
+1. Call `analyze_screen("Find the search bar, play button, and library in Spotify")` → get [POINT] coords back
+2. Call `start_teaching()` → golden cursor appears
+3. Call `teaching_move_to(x, y, "This is the search bar")` → move golden cursor to search bar
+4. Call `teaching_click(x, y, "Click here to search")` → click the search bar
+5. Call `type_text({"text": "song name"})` → type in the search
+6. Narrate each step as you do it
+7. Call `stop_teaching() + clear_overlays()` when done
+
+EXAMPLE: Teaching Pythagoras Theorem:
+1. Call `analyze_screen("Find the right triangle and measure its vertices")` → get [POINT] tags
 2. Call `draw_line(x1,y1,x2,y2,"#3B82F6")` to trace each side of the triangle at EXACT coordinates
-3. Call `draw_polygon(...)` to draw squares on each side
+3. Call `draw_polygon(...)` to draw squares on each side with fill colors
 4. Call `show_text(x, y, "a²")`, `show_text(x, y, "b²")`, `show_text(x, y, "c²")` to label
 5. Call `teaching_move_to(x, y, "This is the base a")` to point while narrating
 6. Narration: "The Pythagorean theorem says a² + b² = c²..."
-7. When done explaining, call `clear_overlays()` to remove everything
+7. Call `clear_overlays()` when done
 
 Browser Automation (browser-use — use when page interaction is needed):
 For simple URL opens, use open_url(url) instead — it's faster.
@@ -1740,82 +1759,75 @@ def _build_tools():
             ),
             types.FunctionDeclaration(
                 name="show_pointer",
-                description="Draw a circular pointer with optional label at screen coordinates. Use to visually indicate something on screen.",
+                description="Draw a circular pointer with optional label at screen coordinates. Stays until clear_overlays().",
                 parameters=types.Schema(type="OBJECT", properties={
                     "x": {"type": "INTEGER", "description": "Screen X coordinate"},
                     "y": {"type": "INTEGER", "description": "Screen Y coordinate"},
                     "label": {"type": "STRING", "description": "Optional label text"},
-                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 3.0)"},
                 }, required=["x", "y"]),
             ),
             types.FunctionDeclaration(
                 name="show_cursor_hint",
-                description="Show a text hint bubble near the user's cursor position. Use for quick contextual tips.",
+                description="Show a text hint bubble near the user's cursor position.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "text": {"type": "STRING", "description": "Hint text to display"},
-                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 3.0)"},
                 }, required=["text"]),
             ),
             types.FunctionDeclaration(
                 name="show_annotation_box",
-                description="Highlight a screen region with a colored dashed border. Use to draw attention to a specific UI area.",
+                description="Highlight a screen region with a colored dashed border. Stays until clear_overlays().",
                 parameters=types.Schema(type="OBJECT", properties={
                     "x": {"type": "INTEGER", "description": "Top-left X"},
                     "y": {"type": "INTEGER", "description": "Top-left Y"},
                     "width": {"type": "INTEGER", "description": "Box width"},
                     "height": {"type": "INTEGER", "description": "Box height"},
                     "label": {"type": "STRING", "description": "Optional label"},
-                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 4.0)"},
                 }, required=["x", "y", "width", "height"]),
             ),
             types.FunctionDeclaration(
                 name="show_draw_arrow",
-                description="Draw an arrow from one screen coordinate to another. Useful for showing direction or relationships between elements. Non-blocking.",
+                description="Draw an arrow from one screen coordinate to another. Stays until clear_overlays().",
                 parameters=types.Schema(type="OBJECT", properties={
                     "x1": {"type": "INTEGER", "description": "Start X"},
                     "y1": {"type": "INTEGER", "description": "Start Y"},
                     "x2": {"type": "INTEGER", "description": "End X"},
                     "y2": {"type": "INTEGER", "description": "End Y"},
                     "color": {"type": "STRING", "description": "Hex color (default #3B82F6)"},
-                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 3.0)"},
                 }, required=["x1", "y1", "x2", "y2"]),
             ),
             types.FunctionDeclaration(
                 name="show_text",
-                description="Show text at specific screen coordinates. Non-blocking.",
+                description="Show text at specific screen coordinates. Stays until clear_overlays().",
                 parameters=types.Schema(type="OBJECT", properties={
                     "x": {"type": "INTEGER", "description": "Screen X coordinate"},
                     "y": {"type": "INTEGER", "description": "Screen Y coordinate"},
                     "text": {"type": "STRING", "description": "Text to display"},
                     "color": {"type": "STRING", "description": "Hex color (default #FFFFFF)"},
-                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 3.0)"},
                 }, required=["x", "y", "text"]),
             ),
             types.FunctionDeclaration(
                 name="draw_line",
-                description="Draw an animated straight line between two points (no arrowhead). Buddy follows along as it draws. One line at a time.",
+                description="Draw an animated straight line between two points (no arrowhead). Buddy follows along as it draws. Stays until clear_overlays().",
                 parameters=types.Schema(type="OBJECT", properties={
                     "x1": {"type": "INTEGER", "description": "Start X"},
                     "y1": {"type": "INTEGER", "description": "Start Y"},
                     "x2": {"type": "INTEGER", "description": "End X"},
                     "y2": {"type": "INTEGER", "description": "End Y"},
                     "color": {"type": "STRING", "description": "Hex color (default #3B82F6)"},
-                    "duration": {"type": "NUMBER", "description": "Animation duration in seconds"},
                 }, required=["x1", "y1", "x2", "y2"]),
             ),
             types.FunctionDeclaration(
                 name="draw_polygon",
-                description="Draw a closed polygon (triangle, rectangle, square, etc.) from a list of coordinate pairs. Stays on screen until clear_overlays(). Perfect for drawing squares on triangle sides for math demonstrations.",
+                description="Draw a closed polygon (triangle, rectangle, square, etc.) from coordinate pairs. Stays on screen until clear_overlays(). Animates vertex by vertex. Perfect for drawing squares on triangle sides for math demonstrations.",
                 parameters=types.Schema(type="OBJECT", properties={
-                    "points": {"type": "ARRAY", "description": "List of [x,y] coordinate pairs, e.g. [[100,200],[300,200],[200,100]]"},
+                    "points": {"type": "ARRAY", "description": "Coordinate pairs as string 'x1,y1, x2,y2, x3,y3' or array [[x1,y1], [x2,y2], [x3,y3]]"},
                     "color": {"type": "STRING", "description": "Outline hex color (default #3B82F6)"},
                     "fill_color": {"type": "STRING", "description": "Fill hex color (optional, e.g. #3B82F640 for semi-transparent)"},
-                    "duration": {"type": "NUMBER", "description": "Seconds to show (default 3600)"},
                 }, required=["points"]),
             ),
             types.FunctionDeclaration(
                 name="draw_path",
-                description="Draw arbitrary SVG path on screen. Path data like M 100 100 L 200 200 C 300 150, 400 200, 500 100. Draws anything anywhere.",
+                description="Draw arbitrary SVG path on screen. Stays until clear_overlays(). Path data like M 100 100 L 200 200 C 300 150, 400 200, 500 100.",
                 parameters=types.Schema(type="OBJECT", properties={
                     "path_data": {"type": "STRING", "description": "SVG path commands"},
                     "x": {"type": "INTEGER", "description": "X offset"},
