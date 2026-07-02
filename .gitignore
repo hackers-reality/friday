@@ -20,6 +20,14 @@ test_all_osint.py
 # Runtime output
 *.txt
 scratch/
+archive/
+
+# Scratch tests
+_test_*
+
+# Runtime data
+friday/memory/
+data/
 
 # Dependencies
 venv/
