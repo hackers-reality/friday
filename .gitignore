@@ -7,8 +7,9 @@ test_value
 # Cache
 friday_cache/
 friday_memory/
+.spotify_cache
 
-# Test scripts
+# Test scripts that shouldn't be committed
 tests/benchmark_models.py
 tests/debug_*.py
 tests/test_1011_fix.py
