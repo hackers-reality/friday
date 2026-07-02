@@ -6,37 +6,41 @@ test_value
 
 # Cache
 friday_cache/
+friday_memory/
 
-# Test scripts that shouldn't be committed
+# Test scripts
 tests/benchmark_models.py
 tests/debug_*.py
 tests/test_1011_fix.py
 tests/test_fixes_v6.py
 tests/test_live.py
+test_all_osint.py
 
-# Virtual environment
+# Runtime output
+*.txt
+scratch/
+
+# Dependencies
 venv/
-
-# Model files
-*.pt
-
-# Python cache
-__pycache__/
-*.pyc
+dashboard/node_modules/
+friday/friday_ui/frontend/node_modules/
 
 # Secrets
 .env
 .github_token.json
+credentials.json
+google_credentials.json
+
+# Python
+__pycache__/
+*.pyc
 
 # IDE
 .vscode/
 
-# Cache files
-.spotify_cache
-friday_cache/
+# Model files
+*.pt
 
-# Dependencies
-dashboard/node_modules/
-
-# Temp files
-.config_updated
+# Dist
+friday/friday_ui/frontend/dist/
+dashboard/dist/
