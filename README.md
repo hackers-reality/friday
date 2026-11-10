@@ -779,27 +779,11 @@ MIT License — see [LICENSE](LICENSE) for details.
 ## Author
 
 **Friday is solely built by Arnav** ([@hackers-reality](https://github.com/hackers-reality))  
-Co-leader of [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community based in Pune, Maharashtra, India.
+Co-leader of [NexSemble](https://github.com/hackers-reality) — a peer-learning and collaborative tech community based in India.
 
 > *"This is not a chatbot . This is Friday — the real one."*
 
 ---
-
-## Community — Join NexSemble
-
-Friday is built in public and shared through **NexSemble** — a community of builders, hackers, and learners who ship real projects together. Come talk Friday, AI agents, and whatever you're bui[...]
-
-<div align="center">
-
-[![Discord](https://img.shields.io/discord/1483417587034493009?style=for-the-badge&logo=discord&logoColor=white&label=NexSemble%20Discord&color=5865F2)](https://discord.gg/Ttqz3jHGk2)
-
-**[→ Join the NexSemble Discord](https://discord.gg/Ttqz3jHGk2)**
-
-</div>
-
----
-
-<div align="center">
 
 **Star the repo if Friday helped you. She deserves it.**
 
