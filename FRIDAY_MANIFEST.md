@@ -62,3 +62,17 @@ FRIDAY is a Windows-native, Iron-Man-inspired personal AI OS assistant built on 
 3. Run compile check: `python -m compileall -q friday`
 4. Commit small coherent units with clear messages.
 5. Never commit secrets, .env files, tokens, or personal memory data.
+
+## Last verified 2026-11-10 (append — document above left unchanged)
+
+- ~199 modules in `friday/` (324 .py files incl. subpackages/tests artifacts).
+- Tool manifest: 201 hand-written declarations in `_build_tools()` + 651 auto-generated (`tools/registry.py`) + ~480 dynamic OSINT → **209 declared tools** after the 8 agent-desktop tools were added (`_build_tools()` count). The Live-API surface actually sent at connect is `_build_live_tools()` (TOOL_MAP introspection).
+- `TOOL_MAP`: **504 unique entries, 0 duplicates** (forms_list_responses double-entry removed; agent-desktop tools wired in).
+- `tool_registry.TOOL_META`: **278 entries — 100% of the hand-written manifest covered** (was 36 short; threat_intel_ip alias added).
+- Tests: **354** collected by `python -m unittest discover -p "test_*.py"`; **7 errors — all pre-existing** (scratch/UI test files import or contact live services; not fixed on purpose). Same 7 as the pre-change baseline; 347 pass. Targeted `unittest test_tool_registry test_spawned_agents` → **16/16 OK**.
+- `python -m compileall -q friday` fails ONLY on 4 pre-existing broken agent scratch files under `friday/tests/_research_test_outputs/` (tracked; owner's call whether to delete).
+- Fallback "backup brain": Gemini Live 429/1007 → `_fallback_text_mode` → NIM **nemotron-3-ultra-550b-a55b → nemotron-3.5-lightning-30b-a3b → minimax-m3.1-flash (2-min budget)** → `gemini-2.5-flash` → `gemini-flash-lite-latest`. OpenCode Zen removed from the active chain (owner 2026-11-10).
+- Voice: default gemini-live; on Live unavailability/429: **fish (Selene, `s2.1-pro-free` free-tier header) → kitten (local 24kHz) → sarvam → edge-tts**. Fish/Selene synthesis verified (`tts_test/selene_fish_sample2.wav`).
+- Launch: canonical is `python friday.py` (via `.\friday.cmd`); `python friday/live.py` also works since the sys.path bootstrap was moved before the `friday.*` imports. `friday.cmd` mirrors install.ps1's wrapper.
+- Spawning agent terminals requires at least one of `NVIDIA_NIM_API_KEY` / `OPENCODE_ZEN_API_KEY` in `.env` (hard gate in `agent_terminal._run_agent`).
+- FRIDAY_MANIFEST.md above is stale in places ("160+ tools", "245 tests", "All 80 modules"); trust this section over it.
