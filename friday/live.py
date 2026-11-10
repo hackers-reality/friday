@@ -767,7 +767,7 @@ Advanced OSINT:
 [NVIDIA NIM — FREE AI MODELS (no local GPU needed)]
 NVIDIA NIM provides FREE access to 46+ AI models via cloud API. No credit card required.
 - nvidia_image_gen(prompt, model) — Generate images using top models: flux.1-schnell (fast), sdxl, stable-diffusion-3.5-medium, playground-v2.5. Returns PNG file. Requires NVIDIA_API_KEY env var (free from build.nvidia.com).
-- nvidia_chat(prompt, model, system_prompt) — Chat with free LLMs: llama-3.3-70b, mixtral-8x22b, nemotron-4-340b, deepseek-r1, qwen2.5-72b. OpenAI-compatible.
+- nvidia_chat(prompt, model, system_prompt) — Chat with free LLMs: nemotron-3-ultra-550b-a55b, nemotron-3.5-lightning-30b-a3b, minimax-m3.1-flash. OpenAI-compatible.
 - nvidia_list_models() — See all available models grouped by category (image gen, chat, embedding).
 - nvidia_status() — Check NVIDIA API connectivity and configuration.
 Use these when you need image generation without local GPU, or when you need a secondary LLM for specialized reasoning tasks.
@@ -880,8 +880,8 @@ Your architecture:
 
 Your model chain (automatic fallback):
 1. Gemini 2.5 Flash Native Audio (primary — streaming audio, function calls, live screen)
-2. NVIDIA NIM models (Llama 3.3 70B, DeepSeek V4 Flash, Mistral Large 3, Florence-2 VL)
-3. OpenCode Zen models (Big-Pickle, MiMo V2.5)
+2. NVIDIA NIM free tier (nemotron-3-ultra-550b-a55b → nemotron-3.5-lightning-30b-a3b → minimax-m3.1-flash)
+3. Google Gemini Flash (gemini-2.5-flash, then gemini-flash-lite-latest)
 
 Screen: streamed as 720p live video at ~1 FPS to Gemini Live API.
 Camera: NOT streamed. Captured on-demand via ask_camera/recall_recent_activity. Analyzed by NIM VL models.
@@ -4505,35 +4505,29 @@ def _extract_text_tool_calls(text: str) -> list[tuple[str, dict]]:
 
 
 async def _fallback_text_mode(chat, reason=""):
-    """Fallback when Live API is unavailable. Uses NIM/Zen with 3-tier tool execution."""
+    """Fallback when Live API is unavailable. Uses NIM (ultra→lightning→minimax) then Gemini Flash."""
     msg = f"Gemini Live API unavailable. {reason}".strip() if reason else "Gemini Live API unavailable."
 
-    from friday.nim_client import NIM_API_BASE, ZEN_API_BASE
+    from friday.nim_client import NIM_API_BASE
     import httpx, json, re, traceback
 
     nim_key = os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or ""
-    zen_key = os.getenv("ZEN_API_KEY") or os.getenv("OPENCODE_API_KEY") or ""
 
     openai_tools = _build_openai_tools()
     tool_ref = _build_tool_reference()
     fallback_system = SYSTEM_INSTRUCTION + "\n\n" + tool_ref
     history: list[dict] = []
 
+    # Owner-approved chain (2026-11-10): NIM free tier first, Gemini Flash last.
+    # .env's NVIDIA_NIM_MODEL (deepseek-v4-flash, retired) is intentionally ignored.
+    # minimax-m3.1-flash is best-effort (timed out at 120s on probe).
     nim_models = [
-        os.getenv("NVIDIA_NIM_MODEL", "deepseek-ai/deepseek-v4-flash"),
-        "deepseek-ai/deepseek-v4-flash",
-        "moonshotai/kimi-k2.5",
-        "meta/llama-3.3-70b-instruct",
-        "minimaxai/minimax-m2.7",
-        "meta/llama-4-maverick-17b-128e-instruct",
-        "deepseek-ai/deepseek-v4-pro",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "minimaxai/minimax-m3.1-flash",
     ]
-
-    zen_models = [
-        os.getenv("OPENCODE_ZEN_MODEL", "big-pickle"),
-        "big-pickle",
-        "mimo-v2.5-free",
-    ]
+    # Owner-verified 200 on 2026-11-10. .env's GEMINI_MODEL (gemini-2.0-flash) ignored.
+    gemini_models = ["gemini-2.5-flash", "gemini-flash-lite-latest"]
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as http:
 
@@ -4543,30 +4537,42 @@ async def _fallback_text_mode(chat, reason=""):
             # NIM models get tools described in system prompt text only — skip tools array
             # to avoid 150KB+ payloads that choke smaller context windows.
             # Text-based tool extraction (Tier 3) handles tool calls from the prompt text.
+            # Minimax is best-effort: cap each model call at 2 minutes (probe-timed-out on 2026-11-10).
             if nim_key:
                 for model in nim_models:
+                    budget = 120.0 if "minimax" in model else 115.0
                     try:
-                        resp = await http.post(
-                            f"{NIM_API_BASE}/chat/completions",
-                            headers={"Authorization": f"Bearer {nim_key}", "Content-Type": "application/json"},
-                            json={**p, "model": model},
+                        resp = await asyncio.wait_for(
+                            http.post(
+                                f"{NIM_API_BASE}/chat/completions",
+                                headers={"Authorization": f"Bearer {nim_key}", "Content-Type": "application/json"},
+                                json={**p, "model": model},
+                            ),
+                            timeout=budget,
                         )
                         if resp.status_code == 200:
                             return resp.text
                     except Exception:
                         continue
-            if zen_key:
-                for model in zen_models:
-                    try:
-                        resp = await http.post(
-                            f"{ZEN_API_BASE}/chat/completions",
-                            headers={"Authorization": f"Bearer {zen_key}", "Content-Type": "application/json"},
-                            json={**p, "model": model},
-                        )
-                        if resp.status_code == 200:
-                            return resp.text
-                    except Exception:
-                        continue
+            # Last rung: Google Gemini (gemini-2.5-flash → gemini-flash-lite-latest).
+            google_key = os.getenv("GOOGLE_API_KEY", "")
+            if google_key:
+                try:
+                    from google import genai
+                    client = genai.Client(api_key=google_key)
+                    contents = "\n\n".join(
+                        f"{m.get('role', 'user')}: {m.get('content', '')}" for m in p.get("messages", [])
+                    )
+                    for gm in gemini_models:
+                        try:
+                            resp = client.models.generate_content(model=gm, contents=contents)
+                            txt = getattr(resp, "text", "") or ""
+                            if txt:
+                                return json.dumps({"choices": [{"message": {"content": txt}}]})
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
             return None
 
         def _clean_param_key(key: str) -> str:
@@ -4627,7 +4633,7 @@ async def _fallback_text_mode(chat, reason=""):
                         chat.add_tool_call(func_name, args)
                         result = await _invoke_tool(func_name, args, session=None)
                         result_str = json.dumps(result)[:500] if isinstance(result, dict) else str(result)[:500]
-                        if result_str.startswith("[NIM") or result_str.startswith("[ZEN") or "ALL TIERS" in result_str:
+                        if result_str.startswith("[NIM") or result_str.startswith("[ALL TIERS") or "ALL TIERS" in result_str:
                             result_str = "[OK]"
                         chat.add_tool_result(func_name, result_str)
                         history.append({"role": "assistant", "content": None, "tool_calls": [tc]})

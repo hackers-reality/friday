@@ -36,11 +36,9 @@ IMAGE_MODEL_MAP = {
 }
 
 CHAT_MODEL_MAP = {
-    "meta/llama-3.3-70b-instruct": "meta/llama-3.3-70b-instruct",
-    "mistralai/mixtral-8x22b-instruct-v0.1": "mistralai/mixtral-8x22b-instruct-v0.1",
-    "nvidia/nemotron-4-340b-instruct": "nvidia/nemotron-4-340b-instruct",
-    "deepseek-ai/deepseek-r1": "deepseek-ai/deepseek-r1",
-    "qwen/qwen2.5-72b-instruct": "qwen/qwen2.5-72b-instruct",
+    "nvidia/nemotron-3-ultra-550b-a55b": "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "minimaxai/minimax-m3.1-flash": "minimaxai/minimax-m3.1-flash",
 }
 
 # ── Helpers ──
@@ -237,7 +235,7 @@ def nvidia_image_gen(
 
 def nvidia_chat(
     prompt: str,
-    model: str = "meta/llama-3.3-70b-instruct",
+    model: str = "nvidia/nemotron-3-ultra-550b-a55b",
     system_prompt: str = "",
     max_tokens: int = 1024,
 ) -> dict:
@@ -245,7 +243,7 @@ def nvidia_chat(
 
     Args:
         prompt: User message text.
-        model: Model identifier (e.g. ``"meta/llama-3.3-70b-instruct"``).
+        model: Model identifier (e.g. ``"nvidia/nemotron-3-ultra-550b-a55b"``).
         system_prompt: Optional system-level instruction.
         max_tokens: Maximum tokens in the response.
 

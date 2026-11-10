@@ -13,9 +13,9 @@ import yaml
 
 _DEFAULT_MODEL_MAP: dict[str, list[str]] = {
     "code_gen": [
-        "deepseek-ai/deepseek-v4-flash",
-        "meta/llama-3.3-70b-instruct",
-        "minimaxai/minimax-m2.7",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "minimaxai/minimax-m3.1-flash",
     ],
     "image_analysis": [
         "microsoft/Florence-2-large",
@@ -23,21 +23,39 @@ _DEFAULT_MODEL_MAP: dict[str, list[str]] = {
         "nvidia/nemotron-nano-12b-v2-vl",
     ],
     "research": [
-        "meta/llama-3.3-70b-instruct",
-        "deepseek-ai/deepseek-v4-flash",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "minimaxai/minimax-m3.1-flash",
     ],
     "summarization": [
-        "meta/llama-3.3-70b-instruct",
-        "minimaxai/minimax-m2.7",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "minimaxai/minimax-m3.1-flash",
     ],
     "reasoning": [
-        "deepseek-ai/deepseek-v4-flash",
-        "meta/llama-3.3-70b-instruct",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "minimaxai/minimax-m3.1-flash",
     ],
     "general": [
-        "meta/llama-3.3-70b-instruct",
-        "deepseek-ai/deepseek-v4-flash",
-        "minimaxai/minimax-m2.7",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "minimaxai/minimax-m3.1-flash",
+    ],
+    "planning": [
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "minimaxai/minimax-m3.1-flash",
+    ],
+    "browse": [
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "minimaxai/minimax-m3.1-flash",
+    ],
+    "osint": [
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "minimaxai/minimax-m3.1-flash",
     ],
 }
 

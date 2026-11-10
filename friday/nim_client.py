@@ -2,10 +2,14 @@
 FRIDAY Inference Client — async OpenAI-compatible client with rate limiting,
 key load balancing, exponential backoff, and layered fallback chain.
 
-Fallback chain:
+Fallback chain (2026-11-10, owner-approved):
   1. NVIDIA NIM (https://integrate.api.nvidia.com/v1)
-  2. OpenCode Zen API (https://api.opencode.ai/v1)
-  3. Google Gemini (google-genai SDK)
+     nvidia/nemotron-3-ultra-550b-a55b → nvidia/nemotron-3.5-lightning-30b-a3b
+     → minimaxai/minimax-m3.1-flash (best-effort, 2-minute budget)
+  2. Google Gemini — gemini-2.5-flash (→ gemini-flash-lite-latest on 503/429)
+
+OpenCode Zen tier removed at owner's request (2026-11-10). DeepSeek/Llama/Kimi
+IDs were retired with it.
 """
 
 from __future__ import annotations
@@ -21,10 +25,22 @@ import httpx
 
 NIM_API_BASE = os.getenv("NIM_API_BASE", "https://integrate.api.nvidia.com/v1")
 ZEN_API_BASE = os.getenv("ZEN_API_BASE", "https://opencode.ai/zen/v1")
-GEMINI_FALLBACK_MODEL = os.getenv(
-    "GEMINI_MODEL",
-    os.getenv("FRIDAY_GEMINI_MODEL", "gemini-2.0-flash"),
-)
+GEMINI_FALLBACK_MODEL = "gemini-2.5-flash"  # owner-verified 200 on 2026-11-10 (GEMINI_MODEL env intentionally ignored)
+
+# Owner-approved NIM free-tier chain (2026-11-10): try in order.
+# minimax-m3.1-flash is best-effort — capped at 2 minutes, then skipped.
+NIM_MODEL_CHAIN = [
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "minimaxai/minimax-m3.1-flash",
+]
+
+
+def _nim_budget_seconds(model: str) -> Optional[float]:
+    """Time budget per model. minimax is flaky — give it 2 minutes, nothing more."""
+    if "minimax" in model:
+        return 120.0
+    return None
 
 
 def _env_first(*names: str) -> str:
@@ -86,11 +102,11 @@ class TokenBucket:
 
 class InferenceClient:
     """
-    Async inference client with 3-tier fallback chain:
+    Async inference client with 2-tier fallback chain (2026-11-10, owner-approved):
 
     1. NVIDIA NIM  — multi-key, rate-limited, OpenAI-compatible
-    2. OpenCode Zen — single-key, OpenAI-compatible (opencode/big-pickle, etc.)
-    3. Google Gemini — google-genai SDK
+       nemotron-3-ultra-550b-a55b → nemotron-3.5-lightning-30b-a3b → minimax-m3.1-flash (2-min budget)
+    2. Google Gemini — gemini-2.5-flash (→ gemini-flash-lite-latest on 503/429)
     """
 
     def __init__(self, nim_api_base: str = NIM_API_BASE, zen_api_base: str = ZEN_API_BASE):
@@ -130,29 +146,43 @@ class InferenceClient:
         tools: list[dict] | None = None,
     ) -> NIMResult:
         """
-        Send a chat completion request. Fallback chain:
+        Send a chat completion request. Fallback chain (2026-11-10):
 
-          1. NVIDIA NIM  (rate-limited, multi-key)
-          2. OpenCode Zen (single-key, big-pickle etc.)
-          3. Google Gemini (google-genai SDK)
+          1. NVIDIA NIM  (ultra → lightning → minimax, multi-key, rate-limited)
+          2. Google Gemini (gemini-2.5-flash; gemini-flash-lite-latest on 503/429)
+
+        The caller-requested `model` (if any) is appended at the end of the NIM
+        chain, after the owner-approved defaults.
         """
-        # ── Tier 1: NVIDIA NIM ──
+        # ── Tier 1: NVIDIA NIM chain ──
+        candidates = list(NIM_MODEL_CHAIN)
+        if model and model not in candidates:
+            candidates.append(model)
+
         if self._keys:
-            result = await self._nim_chat(model, messages, max_tokens, temperature, tools)
-            if result and not result.content.startswith("[NIM"):
-                return result
-            reason = result.content[:200] if result else "No NIM keys"
+            reason = None
+            for m in candidates:
+                budget = _nim_budget_seconds(m)
+                try:
+                    if budget:
+                        result = await asyncio.wait_for(
+                            self._nim_chat(m, messages, max_tokens, temperature, tools),
+                            timeout=budget,
+                        )
+                    else:
+                        result = await self._nim_chat(m, messages, max_tokens, temperature, tools)
+                except asyncio.TimeoutError:
+                    result = NIMResult(model=m,
+                                       content=f"[NIM timeout after {int(budget or 0)}s - skipped]",
+                                       usage={}, duration_ms=0)
+                if result and not result.content.startswith("[NIM"):
+                    return result
+                reason = (reason or "") + f"; {m}: {result.content[:120] if result else 'no result'}"
+            reason = reason.strip("; ") if reason else "all NIM models failed"
         else:
             reason = "No NIM keys configured"
 
-        # ── Tier 2: OpenCode Zen ──
-        if self._zen_key:
-            result = await self._zen_chat(model, messages, max_tokens, temperature)
-            if result and not result.content.startswith("[ZEN"):
-                return result
-            reason += f"; Zen: {result.content[:100] if result else 'no key'}"
-
-        # ── Tier 3: Google Gemini ──
+        # ── Tier 2: Google Gemini ──
         return await self._gemini_fallback(model, messages, reason)
 
     async def _nim_chat(self, model: str, messages: list[dict],
@@ -220,6 +250,8 @@ class InferenceClient:
         return NIMResult(model=model, content="[NIM rate limited after 3 retries]",
                          usage={}, duration_ms=0)
 
+    # NOTE: OpenCode Zen tier disabled by owner decision 2026-11-10 (see prompt.md).
+    # _zen_chat retained for reference but is never called by the fallback chain.
     async def _zen_chat(self, model: str, messages: list[dict],
                         max_tokens: int, temperature: float) -> Optional[NIMResult]:
         """Tier 2: OpenCode Zen API (OpenAI-compatible)."""
@@ -253,30 +285,41 @@ class InferenceClient:
                              usage={}, duration_ms=int((time.monotonic() - t0) * 1000))
 
     async def _gemini_fallback(self, model: str, messages: list[dict], reason: str) -> NIMResult:
-        """Tier 3: Google Gemini via google-genai SDK (synchronous, blocking)."""
-        try:
-            from google import genai
-            client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-            sys_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
-            user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
-            prompt = f"{sys_msg}\n\n{user_msg}" if sys_msg else user_msg
-            t0 = time.monotonic()
-            model_id = os.getenv("GEMINI_MODEL", os.getenv("FRIDAY_GEMINI_MODEL", GEMINI_FALLBACK_MODEL))
-            resp = client.models.generate_content(model=model_id, contents=prompt)
-            duration = int((time.monotonic() - t0) * 1000)
-            return NIMResult(
-                model=model_id,
-                content=resp.text,
-                usage={"prompt_tokens": 0, "completion_tokens": 0},
-                duration_ms=duration,
-            )
-        except Exception as e:
-            return NIMResult(
-                model="fallback_error",
-                content=f"[ALL TIERS FAILED] Prior: {reason}. Gemini: {e}",
-                usage={},
-                duration_ms=0,
-            )
+        """Last rung: Google Gemini. gemini-2.5-flash first, gemini-flash-lite-latest on failure
+        (owner-verified 200 on 2026-11-10 for both)."""
+        from google import genai
+        sys_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
+        user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
+        prompt = f"{sys_msg}\n\n{user_msg}" if sys_msg else user_msg
+        # Owner-verified chain (2026-11-10). .env's GEMINI_MODEL (gemini-2.0-flash,
+        # stale/unverified) is intentionally ignored here.
+        gemini_chain = ["gemini-2.5-flash", "gemini-flash-lite-latest"]
+        seen: set[str] = set()
+        last_err = None
+        for model_id in gemini_chain:
+            if model_id in seen:
+                continue
+            seen.add(model_id)
+            try:
+                client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+                t0 = time.monotonic()
+                resp = client.models.generate_content(model=model_id, contents=prompt)
+                duration = int((time.monotonic() - t0) * 1000)
+                return NIMResult(
+                    model=model_id,
+                    content=resp.text,
+                    usage={"prompt_tokens": 0, "completion_tokens": 0},
+                    duration_ms=duration,
+                )
+            except Exception as e:
+                last_err = e
+                continue
+        return NIMResult(
+            model="fallback_error",
+            content=f"[ALL TIERS FAILED] Prior: {reason}. Gemini: {last_err}",
+            usage={},
+            duration_ms=0,
+        )
 
     async def health_check(self, model: str) -> bool:
         """Quick check if a model is reachable via NIM."""

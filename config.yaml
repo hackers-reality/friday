@@ -1,35 +1,43 @@
-model: opencode/big-pickle
+model: nvidia/nemotron-3-ultra-550b-a55b
 nim:
-  api_base: https://api.opencode.ai/v1
+  api_base: https://integrate.api.nvidia.com/v1
   rate_limit_rpm: 1000
   model_map:
     browse:
-      - opencode/big-pickle
-      - qwen/qwen3-coder-480b-a35b-instruct
+      - nvidia/nemotron-3-ultra-550b-a55b
+      - nvidia/nemotron-3.5-lightning-30b-a3b
+      - minimaxai/minimax-m3.1-flash
     code_gen:
-      - opencode/big-pickle
-      - qwen/qwen3-coder-480b-a35b-instruct
+      - nvidia/nemotron-3-ultra-550b-a55b
+      - nvidia/nemotron-3.5-lightning-30b-a3b
+      - minimaxai/minimax-m3.1-flash
     general:
-      - opencode/big-pickle
-      - qwen/qwen3-coder-480b-a35b-instruct
+      - nvidia/nemotron-3-ultra-550b-a55b
+      - nvidia/nemotron-3.5-lightning-30b-a3b
+      - minimaxai/minimax-m3.1-flash
     image_analysis:
-      - opencode/big-pickle
       - meta/llama-3.2-11b-vision-instruct
+      - nvidia/nemotron-nano-12b-v2-vl
     osint:
-      - opencode/big-pickle
-      - qwen/qwen3-coder-480b-a35b-instruct
+      - nvidia/nemotron-3-ultra-550b-a55b
+      - nvidia/nemotron-3.5-lightning-30b-a3b
+      - minimaxai/minimax-m3.1-flash
     reasoning:
-      - opencode/big-pickle
-      - qwen/qwen3-coder-480b-a35b-instruct
+      - nvidia/nemotron-3-ultra-550b-a55b
+      - nvidia/nemotron-3.5-lightning-30b-a3b
+      - minimaxai/minimax-m3.1-flash
     research:
-      - opencode/big-pickle
-      - qwen/qwen3-coder-480b-a35b-instruct
+      - nvidia/nemotron-3-ultra-550b-a55b
+      - nvidia/nemotron-3.5-lightning-30b-a3b
+      - minimaxai/minimax-m3.1-flash
     summarization:
-      - opencode/big-pickle
-      - qwen/qwen3-coder-480b-a35b-instruct
+      - nvidia/nemotron-3-ultra-550b-a55b
+      - nvidia/nemotron-3.5-lightning-30b-a3b
+      - minimaxai/minimax-m3.1-flash
     planning:
-      - opencode/big-pickle
-      - qwen/qwen3-coder-480b-a35b-instruct
+      - nvidia/nemotron-3-ultra-550b-a55b
+      - nvidia/nemotron-3.5-lightning-30b-a3b
+      - minimaxai/minimax-m3.1-flash
 agents:
 - id: research_agent
   name: Veronica
@@ -37,7 +45,7 @@ agents:
   - research
   - summarization
   - osint
-  nim_model: opencode/big-pickle
+  nim_model: nvidia/nemotron-3-ultra-550b-a55b
   tools:
   - browser_use_navigate
   - browser_use_click
@@ -60,7 +68,7 @@ agents:
   - deep_research
   enabled: true
   system_prompt: |
-    You are Veronica, FRIDAY's deep-dive research specialist running on NVIDIA NIM with large-context models (Qwen 3 Coder 480B / Nemotron Omni 30B).
+    You are Veronica, FRIDAY's deep-dive research specialist running on NVIDIA NIM with nemotron-3-ultra-550b-a55b.
 
     YOUR WORKFLOW — every research request follows these steps:
 
@@ -110,7 +118,7 @@ agents:
   - reasoning
   - code_review
   - refactor
-  nim_model: opencode/big-pickle
+  nim_model: nvidia/nemotron-3-ultra-550b-a55b
   tools:
   - read_file
   - write_file
@@ -165,7 +173,7 @@ agents:
   task_types:
   - summarization
   - general
-  nim_model: meta/llama-3.3-70b-instruct
+  nim_model: nvidia/nemotron-3.5-lightning-30b-a3b
   tools:
   - web_search
   - email
@@ -181,7 +189,7 @@ agents:
   task_types:
   - reasoning
   - general
-  nim_model: minimax/minimax-01
+  nim_model: minimaxai/minimax-m3.1-flash
   tools:
   - task_manager
   - calendar
@@ -197,7 +205,7 @@ agents:
   task_types:
   - reasoning
   - research
-  nim_model: opencode/big-pickle
+  nim_model: nvidia/nemotron-3-ultra-550b-a55b
   tools:
   - deep_research
   - web_search
@@ -218,7 +226,7 @@ agents:
   - ip_scan
   - domain_scan
   - graph_query
-  nim_model: opencode/big-pickle
+  nim_model: nvidia/nemotron-3-ultra-550b-a55b
   tools:
   - sherlock
   - exiftool
@@ -272,7 +280,7 @@ agents:
   - form_fill
   - web_extract
   - screenshot
-  nim_model: meta/llama-3.3-70b-instruct
+  nim_model: nvidia/nemotron-3.5-lightning-30b-a3b
   tools:
   - navigate
   - click
