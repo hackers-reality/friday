@@ -1149,6 +1149,31 @@ class AgentDelegator:
 
     async def _run_agent(self, agent_id: str, task: str, role: str) -> dict[str, Any]:
         """Execute a task on a specific agent via the orchestrator."""
+        km = get_key_manager()
+        if not km.have_keys_present():
+            term = self._terminal_manager.spawn_agent_terminal(
+                agent_name=agent_id,
+                prompt=task,
+                task_type=role,
+                role=role,
+            )
+            self._terminal_manager.update_agent_terminal(
+                agent_id,
+                status="failed",
+                action="No NVIDIA NIM or OpenCode Zen API key — agent cannot spawn",
+                progress=0,
+                result_summary="Set NVIDIA_NIM_API_KEY or OPENCODE_ZEN_API_KEY (or call friday_key_check)",
+            )
+            return {
+                "agent_id": agent_id,
+                "task": task,
+                "status": "failed",
+                "error": "No NVIDIA NIM or OpenCode Zen API key configured. "
+                         "Agents cannot spawn. Run friday_key_check or set "
+                         "NVIDIA_NIM_API_KEY / OPENCODE_ZEN_API_KEY in .env.",
+                "duration_ms": 0,
+                "gated": True,
+            }
         term = self._terminal_manager.spawn_agent_terminal(
             agent_name=agent_id,
             prompt=task,

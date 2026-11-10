@@ -31,6 +31,7 @@ data/
 
 # Dependencies
 venv/
+.venv-kitten/
 dashboard/node_modules/
 friday/friday_ui/frontend/node_modules/
 

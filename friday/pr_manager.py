@@ -104,7 +104,6 @@ def _scan_repo(repo: str, gh: object) -> list:
             "analyzed": False,
         }
         new_prs.append(pr_info)
-        state["seen_prs"][repo].append(pr_id)
 
     _save_state(state)
     return new_prs

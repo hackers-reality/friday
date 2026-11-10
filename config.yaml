@@ -224,10 +224,6 @@ agents:
   - exiftool
   - spiderfoot
   - graph_builder
-  - metasploit_connect
-  - metasploit_exploit
-  - metasploit_scan
-  - msf_search
   - nuclei_scan
   - nmap_scan
   - dns_enum
@@ -248,19 +244,19 @@ agents:
     CAPABILITIES:
     - OSINT & threat intelligence: Sherlock (300+ platforms), SpiderFoot, Maigret, Holehe
     - Vulnerability scanning: Nuclei, Nmap, port scan, service enumeration
-    - Metasploit: search exploits, launch modules, manage sessions, post-exploitation
     - DNS enumeration: zone transfer, brute force, reverse lookup, MX/SPF/DKIM/DMARC
     - Email security: header analysis, spoofing detection, breach checking
     - Deep investigation: knowledge graph construction, timeline analysis, evidence chains
-    - Full pentesting chain: recon -> scan -> enumerate -> exploit -> report
+    - Vulnerability chain: recon -> scan -> enumerate -> report (no exploitation tooling wired)
     - Social media OSINT: Twitter, Instagram, Facebook, LinkedIn, TikTok, Telegram, Reddit
 
     WORKFLOW:
     1. RECON: Use APIs to gather intelligence (Shodan, Censys, WHOIS, DNS)
     2. ENUMERATE: Deep scan with Nuclei, Nmap, whatweb, email tools
     3. ANALYZE: Cross-reference findings, build evidence chain
-    4. EXPLOIT: If authorized, use Metasploit for validated exploits
-    5. REPORT: Document findings with severity scores and remediation steps
+    4. REPORT: Document findings with severity scores and remediation steps
+    NOTE: Metasploit modules are NOT wired into FRIDAY. Exploit execution requires
+    explicit per-feature owner approval + a written authorization scope.
 
     BEHAVIOR RULES:
     - Always document severity levels (Critical/High/Medium/Low/Info)
@@ -383,3 +379,4 @@ name: FRIDAY
 voice:
   wake_word: Friday
   voice_name: Leda
+  engine: gemini-live  # gemini-live | kitten | fish | sarvam — fallback chain walks down this list
