@@ -24,6 +24,10 @@ import sys
 import threading
 import time
 
+# Allow `python friday/live.py` (script mode) — repo root must be importable
+# before any `friday.*` imports (friday.cmd / friday.py / -m friday.live don't need this).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pyaudio
 from dotenv import load_dotenv
 from google import genai
@@ -59,8 +63,6 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8")
     except Exception:
         pass
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from friday._paths import PICOVOICE_MODEL
 
@@ -124,10 +126,16 @@ from friday.browser_use_bridge import (
     browser_use_status, browser_use_clear, browser_use_reconnect,
 )
 from friday.desktop_use_bridge import (
-    desktop_use_status, desktop_list_windows, desktop_get_active_window,
-    desktop_focus_window, desktop_launch_app, desktop_click,
+    desktop_use_status, desktop_get_active_window,
+    desktop_focus_window, desktop_launch_app,
     desktop_type_text, desktop_extract_text, desktop_screenshot,
     desktop_scroll, desktop_press_key, desktop_get_element_tree,
+)
+# agent-desktop (accessibility-tree) bridge — preferred desktop actuation path.
+# Refs come from the latest desktop_snapshot only; headless by default.
+from friday.desktop_bridge import (
+    desktop_status, desktop_list_apps, desktop_list_windows,
+    desktop_snapshot, desktop_get, desktop_click, desktop_type, desktop_press,
 )
 from friday.voice_use_bridge import (
     voice_use_status, voice_list_devices, voice_record,
@@ -526,12 +534,23 @@ Use browser-use when you need to click, type, scroll, extract content, or fill f
 Desktop Control (desktop-use — native Windows app automation):
 - desktop_launch_app(name) — launch desktop applications
 - desktop_focus_window(title) — bring window to foreground
-- desktop_list_windows() / desktop_get_active_window() — window management
+- desktop_get_active_window() — window management
 - desktop_get_element_tree(title) — inspect UI element hierarchy
-- desktop_click(title, auto_id) — click UI elements by title or automation ID
 - desktop_type_text(text) — type into focused window
 - desktop_extract_text(title) — read window text
 - desktop_screenshot() — capture desktop screenshots
+
+Desktop Actuation (agent-desktop — PREFERRED path for clicking/typing in native apps):
+Reads the OS accessibility tree (Windows UI Automation / macOS AX / Linux AT-SPI) — no screenshots, no OCR, no pixel matching. Refs are snapshot-scoped: '@<snapshot_id>:e<N>'.
+- desktop_status() — agent-desktop availability + OS permissions (read-only)
+- desktop_list_apps() — running applications (read-only)
+- desktop_list_windows() — open windows with ids/bounds/titles (read-only)
+- desktop_snapshot(app, window_id) — capture accessibility tree with refs. ALWAYS snapshot first.
+- desktop_get(ref, property) — read element text/value/title/bounds/role/states
+- desktop_click(ref) — click element by ref (headless by default)
+- desktop_type(ref, text) — type into element by ref (text piped via stdin)
+- desktop_press(key, app) — key combo like 'return', 'ctrl+c', 'shift+tab'
+RULES: refs only come from the LATEST snapshot — if the UI changed, STALE_REF / AMBIGUOUS_TARGET means take a fresh desktop_snapshot and use its refs. Quote refs in PowerShell ('@s8f3k2p9:e8'). Never reuse refs across snapshots.
 - desktop_scroll(direction) — scroll in window
 - desktop_press_key(key) — send keystrokes
 
@@ -3229,6 +3248,59 @@ def _build_tools():
                 description="Close all active agent terminal windows and clean up resources."
             ),
 
+            # ─── Desktop Bridge (agent-desktop accessibility-tree actuation) ───
+            types.FunctionDeclaration(
+                name="desktop_status",
+                description="agent-desktop availability, OS permissions and supported surfaces (read-only).",
+            ),
+            types.FunctionDeclaration(
+                name="desktop_list_apps",
+                description="List running applications (pid, name, presentation) via the OS (read-only).",
+            ),
+            types.FunctionDeclaration(
+                name="desktop_list_windows",
+                description="List open application windows: id, title, bounds, focus state (read-only).",
+            ),
+            types.FunctionDeclaration(
+                name="desktop_snapshot",
+                description="Capture the accessibility tree of an app as structured JSON. Every actionable element gets a snapshot-scoped ref '@<snapshot_id>:e<N>'. ALWAYS call this first; refs expire when the UI changes.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "app": {"type": "STRING", "description": "Application name to snapshot, e.g. 'Notepad'. Empty = focused window."},
+                    "window_id": {"type": "STRING", "description": "Scope to a specific window id from desktop_list_windows (optional)."},
+                }),
+            ),
+            types.FunctionDeclaration(
+                name="desktop_get",
+                description="Read an element property from the latest snapshot: text (default), value, title, bounds, role, states.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "ref": {"type": "STRING", "description": "Qualified ref from the latest desktop_snapshot, e.g. '@s8f3k2p9:e8'."},
+                    "property": {"type": "STRING", "description": "Property to read: text, value, title, bounds, role, states."},
+                }, required=["ref"]),
+            ),
+            types.FunctionDeclaration(
+                name="desktop_click",
+                description="Click an element via its accessibility ref from the latest snapshot (headless by default).",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "ref": {"type": "STRING", "description": "Qualified ref from the latest desktop_snapshot, e.g. '@s8f3k2p9:e8'."},
+                }, required=["ref"]),
+            ),
+            types.FunctionDeclaration(
+                name="desktop_type",
+                description="Type text into the element identified by ref. Text is piped via stdin and never appears in process arguments.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "ref": {"type": "STRING", "description": "Qualified ref from the latest desktop_snapshot, e.g. '@s8f3k2p9:e8'."},
+                    "text": {"type": "STRING", "description": "Text to type into the element."},
+                }, required=["ref", "text"]),
+            ),
+            types.FunctionDeclaration(
+                name="desktop_press",
+                description="Send a key combo to an app's process without focusing it (headless). e.g. 'return', 'escape', 'ctrl+c', 'shift+tab'.",
+                parameters=types.Schema(type="OBJECT", properties={
+                    "key": {"type": "STRING", "description": "Key combo like 'return', 'ctrl+c', 'shift+tab'."},
+                    "app": {"type": "STRING", "description": "Target application name (optional)."},
+                }, required=["key"]),
+            ),
+
             # ─── Auto-generated declarations from tools/registry.py ───
             *build_new_tools(types),
         ])
@@ -3574,7 +3646,6 @@ TOOL_MAP = {
     "people_list_directories": people_list_directories,
     "docs_batch_update": docs_batch_update,
     "docs_insert_image": docs_insert_image,
-    "forms_list_responses": forms_list_responses,
     "close_app": close_app,
     "list_running_apps": list_running_apps,
     "generate_file": generate_file,
@@ -3789,6 +3860,7 @@ TOOL_MAP = {
     "dehashed_search": dehashed_search,
     "ip_abuse_report": ip_abuse_report,
     "ip_threat_intel": ip_threat_intel,
+    "threat_intel_ip": ip_threat_intel,  # alias: name used by the Gemini tool manifest
     "ip_reverse_dns": ip_reverse_dns,
     "ip_asn_info": ip_asn_info,
     "ip_blacklist_check": ip_blacklist_check,
@@ -3836,12 +3908,20 @@ TOOL_MAP = {
 
     # ─── Desktop-Use Bridge (native Windows app control) ───
     "desktop_use_status": desktop_use_status,
-    "desktop_list_windows": desktop_list_windows,
     "desktop_get_active_window": desktop_get_active_window,
     "desktop_focus_window": desktop_focus_window,
     "desktop_launch_app": desktop_launch_app,
-    "desktop_click": desktop_click,
     "desktop_type_text": desktop_type_text,
+
+    # ─── Desktop Bridge (agent-desktop — accessibility tree actuation) ───
+    "desktop_status": desktop_status,
+    "desktop_list_apps": desktop_list_apps,
+    "desktop_list_windows": desktop_list_windows,
+    "desktop_snapshot": desktop_snapshot,
+    "desktop_get": desktop_get,
+    "desktop_click": desktop_click,
+    "desktop_type": desktop_type,
+    "desktop_press": desktop_press,
     "desktop_extract_text": desktop_extract_text,
     "desktop_screenshot": desktop_screenshot,
     "desktop_scroll": desktop_scroll,
@@ -4618,40 +4698,11 @@ async def _record_and_transcribe() -> str:
 
 
 async def _fallback_tts(text: str):
-    """Speak response using Sarvam or Edge TTS. Plays audio via pyaudio."""
-    import base64, io, wave
-    sarvam_key = os.getenv("SARVAM_API_KEY", "")
-    if sarvam_key:
-        try:
-            import httpx
-            async with httpx.AsyncClient(timeout=10.0) as c:
-                resp = await c.post(
-                    "https://api.sarvam.ai/text-to-speech",
-                    headers={"api-subscription-key": sarvam_key, "Content-Type": "application/json"},
-                    json={"text": text, "speaker": "priya", "model": "bulbul:v3", "target_language_code": "en-IN"},
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    audios = data.get("audios", [])
-                    if audios:
-                        wav_bytes = base64.b64decode(audios[0])
-                        import pyaudio
-                        p = pyaudio.PyAudio()
-                        try:
-                            wf = wave.open(io.BytesIO(wav_bytes))
-                            stream = p.open(format=p.get_format_from_width(wf.getsampwidth()), channels=wf.getnchannels(), rate=wf.getframerate(), output=True)
-                            stream.write(wf.readframes(wf.getnframes()))
-                            stream.stop_stream()
-                            stream.close()
-                        finally:
-                            p.terminate()
-                        return
-        except Exception:
-            pass
-    # Fallback to Edge TTS
+    """Speak a response. Walks the configured voice chain (kitten → fish → sarvam by
+    default; FRIDAY_VOICE_ENGINE / config.yaml voice.engine), Edge TTS as last resort."""
     try:
-        from friday.tools.voice_tools import speak_text
-        await speak_text(text, engine="edge", voice="en-US-AriaNeural")
+        from friday.voice_engine import synthesize_and_play
+        await synthesize_and_play(text)
     except Exception:
         pass
 
