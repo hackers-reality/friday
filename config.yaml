@@ -387,4 +387,4 @@ name: FRIDAY
 voice:
   wake_word: Friday
   voice_name: Leda
-  engine: gemini-live  # gemini-live | kitten | fish | sarvam — fallback chain walks down this list
+  engine: gemini-live  # gemini-live | fish | kitten | sarvam — fallback chain walks down this list; fish(Selene) is default fallback

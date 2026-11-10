@@ -3,17 +3,17 @@
 ``config.yaml → voice.engine`` (or ``FRIDAY_VOICE_ENGINE``) selects the engine:
 
     gemini-live   Gemini 2.5 Flash Native Audio Live API (default; bidirectional voice)
+    fish          Fish Audio cloud TTS, Selene voice (needs FISH_API_KEY; https://fish.audio)
     kitten        KittenTTS Nano 0.8 — local, offline, Apache-2.0 (Python 3.12 side venv)
-    fish          Fish Audio cloud TTS (needs FISH_API_KEY; https://fish.audio)
     sarvam        Sarvam AI bulbul:v3 (needs SARVAM_API_KEY)
 
-When Gemini Live is unavailable (429 / quota / audio 1007 / text-fallback mode) FRIDAY
-speaks through the remainder of the chain, in this order:
+When Gemini Live is unavailable (429 / quota / audio 1007 / text-fallback mode), FRIDAY
+speaks through the remainder of the chain, in order:
 
-    gemini-live  →  kitten  →  fish  →  sarvam
+    gemini-live  →  fish (Selene)  →  kitten  →  sarvam
 
 Edge TTS remains a last-resort safety net (kept for parity with the pre-existing
-fallback path).
+fallback path). Selene is the Fish Official English voice (owner-verified 2026-11-10).
 
 Fish Audio and Sarvam keys are read from the environment — they are never stored in
 this module. Get a Fish key from the owner (never invented); see .env.example.
@@ -33,7 +33,7 @@ import wave
 from pathlib import Path
 from typing import Any, Optional
 
-VOICE_ENGINE_ORDER = ("gemini-live", "kitten", "fish", "sarvam")
+VOICE_ENGINE_ORDER = ("gemini-live", "fish", "kitten", "sarvam")
 DEFAULT_VOICE = "Jasper"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 KITTEN_HELPER = REPO_ROOT / "scripts" / "kitten_synth.py"
@@ -98,8 +98,9 @@ def voice_engine_status() -> dict[str, Any]:
                        "model": "KittenML/kitten-tts-nano-0.8-fp32 (~50MB, 24kHz)",
                        "voice": os.getenv("FRIDAY_KITTEN_VOICE", DEFAULT_VOICE)},
             "fish": {"available": fish_available(),
-                     "note": "Set FISH_API_KEY (owner-provided) — https://fish.audio",
-                     "model": os.getenv("FISH_AUDIO_MODEL", "s2.1")},
+                     "note": "Set FISH_API_KEY (owner-provided) — https://fish.audio; Selene = FISH_REFERENCE_ID",
+                     "model": os.getenv("FISH_AUDIO_MODEL", "s2.1-pro-free"),
+                     "reference_id": "set" if os.getenv("FISH_REFERENCE_ID") else "unset"},
             "sarvam": {"available": sarvam_available(), "note": "Set SARVAM_API_KEY (bulbul:v3)"},
         },
     }
@@ -109,6 +110,7 @@ def voice_engine_status() -> dict[str, Any]:
 
 def _play_wav_bytes(wav_bytes: bytes) -> None:
     """Play a WAV blob through the default output device (Windows)."""
+    wav_bytes = _normalize_wav(wav_bytes)
     import pyaudio
     p = pyaudio.PyAudio()
     try:
@@ -159,25 +161,42 @@ def _synth_kitten(text: str) -> bytes:
 
 
 async def _synth_fish(text: str) -> bytes:
-    """Synthesize with Fish Audio (https://api.fish.audio/v1/tts). Returns audio bytes."""
+    """Synthesize with Fish Audio (https://api.fish.audio/v1/tts). Returns audio bytes.
+
+    Pay special attention to the 402 body, which is explicit: the free tier is reached
+    with the model id `s2.1-pro-free` sent as an HTTP header named `model` — paid models
+    return HTTP 402 when the account has no credit. So: if FISH_AUDIO_MODEL is unset/blank,
+    default to s2.1-pro-free; send it as a header (and in the JSON body for compatibility);
+    if the configured model still returns HTTP 402, retry once with `s2.1-pro-free` in both.
+    """
     import httpx
     key = os.getenv("FISH_API_KEY")
     if not key:
         raise RuntimeError("FISH_API_KEY not set")
-    payload: dict[str, Any] = {
-        "text": text,
-        "format": "wav",
-        "model": os.getenv("FISH_AUDIO_MODEL", "s2.1"),
-    }
+    model = (os.getenv("FISH_AUDIO_MODEL") or "").strip() or "s2.1-pro-free"
     ref_id = os.getenv("FISH_REFERENCE_ID", "").strip()
-    if ref_id:
-        payload["reference_id"] = ref_id
+
+    def _build(m: str):
+        headers = {"Authorization": f"Bearer {key}", "model": m}
+        body: dict[str, Any] = {"text": text, "format": "wav", "model": m}
+        if ref_id:
+            body["reference_id"] = ref_id
+        return headers, body
+
     async with httpx.AsyncClient(timeout=60.0) as client:
+        headers, payload = _build(model)
         resp = await client.post(
             "https://api.fish.audio/v1/tts",
-            headers={"Authorization": f"Bearer {key}"},
+            headers=headers,
             json=payload,
         )
+        if resp.status_code == 402 and model != "s2.1-pro-free":
+            headers, payload = _build("s2.1-pro-free")  # free tier only this id
+            resp = await client.post(
+                "https://api.fish.audio/v1/tts",
+                headers=headers,
+                json=payload,
+            )
     if resp.status_code != 200:
         raise RuntimeError(f"fish.audio HTTP {resp.status_code}: {resp.text[:200]}")
     return resp.content
@@ -210,6 +229,30 @@ def _is_wav(data: bytes) -> bool:
     return data[:4] == b"RIFF" and data[8:12] == b"WAVE"
 
 
+def _normalize_wav(data: bytes) -> bytes:
+    """Fish Audio (and other streaming TTS engines) ship WAVs with placeholder
+    size fields (RIFF/data size near 0xFFFF0000). Python's wave module trusts those
+    sizes — a naive readframes() would try to allocate gigabytes. Clamp every chunk
+    size to the actual remaining bytes."""
+    if len(data) < 44 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return data
+    fixed = bytearray(data)
+    riff_size = int.from_bytes(data[4:8], "little")
+    if riff_size >= 0xFFFF0000 or riff_size > len(data) - 8:
+        fixed[4:8] = (len(data) - 8).to_bytes(4, "little")
+    pos = 12
+    while pos + 8 <= len(data):
+        cid = data[pos:pos + 4]
+        size = int.from_bytes(data[pos + 4:pos + 8], "little")
+        if size >= 0xFFFF0000 or pos + 8 + size > len(data):
+            size = len(data) - (pos + 8)
+            fixed[pos + 4:pos + 8] = size.to_bytes(4, "little")
+        if cid == b"data":
+            break
+        pos += 8 + size + (size % 2)
+    return bytes(fixed)
+
+
 async def synthesize_and_play(text: str) -> dict[str, Any]:
     """Walk the voice chain from the configured engine; play the first WAV that
     synthesizes. Returns a result dict — never raises."""
@@ -229,6 +272,7 @@ async def synthesize_and_play(text: str) -> dict[str, Any]:
                 audio = await _synth_sarvam(text)
             else:
                 continue
+            audio = _normalize_wav(audio)
             if not _is_wav(audio):
                 raise RuntimeError("engine returned non-WAV audio (Fish: set format='wav')")
             await asyncio.get_running_loop().run_in_executor(None, _play_wav_bytes, audio)
