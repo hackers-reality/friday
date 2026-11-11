@@ -45,6 +45,7 @@ def _notify_friday(event_type: str, details: str = ""):
 BRAND_SVG = {
     "shodan": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%2300e5ff'/%3E%3Ctext x='20' y='28' font-size='22' font-family='Arial,sans-serif' font-weight='bold' fill='%23080c14' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E",
     "censys": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%2300a8ff'/%3E%3Ctext x='20' y='28' font-size='22' font-family='Arial,sans-serif' font-weight='bold' fill='%23080c14' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E",
+    "cloudflare": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%23F38020'/%3E%3Ctext x='20' y='27' font-size='17' font-family='Arial,sans-serif' font-weight='bold' fill='%23ffffff' text-anchor='middle'%3ECF%3C/text%3E%3C/svg%3E",
     "hunter": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%23ff6b35'/%3E%3Ctext x='20' y='28' font-size='22' font-family='Arial,sans-serif' font-weight='bold' fill='%23080c14' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E",
     "clearbit": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%234a90d9'/%3E%3Ctext x='20' y='28' font-size='18' font-family='Arial,sans-serif' font-weight='bold' fill='%23ffffff' text-anchor='middle'%3ECb%3C/text%3E%3C/svg%3E",
     "dehashed": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%23ff0000'/%3E%3Ctext x='20' y='28' font-size='22' font-family='Arial,sans-serif' font-weight='bold' fill='%23ffffff' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E",
@@ -74,6 +75,8 @@ API_LOGO = {
     "NVIDIA_VISION_API_KEY": {"src": f"{SIMPLEICONS}/nvidia/76B900", "type": "simpleicons", "fallback": "nvidia", "domain": "nvidia.com"},
     "NVIDIA_NIM_API_KEY": {"src": f"{SIMPLEICONS}/nvidia/76B900", "type": "simpleicons", "fallback": "nvidia", "domain": "nvidia.com"},
     "OPENCODE_ZEN_API_KEY": {"src": f"{SIMPLEICONS}/opencode/00e5ff", "type": "simpleicons", "fallback": "opencode", "domain": "opencode.ai"},
+    "CLOUDFLARE_API_TOKEN": {"src": f"{SIMPLEICONS}/cloudflare/F38020", "type": "simpleicons", "fallback": "cloudflare", "domain": "cloudflare.com"},
+    "CLOUDFLARE_ACCOUNT_ID": {"src": f"{SIMPLEICONS}/cloudflare/F38020", "type": "simpleicons", "fallback": "cloudflare", "domain": "cloudflare.com"},
     "GROQ_API_KEY": {"src": f"{FAVICON.format(domain='groq.com')}", "type": "favicon", "fallback": "groq", "domain": "groq.com"},
     "SARVAM_API_KEY": {"src": f"{FAVICON.format(domain='sarvam.ai')}", "type": "favicon", "fallback": "sarvam", "domain": "sarvam.ai"},
     "PICOVOICE_ACCESS_KEY": {"src": f"{FAVICON.format(domain='picovoice.ai')}", "type": "favicon", "fallback": "picovoice", "domain": "picovoice.ai"},
@@ -173,6 +176,8 @@ CATEGORY_ICON_MAP = {
 # url (to signup/get key), docs (API documentation), category,
 # test_url (endpoint to verify the key), test_headers (request headers for test).
 
+_KEY_TEST_LAST: dict[str, float] = {}  # E4 debounce: monotonic timestamps per key
+
 API_KEY_META = {
     "GOOGLE_API_KEY": {
         "name": "Gemini API Key",
@@ -251,6 +256,28 @@ API_KEY_META = {
         "howto": "1. Go to opencode.ai 2. Create an account 3. Navigate to Settings > API Keys 4. Generate a new Zen API key 5. Copy the key. You can also set OPENCODE_ZEN_MODEL to choose which model to use (default: big-pickle).",
         "ratelimit": "60 requests/minute on free tier. Higher limits with paid plans.",
         "related": "OPENCODE_ZEN_MODEL, ZEN_API_BASE",
+    },
+    "CLOUDFLARE_API_TOKEN": {
+        "name": "Cloudflare API Token (Workers AI)",
+        "category": "AI",
+        "description": "Cloudflare Workers AI key. Free compute allowance for running open models on Cloudflare's global network through the OpenAI-compatible endpoint https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions. FRIDAY can use it as a slim extra fallback tier (Townhall agents, routing, short tasks) - not recommended for FRIDAY's main brain, whose fat prompt burns the free daily allowance quickly. Some frontier models are paid-only and will fail on the free tier: kimi-k2.6/k2.7, glm-5.2/5.3/5.3-flash, deepseek-v4-*.",
+        "pricing": "Free: 10,000 Neurons per day (resets 00:00 UTC, compute-based, fails closed at the cap). Paid plan: $0.011 per 1,000 Neurons beyond the free allocation. Frontier models require a paid billing method; open models (gpt-oss-20b/120b, llama-4-scout, qwen3-30b, gemma-4-26b, mistral-small-3.1-24b, nemotron-3-120b, glm-4.7-flash) are included in the free allowance.",
+        "url": "https://dash.cloudflare.com/profile/api-tokens",
+        "docs": "https://developers.cloudflare.com/workers-ai/",
+        "howto": "1. Go to dash.cloudflare.com 2. My Profile > API Tokens 3. Create Token 4. Use 'Workers AI' template or Custom Token 5. Copy the token (starts with 'cfat_'). The matching CLOUDFLARE_ACCOUNT_ID is shown in the right sidebar of any account page.",
+        "ratelimit": "Free: 10,000 neurons/day resets 00:00 UTC. Over-cap: HTTP 429 until reset.",
+        "related": "CLOUDFLARE_ACCOUNT_ID",
+    },
+    "CLOUDFLARE_ACCOUNT_ID": {
+        "name": "Cloudflare Account ID",
+        "category": "AI",
+        "description": "Cloudflare account identifier. Not a secret - safe to display (masked). Required in every Workers AI URL (https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions) and used by FRIDAY's Cloudflare key verification. Also used by the Worker endpoints and dashboard links. Pairs with CLOUDFLARE_API_TOKEN.",
+        "pricing": "Free. Not a paid resource - one account, many Workers AI models.",
+        "url": "https://dash.cloudflare.com",
+        "docs": "https://developers.cloudflare.com/workers-ai/",
+        "howto": "1. Sign in to dash.cloudflare.com 2. Look at the right sidebar on any page - 'Account ID' is shown under your account name (a 32-character hex string, e.g. starts 8f2a...). Or open Workers AI, click 'Use REST API' and copy the account id from the example URL.",
+        "ratelimit": "n/a (identifier, not a key)",
+        "related": "CLOUDFLARE_API_TOKEN",
     },
     "GROQ_API_KEY": {
         "name": "Groq API Key",
@@ -871,6 +898,8 @@ API_KEYS_ORDER = [
     "GOOGLE_API_KEY",
     "NVIDIA_VISION_API_KEY", "NVIDIA_NIM_API_KEY",
     "OPENCODE_ZEN_API_KEY",
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
     "GROQ_API_KEY", "SARVAM_API_KEY", "PICOVOICE_ACCESS_KEY",
     "SHODAN_API_KEY", "CENSYS_API_ID", "CENSYS_API_SECRET",
     "VIRUSTOTAL_API_KEY", "HUNTER_API_KEY", "CLEARBIT_API_KEY",
@@ -1378,9 +1407,43 @@ async def test_api_key(req: Request):
     value = data.get("value", "").strip()
     if not key or not value:
         return JSONResponse({"success": False, "error": "Key and value required"}, status_code=400)
+    # Server-side debounce: one outbound test per key at most every 2s (E4 — the page
+    # used to spam this endpoint with real rate/quota-cost probes).
+    import time as _time
+    now = _time.monotonic()
+    last = _KEY_TEST_LAST.get(key, 0.0)
+    if now - last < 2.0:
+        return JSONResponse({"success": False, "status": 429, "error": "debounced — wait 2s between tests of this key"})
+    _KEY_TEST_LAST[key] = now
     meta = API_KEY_META.get(key)
     if not meta:
         return JSONResponse({"success": False, "error": "Unknown API key type."})
+
+    # Cloudflare: the browser sends a masked value, which can never pass CF auth.
+    # Verify honestly with the server-side account id + token from .env instead.
+    if key == "CLOUDFLARE_API_TOKEN":
+        env2 = _load_env()
+        aid = env2.get("CLOUDFLARE_ACCOUNT_ID", "")
+        tok = env2.get("CLOUDFLARE_API_TOKEN", "")
+        if not aid or not tok:
+            return JSONResponse({"success": False, "error": "CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN not set in .env"})
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://api.cloudflare.com/client/v4/accounts/{aid}/tokens/verify",
+                    headers={"Authorization": f"Bearer {tok}"},
+                )
+                try:
+                    body = resp.json()
+                except Exception:
+                    body = {}
+                active = (body.get("result") or {}).get("status") == "active"
+                if resp.status_code == 200 and active:
+                    return JSONResponse({"success": True, "status": 200, "message": "Token valid and active"})
+                return JSONResponse({"success": False, "status": resp.status_code,
+                                     "error": (body.get("errors") or [{}])[0].get("message", f"HTTP {resp.status_code}")})
+        except Exception as exc:
+            return JSONResponse({"success": False, "message": str(exc)[:200]})
     test_url = meta.get("test_url")
     test_headers = meta.get("test_headers")
     if not test_url:
@@ -1599,18 +1662,53 @@ a{display:inline-block;padding:12px 32px;background:#00e5ff;color:#080c14;text-d
 
 @router.post("/settings/google/revoke")
 async def google_revoke():
+    """Revoke Google OAuth. Calls Google's revocation endpoint FIRST
+    (oauth2.googleapis.com/revoke), then removes the local shared store.
+    This affects ALL Google integrations at once (Gmail, Calendar, YouTube, Drive…)."""
     try:
         from friday.google_oauth import _CREDENTIALS_PATH as creds_path
     except ImportError:
         creds_path = Path(__file__).resolve().parent.parent / ".google_credentials.json"
-    if creds_path.exists():
-        try:
-            creds_path.unlink()
-            _notify_friday("oauth_revoked", "google")
-            return JSONResponse({"success": True, "message": "Credentials revoked."})
-        except Exception as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
-    return JSONResponse({"success": True, "message": "No credentials found."})
+
+    if not creds_path.exists():
+        _notify_friday("oauth_revoked", "google")
+        return JSONResponse({"success": True, "message": "No credentials found (already revoked)."})
+
+    # Revoke at Google first (best-effort; we still delete the local file after)
+    google_status = "not sent"
+    import logging as _logging
+    _log = _logging.getLogger("friday.settings_dashboard")
+    try:
+        import json as _json
+        data = _json.loads(creds_path.read_text(encoding="utf-8"))
+        token = data.get("access_token") or data.get("token") or ""
+        refresh = data.get("refresh_token") or ""
+        import requests as _requests
+        for tok_name, tok in (("access_token", token), ("refresh_token", refresh)):
+            if not tok:
+                continue
+            try:
+                r = _requests.post(
+                    "https://oauth2.googleapis.com/revoke",
+                    params={"token": tok},
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=10,
+                )
+                google_status = f"Google revoked {tok_name} (HTTP {r.status_code})"
+            except Exception as _exc:
+                _log.warning("Google revocation endpoint failed for %s: %s", tok_name, _exc)
+                google_status = f"Google revocation unreachable ({type(_exc).__name__}); local token deleted"
+    except Exception as _exc:
+        _log.warning("Could not read credentials for Google revocation: %s", _exc)
+        google_status = "credentials unreadable; local file deleted"
+
+    try:
+        creds_path.unlink()
+        _notify_friday("oauth_revoked", "google")
+        return JSONResponse({"success": True,
+                             "message": f"Credentials revoked ({google_status}). ALL Google integrations are now disconnected."})
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
 # ── GitHub OAuth ──
@@ -2009,7 +2107,7 @@ g.innerHTML=h;g.querySelectorAll('.gConnBtn').forEach(function(b){b.onclick=func
 document.getElementById('mClose').onclick=function(){document.getElementById('mOverlay').classList.remove('open')}
 document.getElementById('mOverlay').onclick=function(e){if(e.target===e.currentTarget)this.classList.remove('open')}
 document.getElementById('gConn').onclick=function(){window.location.href='/settings/google/auth'}
-document.getElementById('gRev').onclick=function(){if(!confirm('Revoke all Google OAuth tokens?'))return;var x=new XMLHttpRequest();x.open('POST','/settings/google/revoke',true);x.onload=function(){t('Tokens revoked','info');loadG()};x.onerror=function(){t('Failed to revoke','error')};x.send()}
+document.getElementById('gRev').onclick=function(){if(!confirm('This revokes ALL Google integrations at once (Gmail, Calendar, YouTube, Drive, Contacts, everything). The token is killed at Google, not just locally. Continue?'))return;var x=new XMLHttpRequest();x.open('POST','/settings/google/revoke',true);x.onload=function(){try{var d=JSON.parse(x.responseText);t(d.message||'Tokens revoked','info');}catch(e){t('Tokens revoked','info');}loadG()};x.onerror=function(){t('Failed to revoke','error')};x.send()}
 function loadGH(){var x=new XMLHttpRequest();x.open('GET','/settings/github/status',true);x.onload=function(){if(x.status===200){try{var d=JSON.parse(x.responseText);var dot=document.getElementById('ghDot'),st=document.getElementById('ghStat'),cn=document.getElementById('ghConn'),rv=document.getElementById('ghRev');if(d.configured&&d.has_token){dot.className='gdot on';st.textContent='Connected';cn.textContent='&#x1f504; Reconnect';rv.style.display='inline-block';document.getElementById('navHubB').textContent='&#x2705;'}else if(d.configured){dot.className='gdot off';st.textContent='OAuth not completed';cn.textContent='&#x1f517; Connect with GitHub';rv.style.display='none';document.getElementById('navHubB').textContent=''}else{dot.className='gdot off';st.textContent='GITHUB_CLIENT_ID not configured';cn.disabled=true;cn.textContent='&#x26a0; Not Configured';rv.style.display='none';document.getElementById('navHubB').textContent=''}}catch(e){}}};x.send()}
 document.getElementById('ghConn').onclick=function(){window.location.href='/settings/github/auth'}
 document.getElementById('ghRev').onclick=function(){if(!confirm('Revoke GitHub OAuth token?'))return;var x=new XMLHttpRequest();x.open('POST','/settings/github/revoke',true);x.onload=function(){t('GitHub token revoked','info');loadGH()};x.onerror=function(){t('Failed to revoke','error')};x.send()}
@@ -2024,7 +2122,7 @@ document.querySelectorAll('.filter-chip').forEach(function(c){c.onclick=function
 document.getElementById('kSearch').oninput=function(){kS=this.value;rK()}
 document.getElementById('gSearch').oninput=function(){gS=this.value;rG()}
 function uC(){var d=new Date();document.getElementById('sClock').textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0')}
-setInterval(uC,1000);uC();loadK();loadG();loadGH();loadSV();setInterval(function(){loadK();loadG();loadGH();loadSV()},60000);
+setInterval(uC,1000);uC();loadK();loadG();loadGH();loadSV();setInterval(function(){loadK();loadG();loadGH();loadSV()},300000);
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&document.getElementById('mOverlay').classList.contains('open')){document.getElementById('mOverlay').classList.remove('open')}});
 </script>
 </body>
