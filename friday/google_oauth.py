@@ -2,6 +2,15 @@
 Unified Google OAuth 2.0 module for FRIDAY.
 Supports per-category authorization so users grant scopes in small batches (~5 per category)
 instead of all ~70 at once (which causes Google consent screen errors).
+
+Storage note (C4): every Google surface — Gmail (friday/gmail.py via googleapiclient),
+the call_api wrappers (friday/google_clients.py), the dashboard /settings/google/* routes —
+shares ONE token file, ``friday_memory/google_credentials.json``. A per-category
+"Connect" re-writes it via include_granted_scopes=true so the newest grant carries the
+union of previously-granted scopes. There is no per-category store — last write wins.
+
+youtube_client kept its own store (friday_memory/youtube_credentials.json) — now unified
+to the shared google_credentials.json too (B5).
 """
 from __future__ import annotations
 
@@ -11,7 +20,7 @@ import os
 import random
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlencode
@@ -395,14 +404,14 @@ def save_token_data(token_data: dict, category: str | None = None) -> bool:
         elif new_scope:
             merged_scopes = new_scope
 
-        expires_at = (datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 3600))).isoformat()
+        expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=token_data.get("expires_in", 3600))).isoformat()
         creds = {
             "access_token": token_data.get("access_token", existing.get("access_token", "")),
             "refresh_token": token_data.get("refresh_token", existing.get("refresh_token", "")),
             "expires_at": expires_at,
             "scope": merged_scopes,
             "token_type": token_data.get("token_type", "Bearer"),
-            "created_at": existing.get("created_at", datetime.utcnow().isoformat()),
+            "created_at": existing.get("created_at", datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
             "authorized_categories": existing.get("authorized_categories", []),
         }
         if category:
@@ -494,14 +503,14 @@ def handle_auth_callback(auth_code: str, category: str | None = None) -> bool:
         elif new_scope:
             merged_scopes = new_scope
 
-        expires_at = (datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
+        expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
         creds = {
             "access_token": data.get("access_token", existing.get("access_token", "")),
             "refresh_token": data.get("refresh_token", existing.get("refresh_token", "")),
             "expires_at": expires_at,
             "scope": merged_scopes,
             "token_type": data.get("token_type", "Bearer"),
-            "created_at": existing.get("created_at", datetime.utcnow().isoformat()),
+            "created_at": existing.get("created_at", datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
             "authorized_categories": existing.get("authorized_categories", []),
         }
         if category:
@@ -536,10 +545,35 @@ def handle_auth_callback(auth_code: str, category: str | None = None) -> bool:
 
 # ── Token management ──
 
+_LAST_API_ERROR: dict = {}
+
+
+def last_api_error() -> dict:
+    """The most recent failure from the Google OAuth layer (empty dict if none).
+
+    Tools surface this to distinguish "not authorized" from "scope insufficient"
+    etc. — no secrets are included (reason strings + truncated response bodies).
+    """
+    return dict(_LAST_API_ERROR)
+
+
+def _set_last_api_error(*, where: str, reason: str, status=None, body: str = "") -> None:
+    _LAST_API_ERROR.clear()
+    _LAST_API_ERROR.update({
+        "where": where,
+        "reason": reason[:300],
+        "status": status,
+        "body": (body or "")[:300],
+        "ts": time.time(),
+    })
+
+
 def get_access_token() -> Optional[str]:
     """Return a valid access token, refreshing if needed."""
     creds = _load_credentials()
     if not creds:
+        _set_last_api_error(where="load", reason="google_credentials.json missing or unreadable")
+        logger.warning("No Google credentials stored (google_credentials.json missing/unreadable)")
         return None
 
     token = creds.get("access_token")
@@ -549,9 +583,13 @@ def get_access_token() -> Optional[str]:
     if expiry_str:
         try:
             exp_dt = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
-            if datetime.utcnow() >= (exp_dt - timedelta(minutes=5)):
+            if datetime.now(timezone.utc).replace(tzinfo=None) >= (exp_dt - timedelta(minutes=5)):
                 if refresh:
-                    return _refresh_token(refresh)
+                    new_token = _refresh_token(refresh)
+                    if not new_token and not last_api_error():
+                        _set_last_api_error(where="refresh", reason="token expired and refresh failed")
+                    return new_token
+                _set_last_api_error(where="refresh", reason="token expired and no refresh_token stored")
                 return None
         except Exception:
             pass
@@ -582,7 +620,7 @@ def _refresh_token(refresh_token: str) -> Optional[str]:
         data = r.json()
         new_token = data.get("access_token")
         if new_token:
-            expires_at = (datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
+            expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
             creds = _load_credentials() or {}
             creds["access_token"] = new_token
             creds["expires_at"] = expires_at
@@ -597,7 +635,17 @@ def _refresh_token(refresh_token: str) -> Optional[str]:
             _save_credentials(creds)
         return new_token
     except Exception as exc:
-        logger.warning("Token refresh failed: %s", exc)
+        resp = getattr(exc, "response", None)
+        body = ""
+        status = None
+        try:
+            if resp is not None:
+                body = resp.text or ""
+                status = resp.status_code
+        except Exception:
+            pass
+        logger.warning("Token refresh failed: %s (status=%s body=%.200s)", exc, status, body)
+        _set_last_api_error(where="refresh", reason=str(exc), status=status, body=body)
         return None
 
 
@@ -663,7 +711,9 @@ def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
     """
     token = get_access_token()
     if not token:
-        logger.warning("No OAuth token available for %s", url)
+        err = last_api_error()
+        logger.warning("No OAuth token available for %s (where=%s reason=%s)",
+                       url, err.get("where"), err.get("reason") or "unknown")
         return None
     if requests is None:
         return None
@@ -679,6 +729,7 @@ def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
 
             # Insufficient scopes — never retry, give clear guidance
             if "insufficientPermissions" in body or "insufficient authentication scopes" in body.lower():
+                _set_last_api_error(where="api", reason="insufficient scopes", status=status, body=body)
                 logger.warning("Google API call failed (insufficient scopes): %s %s", method, url)
                 return None
 
@@ -696,17 +747,21 @@ def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
                         except requests.HTTPError as retry_exc:
                             retry_body = getattr(retry_exc.response, "text", "")
                             retry_status = getattr(retry_exc.response, "status_code", 0)
+                            _set_last_api_error(where="api", reason=f"still failing after enabling API {api_name}", status=retry_status, body=retry_body)
                             logger.warning("Still failing after enabling API (%s): %s",
                                            retry_status, retry_body[:200])
                             return None
                         except Exception as retry_exc:
+                            _set_last_api_error(where="api", reason=f"retry failed after enabling API {api_name}: {retry_exc}")
                             logger.warning("Retry failed after enabling API: %s", retry_exc)
                             return None
                     else:
+                        _set_last_api_error(where="api", reason=f"could not enable API {api_name}: {enable_result.get('error', 'unknown')}", status=status, body=body)
                         logger.warning("Could not enable API %s: %s",
                                        api_name, enable_result.get('error', 'unknown'))
                         return None
                 else:
+                    _set_last_api_error(where="api", reason="access forbidden (403)", status=status, body=body)
                     logger.warning("Access forbidden (403) for %s. Check API is enabled.", url)
                     return None
 
@@ -719,10 +774,12 @@ def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
                     time.sleep(delay)
                     continue
                 logger.warning("Google API call failed after %d retries: %s %s -> %s", max_retries, method, url, exc)
+                _set_last_api_error(where="api", reason=f"rate limit/server error after {max_retries} retries", status=status, body=body)
                 return None
 
             # Other HTTP errors — not retryable
             logger.warning("Google API call failed: %s %s -> %s", method, url, exc)
+            _set_last_api_error(where="api", reason="http error", status=status, body=body)
             return None
 
         except (requests.ConnectionError, requests.Timeout) as exc:
@@ -734,10 +791,12 @@ def call_api(url: str, params: Optional[dict] = None, method: str = "GET",
                 time.sleep(delay)
                 continue
             logger.warning("Google API call failed after %d retries: %s %s -> %s", max_retries, method, url, exc)
+            _set_last_api_error(where="api", reason="network error after retries")
             return None
 
         except Exception as exc:
             logger.warning("Google API call failed: %s %s -> %s", method, url, exc)
+            _set_last_api_error(where="api", reason=str(exc))
             return None
 
     return None

@@ -107,6 +107,26 @@ def _run_local_server_with_fallback(flow) -> Any:
     return flow.credentials
 
 
+_LAST_CRED_ERROR: str | None = None
+
+
+def last_credential_error() -> str | None:
+    """Human-readable reason the last credential load/refresh failed (or None)."""
+    return _LAST_CRED_ERROR or None
+
+
+def _set_cred_error(msg: str | None) -> None:
+    global _LAST_CRED_ERROR
+    _LAST_CRED_ERROR = msg
+
+
+def _actionable_cred_msg(default: str = "Gmail token missing or revoked — re-authorize at /settings/google/auth (Gmail)") -> str:
+    err = last_credential_error()
+    if err:
+        return err
+    return default
+
+
 def _get_credentials(auto_auth: bool = True) -> Any | None:
     """Get cached OAuth credentials (Gmail + Calendar scopes).
     If auto_auth=False, skips OAuth flow and returns None if no cached token exists.
@@ -161,7 +181,15 @@ def _get_credentials(auto_auth: bool = True) -> Any | None:
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 from google.auth.transport.requests import Request
-                creds.refresh(Request())
+                try:
+                    creds.refresh(Request())
+                except Exception as refresh_exc:
+                    msg = str(refresh_exc)
+                    if "400" in msg or "invalid_grant" in msg.lower():
+                        _set_cred_error("Gmail token revoked or expired (refresh rejected — 400 invalid_grant) — re-authorize at /settings/google/auth (Gmail)")
+                    else:
+                        _set_cred_error(f"Google credential refresh failed — {msg[:160]}")
+                    return None
                 # Persist refreshed token back to disk, preserving google_oauth custom keys
                 try:
                     with open(_TOKEN_PATH) as f:
@@ -179,6 +207,7 @@ def _get_credentials(auto_auth: bool = True) -> Any | None:
             elif auto_auth:
                 creds_path = os.path.join(_ROOT, "credentials.json")
                 if not os.path.exists(creds_path):
+                    _set_cred_error("credentials.json missing in repo root — connect Google at /settings/google/auth")
                     return None
                 redirect_uri = _read_redirect_uri_from_config(creds_path)
                 parsed = urllib.parse.urlparse(redirect_uri)
@@ -193,9 +222,13 @@ def _get_credentials(auto_auth: bool = True) -> Any | None:
                 with open(_TOKEN_PATH, "w") as f:
                     f.write(creds.to_json())
             else:
+                _set_cred_error(_actionable_cred_msg(
+                    "Gmail token missing or revoked — re-authorize at /settings/google/auth (Gmail)"))
                 return None
         return creds
     except Exception:
+        _set_cred_error(_actionable_cred_msg(
+            "Google credential load failed — re-authorize at /settings/google/auth (Gmail)"))
         return None
 
 
@@ -208,7 +241,8 @@ def _get_gmail_service(auto_auth: bool = True):
         if not creds:
             return None
         from googleapiclient.discovery import build
-        return build("gmail", "v1", credentials=creds)
+        # cache_discovery=False: silences the oauth2client<4.0.0 file_cache warning (C3)
+        return build("gmail", "v1", credentials=creds, cache_discovery=False)
     except Exception:
         return None
 
@@ -423,7 +457,7 @@ def gmail_list_messages(query: str = "is:unread", max_results: int = 10) -> str:
     try:
         service = _get_gmail_service(auto_auth=False)
         if not service:
-            return "Gmail not configured. Place credentials.json in Friday folder."
+            return _actionable_cred_msg()
         
         result = service.users().messages().list(
             userId="me", q=query, maxResults=max_results
@@ -453,7 +487,7 @@ def gmail_send(to: str, subject: str, body: str) -> str:
         
         service = _get_gmail_service(auto_auth=False)
         if not service:
-            return "Gmail not configured."
+            return _actionable_cred_msg()
         
         message = MIMEText(body)
         message["to"] = to
@@ -476,7 +510,7 @@ def gmail_draft(to: str, subject: str, body: str) -> str:
         
         service = _get_gmail_service(auto_auth=False)
         if not service:
-            return "Gmail not configured."
+            return _actionable_cred_msg()
         
         message = MIMEText(body)
         message["to"] = to
@@ -497,7 +531,7 @@ def gmail_read_message(message_id: str) -> str:
     try:
         service = _get_gmail_service(auto_auth=False)
         if not service:
-            return "Gmail not configured."
+            return _actionable_cred_msg()
         
         m = service.users().messages().get(
             userId="me", id=message_id, format="full"
