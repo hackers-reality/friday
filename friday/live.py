@@ -207,6 +207,7 @@ from friday.diagnostics import diagnostics_tool
 from friday.health_monitor import health_monitor_tool
 from friday.cv_engine import cv_tool, ask_camera, show_camera_feed, hide_camera_feed, start_camera_cycle, stop_camera_cycle, locate_on_camera, ask_camera_smart, nim_describe_screen
 from friday.townhall_context import townhall_catchup, townhall_say, build_townhall_awareness, log_friday_line, is_own_line
+from friday.townhall_tasks import townhall_task_add, townhall_task_list, townhall_task_assign, townhall_task_done
 from friday.visual_overlay import show_pointer, show_cursor_hint, show_annotation_box, show_draw_arrow, show_text, draw_line, draw_path, draw_polygon, start_teaching, stop_teaching, teaching_move_to, teaching_click, teaching_highlight, clear_overlays, start_overlay
 from friday.pointing_agent import analyze_screen as analyze_screen_tool
 
@@ -1032,6 +1033,10 @@ With the relevant categories authorized, you can use these tools â€” exampl
 - gmail_list_messages_paged(page_token="abc123", max_results=20) â€” paginated listing
 - townhall_catchup(last_n=10) â€” read your Townhall: what the agents said recently + their live moods. Also: FRIDAY's own voice/text turns are piped there as FRIDAY lines. Ask it when the Boss mentions the agents/dreams/Townhall.
 - townhall_say(text) â€” post INTO the Townhall as FRIDAY. You are the Live FRIDAY; the simulated Townhall FRIDAY is your co-present duo and may answer on its own. You will receive [TOWNHALL LIVE] background lines mid-conversation when agents post; reply in-turn or call townhall_catchup for details.
+- townhall_task_add(title, assignee="", notes="") â€” add to the Townhall task board (shared with agents; they see it and may self-assign). Assignee must be one of FRIDAY, JARVIS, NOVA, ATLAS, SENTRY, FORGE, ECHO, AEGIS, CRUX, VERSE, LORE.
+- townhall_task_list(status="") â€” see the task board (status filter: open, claimed, done; blank = all).
+- townhall_task_assign(task_id, agent) â€” assign a board task to an agent (e.g. T3 -> NOVA).
+- townhall_task_done(task_id) â€” mark a board task done. Use when the Boss asks you to finish it or says it's complete.
 - gmail_get_auto_forwarding() / gmail_auto_forward(email="fwd@mail.com", disposition="leaveInInbox")
 - gmail_get_delegated_accounts() â€” list delegated accounts
 
@@ -3537,6 +3542,10 @@ TOOL_MAP = {
     "situational_awareness": situational_awareness,
     "townhall_catchup": townhall_catchup,
     "townhall_say": townhall_say,
+    "townhall_task_add": townhall_task_add,
+    "townhall_task_list": townhall_task_list,
+    "townhall_task_assign": townhall_task_assign,
+    "townhall_task_done": townhall_task_done,
     "git_ops": git_ops,
     "take_snapshot": take_snapshot,
     "recall_snapshot": recall_snapshot,

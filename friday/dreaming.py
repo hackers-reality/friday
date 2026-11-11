@@ -361,12 +361,21 @@ class DreamEngine:
         """Return a summary of what happened during the most recent dream session.
 
         Called when the user returns to give them context on background work.
+        Prepends the Townhall snapshot so a post-dream FRIDAY knows what her
+        simulated Townhall counterpart and the other agents were up to.
         """
+        try:
+            from friday.townhall_context import build_townhall_recap
+            townhall_block = "  [TOWNHALL SNAPSHOT]\n" + build_townhall_recap(max_lines=4) + "\n"
+        except Exception:
+            townhall_block = ""
+
         if not self._past_sessions:
-            return "No dream sessions recorded yet."
+            return townhall_block + "No dream sessions recorded yet."
 
         session = self._past_sessions[-1]
         lines: List[str] = [
+            townhall_block,
             f"  Dream Session: {session.id}",
             f"  Started: {session.start_time}",
         ]
