@@ -54,6 +54,16 @@ def _query_event_log(minutes_back: int = 5) -> list:
         data = json.loads(r.stdout.strip())
         if isinstance(data, dict):
             data = [data]
+        # PowerShell ConvertTo-Json serializes DateTime as .NET '/Date(<ms>)/' strings
+        import re as _re
+        for ev in data:
+            ts = ev.get("TimeCreated", "")
+            m = _re.match(r"^/Date\((\d+)\)/$", str(ts))
+            if m:
+                try:
+                    ev["TimeCreated"] = datetime.fromtimestamp(int(m.group(1)) / 1000).isoformat()
+                except Exception:
+                    pass
         return data
     except Exception:
         return []

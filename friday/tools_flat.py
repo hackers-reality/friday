@@ -31,9 +31,10 @@ def stark_log(entry: str) -> str:
 
 # Core tools - always available
 def get_time() -> str:
-    """Get current time."""
+    """Get current time (local timezone, explicitly labeled)."""
     from datetime import datetime
-    return datetime.now().isoformat()
+    now = datetime.now().astimezone()
+    return f"{now.strftime('%A, %B %d, %Y at %I:%M:%S %p %Z')} (UTC{now.strftime('%z')})"
 
 def system_info() -> str:
     """Get system info."""
