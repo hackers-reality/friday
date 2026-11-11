@@ -569,7 +569,7 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
     ("friday.google_clients", "youtube_get_captions", "", None, None),
     ("friday.google_clients", "youtube_get_channel_analytics", "", None, None),
     ("friday.google_clients", "youtube_get_channel_sections", "", None, None),
-    ("friday.google_clients", "youtube_get_trascript", "", None, None),
+    ("friday.google_clients", "youtube_get_transcript", "Get the transcript of a YouTube video", {"video_id": {"type": "STRING", "description": "YouTube video id"}, "language": {"type": "STRING", "description": "Language code (default en)"}}, ["video_id"]),
     ("friday.google_clients", "youtube_get_video_categories", "", None, None),
     ("friday.google_clients", "youtube_get_video_rating", "", None, None),
     ("friday.google_clients", "youtube_list_my_videos", "", None, None),
@@ -893,13 +893,34 @@ TOOL_DESCRIPTORS: list[tuple[str, str, str, dict | None, list[str] | None]] = [
 ]
 
 
+_SCHEMA_CACHE: dict[tuple[str, str], object] = {}
+
+
+def _schema_for_descriptor(types_module, module_path: str, func_name: str):
+    key = (module_path, func_name)
+    cached = _SCHEMA_CACHE.get(key)
+    if cached is not None:
+        return cached
+    from friday.tool_coerce import schema_dict_for_descriptor
+    properties, required = schema_dict_for_descriptor(module_path, func_name)
+    schema = types_module.Schema(
+        type="OBJECT",
+        properties=properties,
+        required=required,
+    )
+    _SCHEMA_CACHE[key] = schema
+    return schema
+
+
 def build_new_tools(types_module) -> list:
     """Generate types.FunctionDeclaration list for all new tools."""
     declarations = []
     for module_path, func_name, desc, params_schema, required in TOOL_DESCRIPTORS:
-        schema = None
         if params_schema:
             schema = types_module.Schema(type="OBJECT", properties=params_schema, required=required or [])
+        else:
+            # Auto-generate from the function signature (Google APIs mostly)
+            schema = _schema_for_descriptor(types_module, module_path, func_name)
         declarations.append(
             types_module.FunctionDeclaration(name=func_name, description=desc, parameters=schema)
         )
@@ -1015,14 +1036,9 @@ class _LazyToolFunc:
 
     def __call__(self, **kwargs):
         self._load()
-        try:
-            result = self._func(**kwargs)
-        except TypeError as e:
-            # Some tools expect positional args or different patterns
-            try:
-                result = self._func(**{k: v for k, v in kwargs.items() if v is not None})
-            except Exception:
-                result = self._func(kwargs)
+        from friday.tool_coerce import coerce_args
+        kwargs = coerce_args(self._func, kwargs)
+        result = self._func(**kwargs)
         if result is not None and hasattr(result, '__await__'):
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as pool:
