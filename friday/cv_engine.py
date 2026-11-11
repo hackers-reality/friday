@@ -355,11 +355,46 @@ def _analyze_scene(frame) -> Dict[str, Any]:
         return {}
 
 
+# ─── VL circuit breaker (F1) ───────────────────────────────
+_VL_FAILURES = 0
+_VL_BACKOFF_UNTIL = 0.0
+_VL_CIRCUIT_OPEN = False
+_VL_FAILURE_LIMIT = 5
+
+
+def _vl_blocked() -> bool:
+    import time as _t
+    if _VL_CIRCUIT_OPEN:
+        return True
+    return _t.monotonic() < _VL_BACKOFF_UNTIL
+
+
+def _vl_note_failure() -> None:
+    global _VL_FAILURES, _VL_BACKOFF_UNTIL, _VL_CIRCUIT_OPEN
+    _VL_FAILURES += 1
+    if _VL_FAILURES >= _VL_FAILURE_LIMIT:
+        _VL_CIRCUIT_OPEN = True  # permanently skip VL this process
+    else:
+        import time as _t
+        _VL_BACKOFF_UNTIL = _t.monotonic() + (2 ** _VL_FAILURES)
+
+
+def _vl_note_success() -> None:
+    global _VL_FAILURES, _VL_BACKOFF_UNTIL
+    _VL_FAILURES = 0
+    _VL_BACKOFF_UNTIL = 0.0
+
+
 def _ask_nim_vl(question: str, frame_b64: str) -> str:
     """Ask a custom question about a camera frame using NVIDIA NIM vision-language model.
 
-    Uses phi-4-multimodal-instruct (primary) → llama-3.2-11b-vision-instruct → nemotron-nano-12b-v2-vl.
+    Primary: nvidia/nemotron-3.5-super-vl-120b-a12b (verified 200 on 2026-11-11).
+    Fallback: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning (verified 200).
+    The old IDs (nemotron-nano-12b-v2-vl, llama-3.2-11b-vision-instruct) hit 410 Gone.
+    Skipped entirely after 5 consecutive failures (circuit breaker).
     """
+    if _vl_blocked():
+        return ""
     from openai import OpenAI
     api_key = os.environ.get("NVIDIA_VISION_API_KEY") or os.environ.get("NVIDIA_NIM_API_KEY") or os.environ.get("NVIDIA_API_KEY") or os.environ.get("NIM_API_KEY")
     if not api_key:
@@ -369,8 +404,8 @@ def _ask_nim_vl(question: str, frame_b64: str) -> str:
     image_url = f"data:image/jpeg;base64,{image_data}"
 
     for model in (
-        "nvidia/nemotron-nano-12b-v2-vl",
-        "meta/llama-3.2-11b-vision-instruct",
+        "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
     ):
         try:
             response = client.chat.completions.create(
@@ -386,11 +421,11 @@ def _ask_nim_vl(question: str, frame_b64: str) -> str:
                 temperature=0.3,
                 timeout=10,
             )
-
-
+            _vl_note_success()
             return response.choices[0].message.content.strip()
         except Exception:
             continue
+    _vl_note_failure()
     return ""
 
 
@@ -539,6 +574,7 @@ def _camera_loop(camera_index: int, interval: float):
         if not ret:
             with _cv_lock:
                 _cv_state["error"] = "Camera read failed"
+                _cv_state["camera_active"] = False
             break
         # Dynamically auto-brighten dark/dim frames
         try:
@@ -685,13 +721,17 @@ def _camera_loop(camera_index: int, interval: float):
             _cv_state["stats"] = stats
             _cv_state["error"] = None
 
-        # NIM vision description (skipped if no API key, runs after frame is stored)
-        nim_key = os.environ.get("NVIDIA_VISION_API_KEY") or os.environ.get("NVIDIA_NIM_API_KEY") or os.environ.get("NVIDIA_API_KEY") or os.environ.get("NIM_API_KEY")
-        if nim_key:
-            nim_desc = _describe_scene_nim(frame_b64)
-            if nim_desc:
-                with _cv_lock:
-                    _cv_state["scene_description"] = nim_desc
+        # NIM vision description — OPT-IN only (F1): FRIDAY_CV_VL_DIALOG=1.
+        # Per-frame VL calls spam the log with 410s and burn quota; the Live session's
+        # screen stream already covers "what's on screen". Explicit VL requests
+        # (cv_tool("ask_camera", ...)) still work regardless.
+        if os.getenv("FRIDAY_CV_VL_DIALOG", "").strip() == "1":
+            nim_key = os.environ.get("NVIDIA_VISION_API_KEY") or os.environ.get("NVIDIA_NIM_API_KEY") or os.environ.get("NVIDIA_API_KEY") or os.environ.get("NIM_API_KEY")
+            if nim_key:
+                nim_desc = _describe_scene_nim(frame_b64)
+                if nim_desc:
+                    with _cv_lock:
+                        _cv_state["scene_description"] = nim_desc
 
         try:
             with open(_CV_STATE_FILE, "w") as f:
@@ -1371,7 +1411,7 @@ def cv_tool(action: str = "status", **kwargs) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Auto-start camera on module import
+# Camera auto-start — OPT-IN ONLY (G1)
 # ═══════════════════════════════════════════════════════════════════
 
 def _ensure_camera_running():
@@ -1390,5 +1430,10 @@ def _ensure_camera_running():
         print(f"[CV] Camera auto-start error: {e}")
 
 
-# Auto-start in a background thread (non-blocking)
-threading.Thread(target=_ensure_camera_running, daemon=True, name="cv-autostart").start()
+# By default FRIDAY does NOT touch the camera at import time. The old default
+# flooded the console with obsensor::getStreamChannelGroup errors on machines
+# where camera 0 is not a real capture device (e.g. OBS virtual camera).
+# Set FRIDAY_CAMERA_AUTOSTART=1 to re-enable the legacy auto-start, or call
+# cv_tool("start") explicitly (the recommended path).
+if os.getenv("FRIDAY_CAMERA_AUTOSTART", "0") == "1":
+    threading.Thread(target=_ensure_camera_running, daemon=True, name="cv-autostart").start()
