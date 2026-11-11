@@ -38,13 +38,10 @@ def _on_agent_chat(msg: str):
     m = re.match(r'\[bold[^\]]*\]([^[/]+)\[/bold[^\]]*\]:\s*(.*)', msg)
     agent_name = m.group(1).strip() if m else "System"
     text = m.group(2).strip() if m else msg
-    ch = _channels.get("main")
-    if ch:
-        ch.messages.append({
-            "speaker": agent_name,
-            "text": text,
-            "ts": datetime.datetime.now().isoformat(),
-        })
+    # Do NOT append here — DreamEngine already routes each utterance into
+    # channel.add_message() with proper from/time keys. The old append wrote a
+    # second entry with speaker/ts keys, which rendered as phantom ": text"
+    # lines in the UI.
     _broadcast("chat", {"agent": agent_name, "text": text, "channel": "main"})
 
 
@@ -70,6 +67,10 @@ def _init():
                 ch = ChatChannel.from_dict(data)
                 if ch.active:
                     _channels[name] = ch
+
+    # One-time heal: drop legacy phantom entries (speaker/ts shape, missing from/time)
+    for ch in _channels.values():
+        ch.messages = [m for m in ch.messages if isinstance(m, dict) and m.get("from") and m.get("time")]
 
     _dream_engine = DreamEngine(_agents, _channels, log_callback=_on_agent_chat)
     _dream_engine.start()
@@ -154,7 +155,7 @@ def _serialize():
             "active": c.active,
             "messages": [
                 {"from": _clean(m.get("from", "")), "text": _clean(m.get("text", "")), "time": m.get("time", "")}
-                for m in c.messages[-50:]
+                for m in c.messages
             ],
         }
     return {"agents": agents, "channels": channels}
@@ -230,8 +231,11 @@ body { background: #050510; color: #c8c8d8; font-family: 'Segoe UI', system-ui, 
   <div id="agent-list"></div>
   <div class="divider"></div>
   <div id="chat-section">
-    <div class="section-title">&#128172; Main Chat</div>
-    <div id="chat-log" style="flex:none;max-height:200px;overflow-y:auto;padding:0 16px 4px;font-size:12px"></div>
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>&#128172; Main Chat</span>
+      <button id="chat-popout" title="Open the big chat window" style="background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.35);color:#00E5FF;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;letter-spacing:.4px">&#8599; Pop out</button>
+    </div>
+    <div id="chat-log" style="flex:none;max-height:300px;overflow-y:auto;padding:0 16px 4px;font-size:12px"></div>
   </div>
   <div class="divider"></div>
   <div id="task-section"></div>
@@ -252,6 +256,12 @@ const agentInfo = document.getElementById('agent-info');
 const agentList = document.getElementById('agent-list');
 const taskSection = document.getElementById('task-section');
 const chatLog = document.getElementById('chat-log');
+const popoutBtn = document.getElementById('chat-popout');
+if (popoutBtn) {
+  popoutBtn.addEventListener('click', () => {
+    window.open('/chat', 'friday_chat_popout', 'width=460,height=680,resizable=yes,scrollbars=yes');
+  });
+}
 const connStatus = document.getElementById('conn-status');
 
 let state = { agents: {}, channels: {} };
@@ -477,13 +487,27 @@ ws.onclose = () => connStatus.textContent = 'disconnected';
 function renderChat() {
   const ch = state.channels && state.channels.main;
   if (!ch || !ch.messages) { chatLog.innerHTML = ''; return; }
-  chatLog.innerHTML = ch.messages.slice(-20).map(m => {
+  const atBottom = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 40;
+  // Defensive dedup (E2): collapse exact duplicate messages and drop empty-from
+  // mirror entries whose text matches the previous line ('FRIDAY: X' + ': X').
+  const seen = new Set();
+  const msgs = [];
+  for (const m of ch.messages) {
+    if (m && m.time) {
+      const key = `${m.from || ''}|${m.time}|${m.text || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    if (m && !m.from && msgs.length && msgs[msgs.length - 1].text === m.text) continue; // phantom mirror
+    msgs.push(m);
+  }
+  chatLog.innerHTML = msgs.map(m => {
     if (m.from === 'system') return `<div style="color:#686898;font-style:italic;font-size:11px">${escapeHtml(m.text)}</div>`;
     const a = state.agents[m.from]; const c = a ? a.color : '#c8c8d8';
     const ts = m.time ? m.time.slice(11, 16) : '';
-    return `<div><span style="color:#484868;font-size:10px">${ts}</span> <span style="color:${c};font-weight:600">${m.from}</span>: ${escapeHtml(m.text)}</div>`;
+    return `<div><span style="color:#484868;font-size:10px">${ts}</span> <span style="color:${c};font-weight:600">${escapeHtml(m.from||'')}</span>: ${escapeHtml(m.text)}</div>`;
   }).join('');
-  chatLog.scrollTop = chatLog.scrollHeight;
+  if (atBottom) chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 function escapeHtml(t) {
@@ -584,6 +608,104 @@ animate();
 def _store_loop():
     global _loop
     _loop = asyncio.get_running_loop()
+
+
+POPUP_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FRIDAY — Townhall Chat</title>
+<style>
+  :root { --bg:#050510; --panel:#0a0a1a; --cyan:#00E5FF; --dim:#686898; --ink:#d8d8e8; }
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:var(--bg); color:var(--ink); font-family:'Segoe UI',system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden }
+  header { display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--panel); border-bottom:1px solid rgba(0,229,255,0.18); flex:none }
+  header .dot { width:9px; height:9px; border-radius:50%; background:#00BFFF; box-shadow:0 0 6px #00BFFF }
+  header h1 { font-size:13px; letter-spacing:2.4px; color:var(--cyan); font-weight:700 }
+  header .spacer { flex:1 }
+  header .count { font-size:11px; color:var(--dim); font-family:'Cascadia Code',monospace }
+  header button { background:rgba(0,229,255,0.08); border:1px solid rgba(0,229,255,0.3); color:var(--cyan); border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer }
+  #log { flex:1; overflow-y:auto; padding:14px 16px 18px; font-size:15px; line-height:1.65 }
+  #log .row { margin:7px 0; word-wrap:break-word }
+  #log .ts { color:#484868; font-size:10px; font-family:'Cascadia Code',monospace; margin-right:6px }
+  #log .who { font-weight:700; margin-right:2px }
+  #log .sys { color:#686898; font-style:italic; font-size:12px }
+  #jump { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:rgba(0,229,255,0.14); border:1px solid rgba(0,229,255,0.45); color:var(--cyan); border-radius:20px; padding:8px 18px; font-size:12px; cursor:pointer; display:none; box-shadow:0 4px 24px rgba(0,229,255,0.2) }
+  #foot { flex:none; padding:8px 16px; border-top:1px solid rgba(26,26,58,0.8); color:var(--dim); font-size:10px; text-align:center; font-family:'Cascadia Code',monospace }
+  ::-webkit-scrollbar { width:8px } ::-webkit-scrollbar-thumb { background:rgba(0,229,255,0.25); border-radius:4px }
+</style>
+</head>
+<body>
+<header>
+  <div class="dot" id="conn"></div>
+  <h1>TOWNHALL CHAT</h1>
+  <div class="spacer"></div>
+  <div class="count" id="count">0 msgs</div>
+  <button id="jumpBtn">&#8595; Latest</button>
+</header>
+<div id="log"></div>
+<button id="jump">&#8595; Jump to latest</button>
+<div id="foot">F.R.I.D.A.Y. · everyone in the room since session start</div>
+<script>
+const logEl = document.getElementById('log');
+const countEl = document.getElementById('count');
+const jumpPill = document.getElementById('jump');
+const connDot = document.getElementById('conn');
+let state = { agents: {}, channels: {} };
+let messages = [];
+let pinned = true;
+
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+function render() {
+  const main = state.channels && state.channels.main;
+  messages = (main && main.messages) ? main.messages : [];
+  countEl.textContent = messages.length + ' msgs';
+  logEl.innerHTML = messages.map(m => {
+    if (m.from === 'system') return `<div class="row sys">${escapeHtml(m.text)}</div>`;
+    const a = state.agents[m.from]; const c = a ? a.color : '#c8c8d8';
+    const ts = m.time ? m.time.slice(11, 16) : '';
+    return `<div class="row"><span class="ts">${ts}</span><span class="who" style="color:${escapeHtml(c)}">${escapeHtml(m.from||'')}:</span> ${escapeHtml(m.text)}</div>`;
+  }).join('');
+  if (pinned) logEl.scrollTop = logEl.scrollHeight;
+  jumpPill.style.display = pinned ? 'none' : 'block';
+}
+
+logEl.addEventListener('scroll', () => {
+  pinned = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+  jumpPill.style.display = pinned ? 'none' : 'block';
+});
+jumpPill.addEventListener('click', () => { pinned = true; logEl.scrollTop = logEl.scrollHeight; jumpPill.style.display = 'none'; });
+document.getElementById('jumpBtn').addEventListener('click', () => { pinned = true; logEl.scrollTop = logEl.scrollHeight; });
+
+function connect() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws');
+  ws.onopen = () => connDot.style.background = '#00FF87';
+  ws.onclose = () => { connDot.style.background = '#FF5555'; setTimeout(connect, 3000); };
+  ws.onerror = () => {};
+  ws.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'state') { state = data; render(); }
+      else if (data.type === 'update') {
+        if (data.agents) Object.assign(state.agents, data.agents);
+        if (data.channels) Object.assign(state.channels, data.channels);
+        render();
+      }
+    } catch (err) { console.error(err); }
+  };
+}
+connect();
+</script>
+</body>
+</html>
+"""
+
+
+@app.get("/chat")
+async def chat_popup():
+    return HTMLResponse(POPUP_HTML)
 
 
 @app.get("/")

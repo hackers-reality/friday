@@ -202,34 +202,22 @@ class Orchestrator:
             if new_key:
                 os.environ["NVIDIA_NIM_API_KEY"] = new_key
                 keys_updated = True
-                
-        opencode_key = os.getenv("OPENCODE_ZEN_API_KEY")
-        if not opencode_key:
-            new_key = input("Enter OPENCODE_ZEN_API_KEY: ").strip()
-            if new_key:
-                os.environ["OPENCODE_ZEN_API_KEY"] = new_key
-                keys_updated = True
-                
+
+        # Zen ripped out 2026-11-11 (401, owner decision) — no Zen key is requested.
         if keys_updated and os.path.exists(env_path):
             try:
                 with open(env_path, "r", encoding="utf-8") as f:
                     lines = f.readlines()
                 new_lines = []
                 has_nim = False
-                has_opencode = False
                 for line in lines:
                     if line.startswith("NVIDIA_NIM_API_KEY="):
                         new_lines.append(f"NVIDIA_NIM_API_KEY={os.getenv('NVIDIA_NIM_API_KEY')}\n")
                         has_nim = True
-                    elif line.startswith("OPENCODE_ZEN_API_KEY="):
-                        new_lines.append(f"OPENCODE_ZEN_API_KEY={os.getenv('OPENCODE_ZEN_API_KEY')}\n")
-                        has_opencode = True
                     else:
                         new_lines.append(line)
                 if not has_nim:
                     new_lines.append(f"NVIDIA_NIM_API_KEY={os.getenv('NVIDIA_NIM_API_KEY')}\n")
-                if not has_opencode:
-                    new_lines.append(f"OPENCODE_ZEN_API_KEY={os.getenv('OPENCODE_ZEN_API_KEY')}\n")
                 with open(env_path, "w", encoding="utf-8") as f:
                     f.writelines(new_lines)
                 print("[STARK INDUSTRIES] API keys saved successfully to .env!\n", flush=True)

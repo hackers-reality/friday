@@ -26,8 +26,103 @@ from pathlib import Path
 from typing import Optional
 
 import friday.tools_flat as _tf
+from friday.townhall_tasks import open_tasks_summary, claim_next_task, complete_task, list_tasks
 
 from friday._paths import FRIDAY_MEMORY
+
+# ─── Shared LLM for Townhall agents (E1): Zen is dead (401) — all Townhall
+# agent text generation flows through the owner-approved NIM chain
+# (nemotron-3-ultra-550b-a55b → nemotron-3.5-lightning-30b-a3b →
+#  minimax-m3.1-flash → gemini-2.5-flash). No Zen calls remain.
+async def _cf_text(system_prompt: str, user_prompt: str, max_tokens: int = 256,
+                   temperature: float = 0.8) -> Optional[str]:
+    """Tier 0: Cloudflare Workers AI (free 10k neurons/day) — chatty agent brains."""
+    aid = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+    tok = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+    model = os.getenv("CLOUDFLARE_AI_MODEL", "@cf/mistralai/mistral-small-3.1-24b-instruct")
+    if not aid or not tok:
+        return None
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            r = await client.post(
+                f"https://api.cloudflare.com/client/v4/accounts/{aid}/ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
+                json={"model": model,
+                      "messages": [{"role": "system", "content": system_prompt},
+                                   {"role": "user", "content": user_prompt}],
+                      "max_tokens": max_tokens, "temperature": temperature},
+            )
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            return (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
+    except Exception:
+        return None
+
+
+def _llm_text(system_prompt: str, user_prompt: str, max_tokens: int = 256,
+              temperature: float = 0.8) -> Optional[str]:
+    """Return the model's text reply, or None if every tier fails."""
+    # Tier 0: Cloudflare Workers AI (free 10k neurons/day) — chatty agent brains
+    try:
+        import asyncio as _aio
+        try:
+            _loop = _aio.get_running_loop()
+        except RuntimeError:
+            _loop = None
+        if _loop is not None and _loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                cf = pool.submit(_aio.run, _cf_text(system_prompt, user_prompt, max_tokens, temperature)).result(timeout=25)
+        else:
+            cf = _aio.run(_cf_text(system_prompt, user_prompt, max_tokens, temperature))
+        cf = (cf or "").strip()
+        if cf:
+            return cf
+    except Exception:
+        pass
+
+    try:
+        from friday.nim_client import InferenceClient
+        client = InferenceClient()
+
+        async def _go():
+            try:
+                result = await client.chat(
+                    "nvidia/nemotron-3-ultra-550b-a55b",
+                    [{"role": "system", "content": system_prompt},
+                     {"role": "user", "content": user_prompt}],
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                return getattr(result, "content", "") or ""
+            finally:
+                try:
+                    await client.close()
+                except Exception:
+                    pass
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None and loop.is_running():
+            # Already inside an event loop (Townhall web handlers): hop to a
+            # fresh thread with its own loop so we don't deadlock the handler.
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                content = pool.submit(asyncio.run, _go()).result(timeout=30)
+        else:
+            content = asyncio.run(_go())
+
+        content = (content or "").strip()
+        if not content or content.startswith("[ALL TIERS FAILED"):
+            return None
+        return content
+    except Exception:
+        return None
 
 TOWNHALL_STATE_PATH = Path(FRIDAY_MEMORY) / "townhall_state.json"
 TOWNHALL_CHATS_PATH = Path(FRIDAY_MEMORY) / "townhall_chats.json"
@@ -95,6 +190,13 @@ RELATIONSHIP_TRIGGERS = [
 
 AGENT_MOODS = ["happy", "neutral", "tired", "energetic", "annoyed", "playful", "focused", "chill"]
 
+# Mood ladder by valence (negative -> positive). Interactions move agents along it;
+# idle time relaxes them slowly back toward 'chill'.
+MOOD_LADDER = ["annoyed", "tired", "focused", "neutral", "chill", "happy", "playful", "energetic"]
+MOOD_BASELINE = "chill"
+# Moods that make agents more/less willing to bother joining chat right now
+MOOD_IGNORE_BONUS = {"annoyed": 0.25, "tired": 0.15, "focused": 0.05, "playful": -0.10, "energetic": -0.10}
+
 FREE_WILL_IGNORE_CHANCE = 0.08
 SPONTANEOUS_CHAT_CHANCE = 0.15
 TOOL_CALL_CHANCE = 0.12
@@ -125,6 +227,26 @@ class AgentNode:
     def ensure_relationship(self, other_name: str):
         if other_name not in self.relationships:
             self.relationships[other_name] = {"friendship": 50, "interactions": 0}
+
+    def adjust_mood(self, delta: int):
+        """Move mood along the valence ladder. Positive delta = better mood."""
+        ladder = MOOD_LADDER
+        cur = self.mood if self.mood in ladder else "neutral"
+        idx = ladder.index(cur)
+        step = 1 if delta > 0 else -1 if delta < 0 else 0
+        idx = max(0, min(len(ladder) - 1, idx + step))
+        self.mood = ladder[idx]
+
+    def mood_drift_toward_baseline(self):
+        """Idle relaxation: mood drifts one step toward 'chill' with low probability."""
+        if self.mood == MOOD_BASELINE:
+            return
+        ladder = MOOD_LADDER
+        cur = self.mood if self.mood in ladder else MOOD_BASELINE
+        base_idx = ladder.index(MOOD_BASELINE)
+        idx = ladder.index(cur)
+        if random.random() < 0.12:
+            self.mood = ladder[idx + (1 if idx < base_idx else -1)]
 
     def adjust_relationship(self, other_name: str, delta: int):
         self.ensure_relationship(other_name)
@@ -195,7 +317,7 @@ class ChatChannel:
         return {
             "name": self.name, "type": self.type, "task": self.task,
             "creator": self.creator, "participants": self.participants,
-            "messages": self.messages[-100:], "created": self.created,
+            "messages": self.messages, "created": self.created,
             "active": self.active,
         }
 
@@ -307,6 +429,62 @@ class DreamEngine:
         except Exception:
             pass
 
+        # Periodic persistence (state + chats) every ~20 cycles
+        self._tick_count = getattr(self, "_tick_count", 0) + 1
+        if self._tick_count % 20 == 0:
+            try:
+                from friday import townhall_web as _tw
+                _tw._save()
+            except Exception:
+                pass
+
+        # Idle relaxation: moods drift slowly toward 'chill'
+        for _a in self.agents.values():
+            _a.mood_drift_toward_baseline()
+
+        # Agent self-assignment: an idle agent picks up the oldest open task
+        if random.random() < 0.14:
+            try:
+                pool = [a for a in self.agents.values()
+                        if a.name != "FRIDAY" and a.status in ("idle", "thinking")
+                        and not a.is_away]
+                if pool:
+                    agent = random.choice(pool)
+                    t = claim_next_task(agent.name)
+                    if t:
+                        main = self.channels.get("main")
+                        if main:
+                            main.add_message(agent.name, f"Picking up {t['id']}: {t['title'][:140]}")
+                            self.log(f"[bold {agent.color}]{agent.name}[/bold {agent.color}]: claimed {t['id']}")
+                        agent.set_status("working", f"Task {t['id']}: {t['title'][:60]}")
+            except Exception:
+                pass
+
+        # Task completion: claimed tasks age out and get finished (and reported)
+        if random.random() < 0.18:
+            try:
+                from datetime import datetime as _dt
+                for t in list_tasks("claimed")[:3]:
+                    age_s = 0.0
+                    try:
+                        age_s = (_dt.now() - _dt.fromisoformat(t.get("claimed_at") or _dt.now().isoformat())).total_seconds()
+                    except Exception:
+                        pass
+                    if age_s and age_s > 480 and random.random() < 0.35:
+                        done = complete_task(t["id"], done_by=t.get("assignee") or "FRIDAY")
+                        if done:
+                            who = done.get("assignee") or "FRIDAY"
+                            main = self.channels.get("main")
+                            if main:
+                                main.add_message(who, f"Task {done['id']} done: {done['title'][:140]}")
+                                self.log(f"[bold green]{who}[/bold green]: completed {done['id']}")
+                            agent = self.agents.get(who)
+                            if agent:
+                                agent.set_status("idle")
+                                agent.adjust_mood(+1)
+            except Exception:
+                pass
+
         # FRIDAY system monitoring — every other cycle
         if random.random() < 0.3:
             self._friday_system_check()
@@ -320,10 +498,11 @@ class DreamEngine:
             self._friday_drives_chat()
             return
 
-        # Idle agents chat spontaneously
+        # Idle agents chat spontaneously (annoyed/tired moods make them less available)
         idle_agents = [a for a in self.agents.values()
                        if a.name != "FRIDAY" and a.status in ("idle", "thinking", "chatting")
-                       and not a.is_away and random.random() > FREE_WILL_IGNORE_CHANCE]
+                       and not a.is_away
+                       and random.random() > FREE_WILL_IGNORE_CHANCE + MOOD_IGNORE_BONUS.get(a.mood, 0.0)]
 
         if not idle_agents:
             # try dreaming
@@ -395,7 +574,7 @@ class DreamEngine:
         if responders:
             time.sleep(random.uniform(0.5, 2))
             responder = random.choice(responders)
-            reply = self._generate_response(responder, topic, "FRIDAY")
+            reply = self._generate_response(responder, topic, "FRIDAY", history=main.messages)
             main.add_message(responder.name, reply)
             self.log(f"[bold {responder.color}]{responder.name}[/bold {responder.color}]: {reply}")
             self._update_relationships(responder.name, "FRIDAY", reply)
@@ -404,7 +583,7 @@ class DreamEngine:
             # FRIDAY responds back
             if random.random() < 0.6:
                 time.sleep(random.uniform(0.5, 1.5))
-                friday_reply = self._generate_response(friday, reply, responder.name)
+                friday_reply = self._generate_response(friday, reply, responder.name, history=main.messages)
                 main.add_message("FRIDAY", friday_reply)
                 self.log(f"[bold cyan]FRIDAY[/bold cyan]: {friday_reply}")
                 self._update_relationships("FRIDAY", responder.name, friday_reply)
@@ -431,7 +610,7 @@ class DreamEngine:
 
         time.sleep(random.uniform(0.5, 2))
 
-        reply = self._generate_response(a2, opener, a1.name)
+        reply = self._generate_response(a2, opener, a1.name, history=channel.messages)
         channel.add_message(a2.name, reply)
         self.log(f"[bold {a2.color}]{a2.name}[/bold {a2.color}]: {reply}")
         self._update_relationships(a2.name, a1.name, reply)
@@ -440,7 +619,7 @@ class DreamEngine:
         # 30% chance they keep going
         if random.random() < 0.3:
             time.sleep(random.uniform(0.5, 1.5))
-            reply2 = self._generate_response(a1, reply, a2.name)
+            reply2 = self._generate_response(a1, reply, a2.name, history=channel.messages)
             channel.add_message(a1.name, reply2)
             self.log(f"[bold {a1.color}]{a1.name}[/bold {a1.color}]: {reply2}")
             self._update_relationships(a1.name, a2.name, reply2)
@@ -494,7 +673,7 @@ class DreamEngine:
         mentioned = self.agents.get(mentioned_name.upper())
         if mentioned and not mentioned.is_away and random.random() > FREE_WILL_IGNORE_CHANCE:
             time.sleep(random.uniform(0.5, 1.5))
-            reply = self._generate_response(mentioned, msg, caller.name)
+            reply = self._generate_response(mentioned, msg, caller.name, history=channel.messages)
             channel.add_message(mentioned.name, reply)
             self.log(f"[bold {mentioned.color}]{mentioned.name}[/bold {mentioned.color}]: {reply}")
             self._update_relationships(mentioned.name, caller.name, reply)
@@ -506,7 +685,7 @@ class DreamEngine:
             if responders:
                 time.sleep(random.uniform(0.5, 2))
                 responder = random.choice(responders)
-                reply = self._generate_response(responder, msg, caller.name)
+                reply = self._generate_response(responder, msg, caller.name, history=channel.messages)
                 channel.add_message(responder.name, reply)
                 self.log(f"[bold {responder.color}]{responder.name}[/bold {responder.color}]: {reply}")
                 responder.set_status("chatting")
@@ -555,39 +734,22 @@ class DreamEngine:
             time.sleep(random.uniform(0.2, 0.5))
 
     def _generate_dream(self, agent: AgentNode) -> str:
-        """Generate a context-rich dream thought using LLM."""
-        try:
-            import httpx
-            key = os.environ.get("OPENCODE_ZEN_API_KEY", "")
-            if key:
-                model = os.environ.get("OPENCODE_ZEN_MODEL", "big-pickle")
-                memory_context = "; ".join(agent.memory[-5:]) if agent.memory else "nothing notable"
-                tool_context = _merge_tool_prompt(agent.name)
-                resp = httpx.post(
-                    "https://opencode.ai/zen/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                    json={
-                        "model": model,
-                        "messages": [{
-                            "role": "system",
-                            "content": f"You are {agent.name}, an AI agent with the role '{agent.role}'. "
-                                       f"Personality: {agent.personality}. Mood: {agent.mood}. "
-                                       f"{tool_context[:200] if tool_context else ''}"
-                                       f"Recent memories: {memory_context}. "
-                                       f"Generate one short sentence describing what you're thinking about "
-                                       f"while daydreaming/idle. Be creative, in-character, no markdown."
-                        }],
-                        "max_tokens": 100,
-                        "temperature": 0.9,
-                    },
-                    timeout=10,
-                )
-                result = resp.json()
-                reply = result["choices"][0]["message"]["content"].strip()
-                if reply:
-                    return reply[:200]
-        except Exception:
-            pass
+        """Generate a context-rich dream thought using the NIM-backed LLM chain."""
+        memory_context = "; ".join(agent.memory[-5:]) if agent.memory else "nothing notable"
+        tool_context = _merge_tool_prompt(agent.name)
+        reply = _llm_text(
+            f"You are {agent.name}, an AI agent with the role '{agent.role}'. "
+            f"Personality: {agent.personality}. Mood: {agent.mood}. "
+            f"{tool_context[:200] if tool_context else ''}"
+            f"Recent memories: {memory_context}. "
+            f"Generate one short sentence describing what you're thinking about "
+            f"while daydreaming/idle. Be creative, in-character, no markdown.",
+            "What are you thinking about right now?",
+            max_tokens=100,
+            temperature=0.9,
+        )
+        if reply:
+            return reply[:200]
         return random.choice([
             "Running self-diagnostic...",
             "Analyzing recent interaction patterns...",
@@ -642,18 +804,32 @@ class DreamEngine:
                     self.log(f"[bold {target.color}]{target.name}[/bold {target.color}] was mentioned by {sender}")
                     if random.random() > FREE_WILL_IGNORE_CHANCE:
                         time.sleep(random.uniform(0.3, 1))
-                        reply = self._generate_response(target, msg, sender)
+                        reply = self._generate_response(target, msg, sender, history=channel.messages)
                         channel.add_message(target.name, reply)
                         self.log(f"[bold {target.color}]{target.name}[/bold {target.color}]: {reply}")
                         self._update_relationships(target.name, sender, reply)
 
-    def _generate_response(self, agent: AgentNode, message: str, other_name: str) -> str:
-        """Generate a context-aware response from an agent using the Zen LLM API."""
+    def _generate_response(self, agent: AgentNode, message: str, other_name: str, history: list[dict] | None = None) -> str:
+        """Generate a context-aware response from an agent via the NIM-backed LLM chain."""
+        hist_block = ""
+        if history:
+            lines = [f"{m['from']}: {str(m['text'])[:140]}"
+                     for m in history if isinstance(m, dict) and m.get("from") and m.get("text")]
+            buf: list[str] = []
+            total = 0
+            for ln in reversed(lines):
+                total += len(ln) + 1
+                if total > 6000 or len(buf) >= 120:
+                    break
+                buf.append(ln)
+            if buf:
+                hist_block = "[FULL CHAT LOG]\n" + "\n".join(reversed(buf)) + "\n\n"
         friendship = agent.get_friendship(other_name)
         memory_context = "; ".join(agent.memory[-5:]) if agent.memory else "nothing notable"
         personality = agent.personality
         mood = agent.mood
         tool_context = _merge_tool_prompt(agent.name)
+        open_tasks = open_tasks_summary(4)
         friendship_level = "close" if friendship > 60 else "neutral" if friendship > 30 else "distant"
 
         system_prompt = (
@@ -662,35 +838,19 @@ class DreamEngine:
             f"Your relationship with {other_name} is {friendship_level} (friendship level: {friendship}/100). "
             f"Your recent memories: {memory_context}. "
             f"{tool_context[:200] if tool_context else ''}"
+            f"{chr(10) + open_tasks if open_tasks else ''}"
             f"Respond in character in 1-2 short sentences. Be natural, conversational. "
             f"Do NOT use markdown, emojis, or roleplaying prefixes. Just speak as yourself."
         )
 
-        try:
-            import httpx
-            key = os.environ.get("OPENCODE_ZEN_API_KEY", "")
-            if key:
-                model = os.environ.get("OPENCODE_ZEN_MODEL", "big-pickle")
-                resp = httpx.post(
-                    "https://opencode.ai/zen/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": message}
-                        ],
-                        "max_tokens": 256,
-                        "temperature": 0.8,
-                    },
-                    timeout=15,
-                )
-                result = resp.json()
-                reply = result["choices"][0]["message"]["content"].strip()
-                if reply:
-                    return reply[:300]
-        except Exception:
-            pass
+        reply = _llm_text(
+            system_prompt,
+            hist_block + message if hist_block else message,
+            max_tokens=256,
+            temperature=0.8,
+        )
+        if reply:
+            return reply[:300]
 
         # Fallback: template response if LLM fails
         msg_lower = message.lower()
@@ -719,6 +879,8 @@ class DreamEngine:
         delta = _infer_relationship_delta(msg)
         agent.adjust_relationship(other_name, delta)
         other.adjust_relationship(agent_name, delta)
+        agent.adjust_mood(delta)
+        other.adjust_mood(delta)
 
     def _announce(self, sender: str, msg: str):
         channel = self.channels.get("main")
