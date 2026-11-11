@@ -8,7 +8,7 @@ import base64
 import io
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -16,6 +16,42 @@ from friday.google_oauth import call_api, get_access_token
 from friday.logging_utils import configure_logging
 
 logger = configure_logging(__name__)
+
+
+def _coerce_int(value, default: int, lo: int | None = None, hi: int | None = None) -> int:
+    """Coerce LLM-supplied ints (often strings) with clamping. Never raises."""
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        try:
+            v = int(float(value))
+        except (TypeError, ValueError):
+            v = default
+    if lo is not None:
+        v = max(lo, v)
+    if hi is not None:
+        v = min(hi, v)
+    return v
+
+
+def _auth_err() -> str:
+    """Actionable Google-auth failure message built from the OAuth layer's last error."""
+    try:
+        from friday.google_oauth import last_api_error
+        e = last_api_error() or {}
+        status = e.get("status")
+        body = (e.get("body") or "")[:140]
+        where = e.get("where") or ""
+        if status == 400 and where == "refresh":
+            return (f"Google OAuth refresh rejected (400){': ' + body if body else ''} — "
+                    f"re-authorize at /settings/google/auth")
+        if status:
+            return f"Google OAuth error {status}{': ' + body if body else ''} — re-authorize at /settings/google/auth"
+        if e.get("reason"):
+            return f"Google OAuth unavailable — {e['reason'][:140]}"
+    except Exception:
+        pass
+    return "Google OAuth token missing — re-authorize at /settings/google/auth"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -26,7 +62,7 @@ def drive_list(folder_id: str = "root", page_size: int = 20) -> list[dict]:
     """List files and folders in a Drive folder."""
     params = {
         "q": f"'{folder_id}' in parents and trashed=false",
-        "pageSize": min(page_size, 100),
+        "pageSize": min(_coerce_int(page_size, 100), 100),
         "fields": "files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink)",
     }
     data = call_api("https://www.googleapis.com/drive/v3/files", params=params)
@@ -39,7 +75,7 @@ def drive_search(query: str, page_size: int = 20) -> list[dict]:
     """Search Drive for files matching query."""
     params = {
         "q": f"name contains '{query}' and trashed=false",
-        "pageSize": min(page_size, 100),
+        "pageSize": min(_coerce_int(page_size, 100), 100),
         "fields": "files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink)",
     }
     data = call_api("https://www.googleapis.com/drive/v3/files", params=params)
@@ -63,7 +99,7 @@ def drive_upload(file_path: str, mime_type: Optional[str] = None,
         mime_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         from requests_toolbelt import MultipartEncoder
         encoder = MultipartEncoder(
@@ -112,7 +148,7 @@ def drive_download(file_id: str, output_path: str) -> dict:
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     meta = call_api(f"https://www.googleapis.com/drive/v3/files/{file_id}",
                      params={"fields": "name,mimeType"})
     if not meta:
@@ -368,7 +404,7 @@ def _slides_replace_text(presentation_id: str, slide_id: str,
 def people_list(page_size: int = 20) -> list[dict]:
     """List authenticated user's contacts."""
     params = {
-        "pageSize": min(page_size, 100),
+        "pageSize": min(_coerce_int(page_size, 100), 100),
         "personFields": "names,emailAddresses,phoneNumbers,photos,organizations",
     }
     data = call_api("https://people.googleapis.com/v1/people/me/connections",
@@ -389,7 +425,7 @@ def people_search(query: str, page_size: int = 20) -> list[dict]:
         emails = [e.get("value", "").lower() for e in c.get("emailAddresses", [])]
         if any(query_lower in n for n in names) or any(query_lower in e for e in emails):
             results.append(c)
-    return results[:page_size]
+    return results[:_coerce_int(page_size, 20)]
 
 
 def people_create_contact(name: str, email: Optional[str] = None,
@@ -520,7 +556,7 @@ def storage_upload(bucket: str, file_path: str, dest_path: Optional[str] = None)
     dest = dest_path or path.name
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         r = requests.post(
             f"https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o?uploadType=media&name={dest}",
@@ -777,7 +813,7 @@ def books_search(query: str, max_results: int = 10) -> list[dict]:
     """Search Google Books."""
     data = call_api(
         "https://www.googleapis.com/books/v1/volumes",
-        params={"q": query, "maxResults": min(max_results, 40)},
+        params={"q": query, "maxResults": min(_coerce_int(max_results, 40), 40)},
     )
     if not data:
         return []
@@ -828,18 +864,55 @@ def books_get_volume(volume_id: str) -> dict:
 
 def youtube_search(query: str, max_results: int = 10, video_duration: Optional[str] = None,
                    order: str = "relevance") -> list[dict]:
-    """Search YouTube by scraping HTML (no API key required)."""
+    """Search YouTube.
+
+    Primary path: YouTube Data API v3 ``search.list`` via the already-authorized
+    OAuth token (quota: 100 units per search; 10,000 units/day free).
+    Fallback: HTML scrape (no API key / quota) if the API is unusable (403, quota,
+    network failure). ``max_results`` is coerced and clamped 1..50 either way.
+    """
     import httpx, re, html as html_mod
+    max_results = _coerce_int(max_results, 10, lo=1, hi=50)
+    api_order = {"relevance": "relevance", "date": "date", "viewCount": "viewCount",
+                 "rating": "rating", "title": "title"}.get(str(order).strip(), "relevance")
+    params: dict[str, Any] = {
+        "part": "snippet",
+        "q": query,
+        "type": "video",
+        "maxResults": max_results,
+        "order": api_order,
+    }
+    if video_duration in ("short", "medium", "long"):
+        params["videoDuration"] = video_duration
+    data = call_api("https://www.googleapis.com/youtube/v3/search", params=params)
+    items = (data or {}).get("items") or []
+    if items:
+        out = []
+        for it in items[:max_results]:
+            vid = (it.get("id") or {}).get("videoId", "")
+            snip = it.get("snippet", {})
+            thumbs = snip.get("thumbnails") or {}
+            out.append({
+                "videoId": vid,
+                "title": snip.get("title"),
+                "description": (snip.get("description") or "")[:300],
+                "channelTitle": snip.get("channelTitle"),
+                "publishedAt": snip.get("publishedAt"),
+                "thumbnail": (thumbs.get("high") or thumbs.get("default") or {}).get("url"),
+            })
+        return out
+
+    # Fallback: scrape (quota exhausted or API not usable)
+    from urllib.parse import quote
     sort_map = {"relevance": "", "date": "&sp=CAI%3D", "viewCount": "&sp=CAM%3D", "rating": "&sp=CAE%3D"}
     sort_suffix = sort_map.get(order, "")
     dur_map = {"short": "&sp=EgQQARgB", "medium": "&sp=EgQQARgC", "long": "&sp=EgQQARgD"}
-    dur_suffix = dur_map.get(video_duration, "")
-    url = f"https://www.youtube.com/results?search_query={httpx.utils.quote(query)}{sort_suffix}{dur_suffix}"
+    dur_suffix = dur_map.get(video_duration or "", "")
+    url = f"https://www.youtube.com/results?search_query={quote(query)}{sort_suffix}{dur_suffix}"
     try:
         resp = httpx.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         if resp.status_code != 200:
             return []
-        # Extract initial data from ytInitialData
         match = re.search(r'ytInitialData\s*=\s*({.*?});', resp.text, re.DOTALL)
         if not match:
             return []
@@ -951,7 +1024,7 @@ def youtube_list_comments(video_id: str, max_results: int = 20) -> list[dict]:
     """List top-level comments on a YouTube video."""
     data = call_api(
         "https://www.googleapis.com/youtube/v3/commentThreads",
-        params={"part": "snippet", "videoId": video_id, "maxResults": min(max_results, 50),
+        params={"part": "snippet", "videoId": video_id, "maxResults": min(_coerce_int(max_results, 50), 50),
                 "order": "relevance"},
     )
     if not data:
@@ -976,7 +1049,7 @@ def youtube_list_playlist_items(playlist_id: str, max_results: int = 20) -> list
     data = call_api(
         "https://www.googleapis.com/youtube/v3/playlistItems",
         params={"part": "snippet,contentDetails", "playlistId": playlist_id,
-                "maxResults": min(max_results, 50)},
+                "maxResults": min(_coerce_int(max_results, 50), 50)},
     )
     if not data:
         return []
@@ -998,9 +1071,10 @@ def youtube_list_playlist_items(playlist_id: str, max_results: int = 20) -> list
 def youtube_list_channel_videos(channel_id: str, max_results: int = 20,
                                 order: str = "date") -> list[dict]:
     """List videos uploaded by a channel. order: date, rating, viewCount, title."""
+    max_results = _coerce_int(max_results, 20, lo=1, hi=50)
     data = call_api(
         "https://www.googleapis.com/youtube/v3/search",
-        params={"part": "snippet", "channelId": channel_id, "maxResults": min(max_results, 50),
+        params={"part": "snippet", "channelId": channel_id, "maxResults": min(_coerce_int(max_results, 50), 50),
                 "order": order, "type": "video"},
     )
     if not data:
@@ -1060,7 +1134,7 @@ def tasks_list_tasklists(max_results: int = 20) -> list[dict]:
     """List all task lists."""
     data = call_api(
         "https://tasks.googleapis.com/tasks/v1/users/@me/lists",
-        params={"maxResults": min(max_results, 100)},
+        params={"maxResults": min(_coerce_int(max_results, 100), 100)},
     )
     if not data:
         return []
@@ -1072,7 +1146,7 @@ def tasks_list(tasklist_id: str = "@default", max_results: int = 20,
                show_completed: bool = False) -> list[dict]:
     """List tasks from a task list."""
     params: dict[str, Any] = {
-        "maxResults": min(max_results, 100),
+        "maxResults": min(_coerce_int(max_results, 100), 100),
         "showCompleted": str(show_completed).lower(),
     }
     data = call_api(
@@ -1147,7 +1221,7 @@ def tasks_delete(tasklist_id: str, task_id: str) -> dict:
     import requests as req
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         r = req.delete(
             f"https://tasks.googleapis.com/tasks/v1/lists/{tasklist_id}/tasks/{task_id}",
@@ -1173,7 +1247,7 @@ def photos_list_albums(page_size: int = 20) -> list[dict]:
     try:
         r = requests.get(
             "https://photoslibrary.googleapis.com/v1/albums",
-            params={"pageSize": min(page_size, 50)},
+            params={"pageSize": min(_coerce_int(page_size, 50), 50)},
             headers={"Authorization": f"Bearer {token}"},
             timeout=10,
         )
@@ -1201,7 +1275,7 @@ def photos_list_album_contents(album_id: str, page_size: int = 50) -> list[dict]
         r = requests.post(
             "https://photoslibrary.googleapis.com/v1/mediaItems:search",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"albumId": album_id, "pageSize": min(page_size, 100)},
+            json={"albumId": album_id, "pageSize": min(_coerce_int(page_size, 100), 100)},
             timeout=10,
         )
         r.raise_for_status()
@@ -1240,7 +1314,7 @@ def photos_search_by_date(year: int, month: Optional[int] = None,
         r = requests.post(
             "https://photoslibrary.googleapis.com/v1/mediaItems:search",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"pageSize": min(page_size, 100), "filters": filters},
+            json={"pageSize": min(_coerce_int(page_size, 100), 100), "filters": filters},
             timeout=10,
         )
         r.raise_for_status()
@@ -1262,7 +1336,7 @@ def photos_create_album(title: str) -> dict:
     """Create a new Google Photos album."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.post(
@@ -1304,8 +1378,9 @@ def calendar_list_events(calendar_id: str = "primary", max_results: int = 20,
                          time_min: Optional[str] = None,
                          time_max: Optional[str] = None) -> list[dict]:
     """List calendar events. time_min/time_max: ISO 8601 e.g. '2026-06-01T00:00:00Z'."""
+    max_results = _coerce_int(max_results, 20, lo=1, hi=250)
     params: dict[str, Any] = {
-        "maxResults": min(max_results, 250),
+        "maxResults": min(_coerce_int(max_results, 250), 250),
         "singleEvents": "true",
         "orderBy": "startTime",
     }
@@ -1430,7 +1505,7 @@ def drive_export(file_id: str, mime_type: str = "application/pdf") -> dict:
     """
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     import tempfile
     try:
@@ -1468,7 +1543,7 @@ def drive_list_comments(file_id: str, page_size: int = 20) -> list[dict]:
     """List comments on a Google Drive file."""
     data = call_api(
         f"https://www.googleapis.com/drive/v3/files/{file_id}/comments",
-        params={"pageSize": min(page_size, 100), "fields": "comments(id,author,content,createdTime,modifiedTime,quotedFileContent,resolved)"},
+        params={"pageSize": min(_coerce_int(page_size, 100), 100), "fields": "comments(id,author,content,createdTime,modifiedTime,quotedFileContent,resolved)"},
     )
     if not data:
         return []
@@ -1543,7 +1618,7 @@ def drive_list_revisions(file_id: str, page_size: int = 20) -> list[dict]:
     """List revision history for a Drive file."""
     data = call_api(
         f"https://www.googleapis.com/drive/v3/files/{file_id}/revisions",
-        params={"pageSize": min(page_size, 100), "fields": "revisions(id,modifiedTime,lastModifyingUser,size,keepForever,exportLinks)"},
+        params={"pageSize": min(_coerce_int(page_size, 100), 100), "fields": "revisions(id,modifiedTime,lastModifyingUser,size,keepForever,exportLinks)"},
     )
     if not data:
         return []
@@ -1565,7 +1640,7 @@ def forms_list(page_size: int = 50) -> list[dict]:
     data = call_api(
         "https://www.googleapis.com/drive/v3/files",
         params={"q": "mimeType='application/vnd.google-apps.form' and trashed=false",
-                "pageSize": min(page_size, 100),
+                "pageSize": min(_coerce_int(page_size, 100), 100),
                 "fields": "files(id,name,createdTime,modifiedTime,webViewLink)"},
     )
     if not data:
@@ -1640,7 +1715,7 @@ def slides_add_text_slide(presentation_id: str, title: str = "",
     """Add a slide with a title and body text box to a presentation."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     requests_list = []
     layout_req = {
@@ -1701,7 +1776,7 @@ def slides_add_image(presentation_id: str, image_url: str,
     """Add an image to a slide in a presentation."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     img_id = f"img_{int(import_time())}"
     slide_id = slide_object_id or "p"
@@ -1770,7 +1845,7 @@ def nlp_analyze_sentiment(text: str) -> dict:
     """Analyze sentiment of text — returns score (-1 to 1) and magnitude."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.post(
@@ -1890,7 +1965,7 @@ def people_update_contact(resource_name: str, name: Optional[str] = None,
         return {"error": "resource_name is required (e.g. people/12345)"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     body: dict = {"etag": "*"}
     fields = []
@@ -1925,7 +2000,7 @@ def people_delete_contact(resource_name: str) -> dict:
         return {"error": "resource_name is required"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.delete(
@@ -1943,7 +2018,7 @@ def people_list_directories(page_size: int = 20) -> list[dict]:
     """List available contact directories (include 'people/me' for own contacts)."""
     data = call_api(
         "https://people.googleapis.com/v1/people:listDirectoryPeople",
-        params={"readMask": "names,emailAddresses", "pageSize": min(page_size, 100)},
+        params={"readMask": "names,emailAddresses", "pageSize": min(_coerce_int(page_size, 100), 100)},
     )
     if not data:
         return []
@@ -1962,7 +2037,7 @@ def photos_get_media_item(media_item_id: str) -> dict:
     """Get a single media item with full metadata (camera info, GPS, etc.)."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.get(
@@ -2078,7 +2153,7 @@ def docs_batch_update(document_id: str, requests_list: list[dict]) -> dict:
     """
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.post(
@@ -2121,7 +2196,7 @@ def forms_create(title: str, description: str = "",
     """
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     # Step 1: Create the form
     body = {
@@ -2220,7 +2295,7 @@ def searchconsole_query(site_url: str, start_date: str = "7daysAgo",
             f"https://searchconsole.googleapis.com/v1/sites/{site_url}/searchAnalytics/query",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"startDate": start_date, "endDate": end_date,
-                  "dimensions": [dimension], "rowLimit": min(row_limit, 100)},
+                  "dimensions": [dimension], "rowLimit": min(_coerce_int(row_limit, 100), 100)},
             timeout=10,
         )
         r.raise_for_status()
@@ -2252,7 +2327,7 @@ def youtube_upload_video(file_path: str, title: str, description: str = "",
         return {"error": f"File not found: {file_path}"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     # Step 1: Create resumable upload session
     body = {
         "snippet": {
@@ -2346,7 +2421,7 @@ def youtube_set_thumbnail(video_id: str, image_path: str) -> dict:
         return {"error": f"File not found: {image_path}"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         r = requests.post(
             f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={video_id}",
@@ -2443,9 +2518,10 @@ def youtube_unsubscribe(subscription_id: str) -> dict:
 
 def youtube_list_subscriptions(page_size: int = 20) -> list[dict]:
     """List authenticated user's subscriptions."""
+    page_size = _coerce_int(page_size, 20, lo=1, hi=50)
     data = call_api(
         "https://www.googleapis.com/youtube/v3/subscriptions",
-        params={"part": "snippet", "mine": "true", "maxResults": min(page_size, 50)},
+        params={"part": "snippet", "mine": "true", "maxResults": min(_coerce_int(page_size, 50), 50)},
     )
     if not data:
         return []
@@ -2586,7 +2662,7 @@ def youtube_list_replies(comment_id: str, max_results: int = 20) -> list[dict]:
     """List replies to a comment (comment thread ID or comment ID)."""
     data = call_api(
         "https://www.googleapis.com/youtube/v3/comments",
-        params={"part": "snippet", "parentId": comment_id, "maxResults": min(max_results, 50)},
+        params={"part": "snippet", "parentId": comment_id, "maxResults": min(_coerce_int(max_results, 50), 50)},
     )
     if not data:
         return []
@@ -2637,7 +2713,7 @@ def youtube_search_channels(query: str, max_results: int = 10) -> list[dict]:
     """Search for YouTube channels."""
     data = call_api(
         "https://www.googleapis.com/youtube/v3/search",
-        params={"part": "snippet", "q": query, "type": "channel", "maxResults": min(max_results, 50)},
+        params={"part": "snippet", "q": query, "type": "channel", "maxResults": min(_coerce_int(max_results, 50), 50)},
     )
     if not data:
         return []
@@ -2655,7 +2731,7 @@ def youtube_list_my_videos(max_results: int = 20, order: str = "date") -> list[d
     data = call_api(
         "https://www.googleapis.com/youtube/v3/search",
         params={"part": "snippet", "forMine": "true", "type": "video",
-                "maxResults": min(max_results, 50), "order": order},
+                "maxResults": min(_coerce_int(max_results, 50), 50), "order": order},
     )
     if not data:
         return []
@@ -2673,7 +2749,7 @@ def youtube_create_broadcast(title: str, description: str = "",
                              privacy_status: str = "private") -> dict:
     """Create a YouTube live broadcast. start_time: ISO 8601 datetime."""
     if not start_time:
-        start_time = datetime.utcnow().isoformat() + "Z"
+        start_time = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
     body = {
         "snippet": {"title": title, "description": description, "scheduledStartTime": start_time},
         "status": {"privacyStatus": privacy_status},
@@ -2765,7 +2841,7 @@ def youtube_list_playlists(channel_id: str, max_results: int = 20) -> list[dict]
     """List playlists for a channel."""
     data = call_api(
         "https://www.googleapis.com/youtube/v3/playlists",
-        params={"part": "snippet", "channelId": channel_id, "maxResults": min(max_results, 50)},
+        params={"part": "snippet", "channelId": channel_id, "maxResults": min(_coerce_int(max_results, 50), 50)},
     )
     if not data:
         return []
@@ -2822,7 +2898,7 @@ def youtube_get_video_rating(video_id: str) -> dict:
     return {"videoId": video_id, "rating": "none"}
 
 
-def youtube_get_trascript(video_id: str, language: str = "en") -> str:
+def youtube_get_transcript(video_id: str, language: str = "en") -> str:
     """Get video captions/transcript as plain text. Fetches caption track, downloads, parses."""
     import requests
     # Find caption track for requested language
@@ -2858,7 +2934,7 @@ def youtube_channel_search(channel_id: str, query: str, max_results: int = 20) -
     data = call_api(
         "https://www.googleapis.com/youtube/v3/search",
         params={"part": "snippet", "channelId": channel_id, "q": query,
-                "type": "video", "maxResults": min(max_results, 50)},
+                "type": "video", "maxResults": min(_coerce_int(max_results, 50), 50)},
     )
     if not data:
         return []
@@ -3438,7 +3514,7 @@ def docs_insert_header(document_id: str, text: str) -> dict:
     """Insert a header on a document."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.post(
@@ -3462,7 +3538,7 @@ def docs_insert_footer(document_id: str, text: str) -> dict:
     """Insert a footer on a document."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.post(
@@ -3614,7 +3690,7 @@ def docs_update_document_title(document_id: str, title: str) -> dict:
     """Update the document title using the Drive API (PATCH to rename)."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.patch(
@@ -3855,7 +3931,7 @@ def slides_list(max_results: int = 20) -> list[dict]:
         "https://www.googleapis.com/drive/v3/files",
         params={
             "q": "mimeType='application/vnd.google-apps.presentation' and trashed=false",
-            "pageSize": min(max_results, 100),
+            "pageSize": min(_coerce_int(max_results, 100), 100),
             "fields": "files(id,name,createdTime,modifiedTime,webViewLink)",
         },
     )
@@ -4113,7 +4189,7 @@ def calendar_quick_add(calendar_id: str = "primary", text: str = "") -> dict:
         return {"error": "text is required (e.g. 'Meeting at 3pm tomorrow')"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.post(
@@ -4228,7 +4304,7 @@ def calendar_set_reminder(calendar_id: str = "primary",
     """Set default reminders on a calendar. reminders: list of {'method': 'popup'|'email', 'minutes': int}."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     body = {
         "reminders": {
@@ -4437,7 +4513,7 @@ def drive_list_starred(page_size: int = 20) -> list[dict]:
         "https://www.googleapis.com/drive/v3/files",
         params={
             "q": "starred=true and trashed=false",
-            "pageSize": min(page_size, 100),
+            "pageSize": min(_coerce_int(page_size, 100), 100),
             "fields": "files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,starred)",
         },
     )
@@ -4488,14 +4564,14 @@ def drive_list_labels(file_id: Optional[str] = None, page_size: int = 20) -> lis
     if file_id:
         data = call_api(
             f"https://www.googleapis.com/drive/v3/files/{file_id}/labels",
-            params={"pageSize": min(page_size, 100)},
+            params={"pageSize": min(_coerce_int(page_size, 100), 100)},
         )
         if not data:
             return []
         return data.get("labels", [])
     data = call_api(
         "https://www.googleapis.com/drive/v3/labels",
-        params={"pageSize": min(page_size, 100)},
+        params={"pageSize": min(_coerce_int(page_size, 100), 100)},
     )
     if not data:
         return []
@@ -4554,7 +4630,7 @@ def drive_generate_ids(count: int = 10, space: str = "drive") -> list[str]:
     """Generate Drive file IDs for pre-allocation."""
     data = call_api(
         "https://www.googleapis.com/drive/v3/files/generateIds",
-        params={"count": min(max(count, 1), 1000), "space": space},
+        params={"count": min(max(_coerce_int(count, 10), 1), 1000), "space": space},
     )
     if not data:
         return []
@@ -4569,7 +4645,7 @@ def drive_generate_ids(count: int = 10, space: str = "drive") -> list[str]:
 def gmail_list_drafts(max_results: int = 20, q: str = "") -> list[dict]:
     """List draft emails. q: search query."""
     params: dict[str, Any] = {
-        "maxResults": min(max_results, 100),
+        "maxResults": min(_coerce_int(max_results, 100), 100),
     }
     if q:
         params["q"] = q
@@ -4863,7 +4939,7 @@ def gmail_auto_forward(email: str = "", disposition: str = "leaveInInbox") -> di
         return {"error": "email is required"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     # Step 1: Add forwarding address
     try:
@@ -4957,7 +5033,7 @@ def gmail_import_message(raw_base64: str = "",
     }
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.post(
@@ -4997,7 +5073,7 @@ def gmail_search(query: str = "", max_results: int = 20,
     """Search messages with advanced query syntax."""
     params: dict[str, Any] = {
         "q": query,
-        "maxResults": min(max_results, 100),
+        "maxResults": min(_coerce_int(max_results, 100), 100),
         "includeSpamTrash": str(include_spam_trash).lower(),
     }
     data = call_api(
@@ -5019,7 +5095,7 @@ def gmail_list_messages_paged(page_token: str = "", max_results: int = 20,
                                 q: str = "") -> dict:
     """List messages with pagination support."""
     params: dict[str, Any] = {
-        "maxResults": min(max_results, 100),
+        "maxResults": min(_coerce_int(max_results, 100), 100),
     }
     if page_token:
         params["pageToken"] = page_token
@@ -5205,7 +5281,7 @@ def searchconsole_inspect_url(site_url: str = "", inspection_url: str = "") -> d
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         r = requests.post(
             "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect",
@@ -5321,7 +5397,7 @@ def searchconsole_test_robots_txt(site_url: str = "", url_to_test: str = "") -> 
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         r = requests.get(
             "https://searchconsole.googleapis.com/v1/urlTestingTools/site:testRobotsTxt",
@@ -5846,7 +5922,7 @@ def _vision_annotate_single(image_path: str, feature_type: str, max_results: int
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     image_data = base64.b64encode(path.read_bytes()).decode()
     body = {
         "requests": [{
@@ -5944,7 +6020,7 @@ def vision_async_batch_annotate(image_path: str = "",
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     image_data = base64.b64encode(path.read_bytes()).decode()
     if not features:
         features = ["LABEL_DETECTION", "TEXT_DETECTION"]
@@ -6002,7 +6078,7 @@ def translate_batch_translate(texts: Optional[list[str]] = None,
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     body: dict = {
         "q": texts,
         "target": target_language,
@@ -6059,7 +6135,7 @@ def tts_synthesize_long_audio(text: str = "", voice_name: str = "",
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     body = {
         "input": {"text": text},
         "voice": {"name": voice_name, "languageCode": voice_name.split("-")[0] + "-" + voice_name.split("-")[1] if "-" in voice_name else "en-US"},
@@ -6107,7 +6183,7 @@ def storage_create_bucket(name: str = "", project_id: str = "",
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     body = {
         "name": name,
         "location": location,
@@ -6168,7 +6244,7 @@ def storage_copy_file(source_bucket: str = "", source_path: str = "",
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         r = requests.post(
             f"https://storage.googleapis.com/storage/v1/b/{source_bucket}/o/{source_path}/copyTo/b/{dest_bucket}/o/{dest_path}",
@@ -6263,7 +6339,7 @@ def people_search_directory(query: str, page_size: int = 20) -> list[dict]:
     """Search all directories for people matching query."""
     params = {
         "query": query,
-        "pageSize": min(page_size, 100),
+        "pageSize": min(_coerce_int(page_size, 100), 100),
         "readMask": "names,emailAddresses,phoneNumbers,photos",
     }
     data = call_api(
@@ -6284,7 +6360,7 @@ def people_search_directory(query: str, page_size: int = 20) -> list[dict]:
 def people_list_connections(resource_name: str = "people/me", page_size: int = 20) -> list[dict]:
     """List connections for a person resource."""
     params = {
-        "pageSize": min(page_size, 100),
+        "pageSize": min(_coerce_int(page_size, 100), 100),
         "personFields": "names,emailAddresses,phoneNumbers,photos",
     }
     data = call_api(
@@ -6330,7 +6406,7 @@ def people_list_contact_groups(page_size: int = 20) -> list[dict]:
     """List contact groups with pagination."""
     data = call_api(
         "https://people.googleapis.com/v1/contactGroups",
-        params={"pageSize": min(page_size, 100)},
+        params={"pageSize": min(_coerce_int(page_size, 100), 100)},
     )
     if not data:
         return []
@@ -6420,7 +6496,7 @@ def tasks_clear_completed(tasklist_id: str) -> dict:
     import requests
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         r = requests.post(
             f"https://tasks.googleapis.com/tasks/v1/lists/{tasklist_id}/clear",
@@ -6468,7 +6544,7 @@ def photos_upload(file_path: str, album_id: Optional[str] = None,
         return {"error": f"File not found: {file_path}"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     try:
         # Step 1: Upload raw bytes to get upload token
         upload_url = "https://photoslibrary.googleapis.com/v1/uploads"
@@ -6547,7 +6623,7 @@ def photos_search_by_content(include_archived: bool = False,
         filters["contentFilter"] = {"includedContentCategories": [category]}
     if date_filter:
         filters["dateFilter"] = {"dates": date_filter}
-    body: dict[str, Any] = {"pageSize": min(page_size, 100), "filters": filters}
+    body: dict[str, Any] = {"pageSize": min(_coerce_int(page_size, 100), 100), "filters": filters}
     try:
         r = requests.post(
             "https://photoslibrary.googleapis.com/v1/mediaItems:search",
@@ -6576,7 +6652,7 @@ def photos_get_album(album_id: str) -> dict:
         return {"error": "album_id is required"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.get(
@@ -6608,7 +6684,7 @@ def photos_list_shared_albums(page_size: int = 20) -> list[dict]:
     try:
         r = requests.get(
             "https://photoslibrary.googleapis.com/v1/sharedAlbums",
-            params={"pageSize": min(page_size, 50)},
+            params={"pageSize": min(_coerce_int(page_size, 50), 50)},
             headers={"Authorization": f"Bearer {token}"},
             timeout=10,
         )
@@ -6674,7 +6750,7 @@ def photos_get_media_item_metadata(media_item_id: str) -> dict:
     """Get a single media item with full metadata."""
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.get(
@@ -6748,7 +6824,7 @@ def books_get_bookshelf(shelf_id: str, max_results: int = 10) -> list[dict]:
         return []
     data = call_api(
         f"https://www.googleapis.com/books/v1/mylibrary/bookshelves/{shelf_id}/volumes",
-        params={"maxResults": min(max_results, 40)},
+        params={"maxResults": min(_coerce_int(max_results, 40), 40)},
     )
     if not data:
         return []
@@ -6818,7 +6894,7 @@ def books_get_reading_position(volume_id: str) -> dict:
         return {"error": "volume_id is required"}
     token = get_access_token()
     if not token:
-        return {"error": "No OAuth token"}
+        return {"error": _auth_err()}
     import requests
     try:
         r = requests.get(
@@ -6904,7 +6980,7 @@ def books_get_volume_recommended(max_results: int = 10) -> list[dict]:
     """Get recommended volumes for the user."""
     data = call_api(
         "https://www.googleapis.com/books/v1/volumes",
-        params={"q": ":recommended", "maxResults": min(max_results, 40)},
+        params={"q": ":recommended", "maxResults": min(_coerce_int(max_results, 40), 40)},
     )
     if not data:
         return []
@@ -6928,7 +7004,7 @@ def books_search_by_subject(subject: str, max_results: int = 10) -> list[dict]:
         return []
     data = call_api(
         "https://www.googleapis.com/books/v1/volumes",
-        params={"q": f"subject:{subject}", "maxResults": min(max_results, 40)},
+        params={"q": f"subject:{subject}", "maxResults": min(_coerce_int(max_results, 40), 40)},
     )
     if not data:
         return []
@@ -7013,7 +7089,7 @@ def firestore_list_documents(collection: str, page_size: int = 20,
     pid = project_id or os.getenv("GOOGLE_CLOUD_PROJECT", "")
     data = call_api(
         f"https://firestore.googleapis.com/v1/projects/{pid}/databases/(default)/documents/{collection}",
-        params={"pageSize": min(page_size, 300)},
+        params={"pageSize": min(_coerce_int(page_size, 300), 300)},
     )
     if not data:
         return []

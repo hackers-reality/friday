@@ -7,7 +7,7 @@ import json
 import os
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -25,7 +25,10 @@ logger = configure_logging(__name__)
 
 _QUOTA_DB = Path(FRIDAY_MEMORY) / "youtube_quota.db"
 _QUOTA_DAILY_LIMIT = 10_000
-_CREDENTIALS_PATH = Path(FRIDAY_MEMORY) / "youtube_credentials.json"
+# B5: read the SAME shared store as everything else (google_oauth.py writes it;
+# dashboard Connect buttons re-write it). The legacy youtube_credentials.json no longer exists.
+_CREDENTIALS_PATH = Path(FRIDAY_MEMORY) / "google_credentials.json"
+_LEGACY_CREDENTIALS_PATH = Path(FRIDAY_MEMORY) / "youtube_credentials.json"  # legacy only; never written anymore
 
 
 # ── Quota tracking ──────────────────────────────────────────
@@ -40,7 +43,7 @@ def _init_quota_db():
 
 def _get_used_quota() -> int:
     conn = _init_quota_db()
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     row = conn.execute("SELECT units FROM quota WHERE date = ?", (today,)).fetchone()
     conn.close()
     return row[0] if row else 0
@@ -48,7 +51,7 @@ def _get_used_quota() -> int:
 
 def _add_quota(units: int = 1):
     conn = _init_quota_db()
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     conn.execute(
         "INSERT INTO quota (date, units) VALUES (?, ?) "
         "ON CONFLICT(date) DO UPDATE SET units = units + ?",
@@ -74,9 +77,10 @@ def quota_remaining() -> int:
 # ── OAuth2 helpers ──────────────────────────────────────────
 
 def _load_credentials() -> Optional[dict]:
-    if _CREDENTIALS_PATH.exists():
+    path = _CREDENTIALS_PATH if _CREDENTIALS_PATH.exists() else _LEGACY_CREDENTIALS_PATH
+    if path.exists():
         try:
-            return json.loads(_CREDENTIALS_PATH.read_text(encoding="utf-8"))
+            return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             pass
     return None
@@ -108,7 +112,7 @@ def _get_oauth_token() -> Optional[str]:
     if expiry:
         try:
             exp_dt = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
-            if datetime.utcnow() > (exp_dt - timedelta(minutes=5)):
+            if datetime.now(timezone.utc).replace(tzinfo=None) > (exp_dt - timedelta(minutes=5)):
                 if refresh_token:
                     return _refresh_oauth_token(refresh_token)
                 return None
@@ -139,7 +143,7 @@ def _refresh_oauth_token(refresh_token: str) -> Optional[str]:
         if new_token:
             creds = _load_credentials() or {}
             creds["access_token"] = new_token
-            creds["expires_at"] = (datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
+            creds["expires_at"] = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=data.get("expires_in", 3600))).isoformat()
             _save_credentials(creds)
         return new_token
     except Exception as exc:
@@ -399,7 +403,7 @@ class YouTubeClient:
                     "title": title[:100],
                     "file": os.path.basename(file_path),
                     "privacy": privacy_status,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 })
                 return {
                     "success": True,
